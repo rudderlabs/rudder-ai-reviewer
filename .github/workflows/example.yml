@@ -1,0 +1,25 @@
+# Example workflow file for using RudderStack PR Reviewer
+# Copy this to your repository's .github/workflows/ directory
+
+name: RudderStack PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    name: Analyze RudderStack SDK Changes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Run RudderStack PR Reviewer
+        uses: ./
+        with:
+          service_access_token: ${{ secrets.RUDDERSTACK_ACCESS_TOKEN }}
+          source_id: ${{ secrets.RUDDERSTACK_SOURCE_ID }} # Optional
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          output_verbosity: standard # minimal | standard | detailed

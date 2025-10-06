@@ -7,6 +7,8 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ActionConfig } from './types/common';
+import { detectSDKInstallation } from './core/sdk-detector';
+import { postSDKDetectionComment } from './integrations/github/pr-client';
 
 /**
  * Main action entry point
@@ -36,15 +38,33 @@ async function run(): Promise<void> {
 
     core.info(`Analyzing PR #${prNumber} in ${owner}/${repo}`);
 
-    // TODO: Implement core analysis logic
-    // 1. Load previous artifact (if incremental)
-    // 2. Scan files for RudderStack usage
-    // 3. Run static analysis
-    // 4. Post initial PR comment
-    // 5. Fetch workspace config & tracking plan (async)
-    // 6. Run AI analysis (async)
-    // 7. Update PR comment with all results
-    // 8. Save artifact for next run
+    // Get workspace path
+    const workspacePath = process.env.GITHUB_WORKSPACE;
+    if (!workspacePath) {
+      throw new Error('GITHUB_WORKSPACE environment variable is not set');
+    }
+
+    core.info('🔍 Detecting RudderStack SDK installation...');
+
+    // Detect SDK installation
+    const sdkDetection = await detectSDKInstallation(workspacePath);
+
+    core.info(`SDK detection complete: ${sdkDetection.installationType}`);
+    if (sdkDetection.npmVersion) {
+      core.info(`- NPM version: ${sdkDetection.npmVersion}`);
+    }
+    if (sdkDetection.cdnVersion) {
+      core.info(`- CDN version: ${sdkDetection.cdnVersion}`);
+    }
+
+    // Post PR comment with detection results
+    core.info('💬 Posting SDK detection comment to PR...');
+    await postSDKDetectionComment(sdkDetection, {
+      owner,
+      repo,
+      pullNumber: prNumber,
+      token: config.githubToken,
+    });
 
     // Set outputs
     core.setOutput('analysis_status', 'success');
