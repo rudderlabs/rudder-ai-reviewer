@@ -8,7 +8,7 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ActionConfig } from './types/common';
 import { detectSDKInstallation } from './core/sdk-detector';
-import { postSDKDetectionComment } from './integrations/github/pr-client';
+import { postSDKDetectionComment, postInlineAnnotations, InlineAnnotation } from './integrations/github/pr-client';
 
 /**
  * Main action entry point
@@ -39,15 +39,25 @@ async function run(): Promise<void> {
     core.info(`Analyzing PR #${prNumber} in ${owner}/${repo}`);
 
     // Get workspace path (use root_directory if provided, otherwise GitHub workspace)
-    let workspacePath = config.rootDirectory;
-    if (!workspacePath) {
-      workspacePath = process.env.GITHUB_WORKSPACE;
-      if (!workspacePath) {
-        throw new Error('GITHUB_WORKSPACE environment variable is not set');
-      }
+    const githubWorkspace = process.env.GITHUB_WORKSPACE;
+    if (!githubWorkspace) {
+      throw new Error('GITHUB_WORKSPACE environment variable is not set');
     }
 
+    let workspacePath = config.rootDirectory;
+    if (!workspacePath) {
+      workspacePath = githubWorkspace;
+    }
+
+    // Calculate path prefix for GitHub annotations (relative to repo root)
+    const pathPrefix = config.rootDirectory
+      ? config.rootDirectory.replace(githubWorkspace, '').replace(/^\//, '')
+      : '';
+
     core.info(`Analyzing directory: ${workspacePath}`);
+    if (pathPrefix) {
+      core.info(`Path prefix for annotations: ${pathPrefix}`);
+    }
 
     core.info('🔍 Detecting RudderStack SDK installation...');
 
@@ -69,7 +79,34 @@ async function run(): Promise<void> {
       repo,
       pullNumber: prNumber,
       token: config.githubToken,
+      pathPrefix: pathPrefix || undefined,
     });
+
+    // Try to create inline annotations for SDK locations in changed files
+    if (sdkDetection.locations.length > 0) {
+      core.info(`📍 Attempting to create inline comments for ${sdkDetection.locations.length} location(s)...`);
+
+      const annotations: InlineAnnotation[] = sdkDetection.locations.map((loc) => {
+        // Adjust path for GitHub (add prefix if analyzing subdirectory)
+        const githubPath = pathPrefix ? `${pathPrefix}/${loc.file}` : loc.file;
+
+        return {
+          path: githubPath,
+          line: loc.line,
+          annotation_level: 'notice',
+          message: `🔍 **RudderStack SDK detected (${loc.type.toUpperCase()})**\n\n\`\`\`\n${loc.snippet}\n\`\`\``,
+        };
+      });
+
+      // This will only post comments on files that are part of the PR diff
+      // All locations are listed in the main PR comment
+      await postInlineAnnotations(annotations, {
+        owner,
+        repo,
+        pullNumber: prNumber,
+        token: config.githubToken,
+      });
+    }
 
     // Set outputs
     core.setOutput('analysis_status', 'success');
