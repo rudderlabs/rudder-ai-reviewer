@@ -39,15 +39,25 @@ async function run(): Promise<void> {
     core.info(`Analyzing PR #${prNumber} in ${owner}/${repo}`);
 
     // Get workspace path (use root_directory if provided, otherwise GitHub workspace)
-    let workspacePath = config.rootDirectory;
-    if (!workspacePath) {
-      workspacePath = process.env.GITHUB_WORKSPACE;
-      if (!workspacePath) {
-        throw new Error('GITHUB_WORKSPACE environment variable is not set');
-      }
+    const githubWorkspace = process.env.GITHUB_WORKSPACE;
+    if (!githubWorkspace) {
+      throw new Error('GITHUB_WORKSPACE environment variable is not set');
     }
 
+    let workspacePath = config.rootDirectory;
+    if (!workspacePath) {
+      workspacePath = githubWorkspace;
+    }
+
+    // Calculate path prefix for GitHub annotations (relative to repo root)
+    const pathPrefix = config.rootDirectory
+      ? config.rootDirectory.replace(githubWorkspace, '').replace(/^\//, '')
+      : '';
+
     core.info(`Analyzing directory: ${workspacePath}`);
+    if (pathPrefix) {
+      core.info(`Path prefix for annotations: ${pathPrefix}`);
+    }
 
     core.info('🔍 Detecting RudderStack SDK installation...');
 
@@ -75,12 +85,17 @@ async function run(): Promise<void> {
     if (sdkDetection.locations.length > 0) {
       core.info(`📍 Attempting to create inline comments for ${sdkDetection.locations.length} location(s)...`);
 
-      const annotations: InlineAnnotation[] = sdkDetection.locations.map((loc) => ({
-        path: loc.file,
-        line: loc.line,
-        annotation_level: 'notice',
-        message: `🔍 **RudderStack SDK detected (${loc.type.toUpperCase()})**\n\n\`\`\`\n${loc.snippet}\n\`\`\``,
-      }));
+      const annotations: InlineAnnotation[] = sdkDetection.locations.map((loc) => {
+        // Adjust path for GitHub (add prefix if analyzing subdirectory)
+        const githubPath = pathPrefix ? `${pathPrefix}/${loc.file}` : loc.file;
+
+        return {
+          path: githubPath,
+          line: loc.line,
+          annotation_level: 'notice',
+          message: `🔍 **RudderStack SDK detected (${loc.type.toUpperCase()})**\n\n\`\`\`\n${loc.snippet}\n\`\`\``,
+        };
+      });
 
       // This will only post comments on files that are part of the PR diff
       // All locations are listed in the main PR comment
