@@ -79,6 +79,7 @@ async function run(): Promise<void> {
       repo,
       pullNumber: prNumber,
       token: config.githubToken,
+      pathPrefix: pathPrefix || undefined,
     });
 
     // Try to create inline annotations for SDK locations in changed files

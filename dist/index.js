@@ -30089,11 +30089,11 @@ async function detectCDNUsage(repoPath) {
     const files = [];
     const locations = [];
     let version;
-    // Patterns to search for
+    // Patterns to search for (with identifiers)
     const cdnPatterns = [
-        /cdn\.rudderlabs\.com\/v(\d+)(?:\.(\d+)\.(\d+))?\/(modern|legacy)\/rsa\.min\.js/,
-        /window\.RudderSnippetVersion\s*=\s*["']([^"']+)["']/,
-        /window\.rudderanalytics\s*=\s*\[\]/,
+        { pattern: /cdn\.rudderlabs\.com\/v(\d+)(?:\.(\d+)\.(\d+))?\/(modern|legacy)\/rsa\.min\.js/, type: 'url' },
+        { pattern: /window\.RudderSnippetVersion\s*=\s*["']([^"']+)["']/, type: 'snippet' },
+        { pattern: /window\.rudderanalytics\s*=\s*\[\]/, type: 'buffer' },
     ];
     // Files to check (limit to common patterns for now)
     const filesToCheck = [
@@ -30116,7 +30116,7 @@ async function detectCDNUsage(repoPath) {
                 // Check for CDN patterns line by line
                 for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
                     const line = lines[lineIndex];
-                    for (const pattern of cdnPatterns) {
+                    for (const { pattern, type } of cdnPatterns) {
                         const match = line.match(pattern);
                         if (match) {
                             if (!files.includes(file)) {
@@ -30129,13 +30129,20 @@ async function detectCDNUsage(repoPath) {
                                 type: 'cdn',
                                 snippet: line.trim(),
                             });
-                            // Extract version if found
-                            if (match[1] && !version) {
-                                if (match[2] && match[3]) {
-                                    version = `${match[1]}.${match[2]}.${match[3]}`;
+                            // Extract version based on pattern type
+                            if (!version && match[1]) {
+                                if (type === 'url') {
+                                    // CDN URL: v3 or v3.0.0 format
+                                    if (match[2] && match[3]) {
+                                        version = `v${match[1]}.${match[2]}.${match[3]}`;
+                                    }
+                                    else {
+                                        version = `v${match[1]}`;
+                                    }
                                 }
-                                else {
-                                    version = `v${match[1]}`;
+                                else if (type === 'snippet') {
+                                    // Snippet version: use as-is (already includes 'v' or is semver)
+                                    version = match[1];
                                 }
                             }
                             break; // Move to next line
@@ -30209,7 +30216,7 @@ const core = __importStar(__nccwpck_require__(7484));
 /**
  * Format SDK detection results as markdown comment
  */
-function formatSDKDetectionComment(result) {
+function formatSDKDetectionComment(result, options) {
     const { installationType, npmVersion, cdnVersion, details, locations } = result;
     let comment = '## 🔍 RudderStack SDK Detection\n\n';
     // Installation type badge
@@ -30234,11 +30241,15 @@ function formatSDKDetectionComment(result) {
             comment += `${detail}\n`;
         });
     }
-    // Locations section
+    // Locations section with clickable links
     if (locations.length > 0) {
         comment += '\n### 📍 SDK Usage Locations\n\n';
         locations.forEach((loc, idx) => {
-            comment += `${idx + 1}. **${loc.file}:${loc.line}** (${loc.type.toUpperCase()})\n`;
+            // Adjust path with prefix if needed
+            const fullPath = options.pathPrefix ? `${options.pathPrefix}/${loc.file}` : loc.file;
+            // Create GitHub permalink to specific line
+            const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${loc.line}`;
+            comment += `${idx + 1}. [**${fullPath}:${loc.line}**](${fileLink}) (${loc.type.toUpperCase()})\n`;
             comment += '   ```\n';
             comment += `   ${loc.snippet}\n`;
             comment += '   ```\n\n';
@@ -30252,12 +30263,24 @@ function formatSDKDetectionComment(result) {
  * Post or update PR comment with SDK detection results
  */
 async function postSDKDetectionComment(result, options) {
-    const { owner, repo, pullNumber, token } = options;
+    const { owner, repo, pullNumber, token, pathPrefix } = options;
     const octokit = github.getOctokit(token);
-    const commentBody = formatSDKDetectionComment(result);
-    const commentIdentifier = '<!-- rudderstack-pr-reviewer-sdk-detection -->';
-    const fullCommentBody = `${commentIdentifier}\n${commentBody}`;
     try {
+        // Get PR to get commit SHA for links
+        const { data: pr } = await octokit.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        const commitSha = pr.head.sha;
+        const commentBody = formatSDKDetectionComment(result, {
+            owner,
+            repo,
+            commitSha,
+            pathPrefix,
+        });
+        const commentIdentifier = '<!-- rudderstack-pr-reviewer-sdk-detection -->';
+        const fullCommentBody = `${commentIdentifier}\n${commentBody}`;
         // Find existing comment
         const { data: comments } = await octokit.rest.issues.listComments({
             owner,
@@ -30482,6 +30505,7 @@ async function run() {
             repo,
             pullNumber: prNumber,
             token: config.githubToken,
+            pathPrefix: pathPrefix || undefined,
         });
         // Try to create inline annotations for SDK locations in changed files
         if (sdkDetection.locations.length > 0) {

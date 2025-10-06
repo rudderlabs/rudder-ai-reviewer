@@ -11,6 +11,8 @@ export interface PRCommentOptions {
   repo: string;
   pullNumber: number;
   token: string;
+  pathPrefix?: string;
+  commitSha?: string;
 }
 
 export interface InlineAnnotation {
@@ -23,7 +25,10 @@ export interface InlineAnnotation {
 /**
  * Format SDK detection results as markdown comment
  */
-export function formatSDKDetectionComment(result: SDKDetectionResult): string {
+export function formatSDKDetectionComment(
+  result: SDKDetectionResult,
+  options: { owner: string; repo: string; commitSha: string; pathPrefix?: string }
+): string {
   const { installationType, npmVersion, cdnVersion, details, locations } = result;
 
   let comment = '## 🔍 RudderStack SDK Detection\n\n';
@@ -54,11 +59,17 @@ export function formatSDKDetectionComment(result: SDKDetectionResult): string {
     });
   }
 
-  // Locations section
+  // Locations section with clickable links
   if (locations.length > 0) {
     comment += '\n### 📍 SDK Usage Locations\n\n';
     locations.forEach((loc, idx) => {
-      comment += `${idx + 1}. **${loc.file}:${loc.line}** (${loc.type.toUpperCase()})\n`;
+      // Adjust path with prefix if needed
+      const fullPath = options.pathPrefix ? `${options.pathPrefix}/${loc.file}` : loc.file;
+
+      // Create GitHub permalink to specific line
+      const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${loc.line}`;
+
+      comment += `${idx + 1}. [**${fullPath}:${loc.line}**](${fileLink}) (${loc.type.toUpperCase()})\n`;
       comment += '   ```\n';
       comment += `   ${loc.snippet}\n`;
       comment += '   ```\n\n';
@@ -78,14 +89,28 @@ export async function postSDKDetectionComment(
   result: SDKDetectionResult,
   options: PRCommentOptions
 ): Promise<void> {
-  const { owner, repo, pullNumber, token } = options;
+  const { owner, repo, pullNumber, token, pathPrefix } = options;
   const octokit = github.getOctokit(token);
 
-  const commentBody = formatSDKDetectionComment(result);
-  const commentIdentifier = '<!-- rudderstack-pr-reviewer-sdk-detection -->';
-  const fullCommentBody = `${commentIdentifier}\n${commentBody}`;
-
   try {
+    // Get PR to get commit SHA for links
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
+
+    const commitSha = pr.head.sha;
+
+    const commentBody = formatSDKDetectionComment(result, {
+      owner,
+      repo,
+      commitSha,
+      pathPrefix,
+    });
+    const commentIdentifier = '<!-- rudderstack-pr-reviewer-sdk-detection -->';
+    const fullCommentBody = `${commentIdentifier}\n${commentBody}`;
+
     // Find existing comment
     const { data: comments } = await octokit.rest.issues.listComments({
       owner,
