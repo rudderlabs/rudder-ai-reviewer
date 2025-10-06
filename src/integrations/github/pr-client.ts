@@ -115,7 +115,7 @@ export async function postSDKDetectionComment(
 }
 
 /**
- * Post inline annotations to PR files
+ * Post inline review comments to PR files
  */
 export async function postInlineAnnotations(
   annotations: InlineAnnotation[],
@@ -130,37 +130,61 @@ export async function postInlineAnnotations(
   const octokit = github.getOctokit(token);
 
   try {
-    // Get the PR to get the head SHA
+    // Get the PR to get commit SHA
     const { data: pr } = await octokit.rest.pulls.get({
       owner,
       repo,
       pull_number: pullNumber,
     });
 
-    const headSha = pr.head.sha;
+    const commitSha = pr.head.sha;
 
-    // Create a check run with annotations
-    const { data: checkRun } = await octokit.rest.checks.create({
+    // Get existing review comments to avoid duplicates
+    const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
       owner,
       repo,
-      name: 'RudderStack SDK Detection',
-      head_sha: headSha,
-      status: 'completed',
-      conclusion: 'success',
-      output: {
-        title: 'RudderStack SDK Detection Results',
-        summary: `Found ${annotations.length} SDK usage location(s)`,
-        annotations: annotations.map((ann) => ({
-          path: ann.path,
-          start_line: ann.line,
-          end_line: ann.line,
-          annotation_level: ann.annotation_level,
-          message: ann.message,
-        })),
-      },
+      pull_number: pullNumber,
     });
 
-    core.info(`✅ Posted ${annotations.length} inline annotation(s) via check run #${checkRun.id}`);
+    const commentIdentifier = '<!-- rudderstack-sdk-location -->';
+
+    // Filter out annotations that already have comments
+    const newAnnotations = annotations.filter((ann) => {
+      return !existingComments.some(
+        (comment) =>
+          comment.path === ann.path &&
+          comment.line === ann.line &&
+          comment.body?.includes(commentIdentifier)
+      );
+    });
+
+    if (newAnnotations.length === 0) {
+      core.info('All locations already have comments, skipping');
+      return;
+    }
+
+    // Create review comments for each location
+    let successCount = 0;
+    for (const ann of newAnnotations) {
+      try {
+        await octokit.rest.pulls.createReviewComment({
+          owner,
+          repo,
+          pull_number: pullNumber,
+          body: `${commentIdentifier}\n${ann.message}`,
+          commit_id: commitSha,
+          path: ann.path,
+          line: ann.line,
+        });
+        successCount++;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to post comment on ${ann.path}:${ann.line}: ${errorMessage}`);
+        // Continue with other annotations
+      }
+    }
+
+    core.info(`✅ Posted ${successCount}/${newAnnotations.length} inline comment(s)`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     core.warning(`Failed to post inline annotations: ${errorMessage}`);
