@@ -24,7 +24,7 @@ export interface InlineAnnotation {
  * Format SDK detection results as markdown comment
  */
 export function formatSDKDetectionComment(result: SDKDetectionResult): string {
-  const { installationType, npmVersion, cdnVersion, details } = result;
+  const { installationType, npmVersion, cdnVersion, details, locations } = result;
 
   let comment = '## 🔍 RudderStack SDK Detection\n\n';
 
@@ -51,6 +51,17 @@ export function formatSDKDetectionComment(result: SDKDetectionResult): string {
     comment += '\n### Details\n\n';
     details.forEach((detail) => {
       comment += `${detail}\n`;
+    });
+  }
+
+  // Locations section
+  if (locations.length > 0) {
+    comment += '\n### 📍 SDK Usage Locations\n\n';
+    locations.forEach((loc, idx) => {
+      comment += `${idx + 1}. **${loc.file}:${loc.line}** (${loc.type.toUpperCase()})\n`;
+      comment += '   ```\n';
+      comment += `   ${loc.snippet}\n`;
+      comment += '   ```\n\n';
     });
   }
 
@@ -115,7 +126,7 @@ export async function postSDKDetectionComment(
 }
 
 /**
- * Post inline review comments to PR files
+ * Post inline review comments to PR files (only for changed files)
  */
 export async function postInlineAnnotations(
   annotations: InlineAnnotation[],
@@ -130,6 +141,23 @@ export async function postInlineAnnotations(
   const octokit = github.getOctokit(token);
 
   try {
+    // Get PR files to see what's actually in the diff
+    const { data: prFiles } = await octokit.rest.pulls.listFiles({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
+
+    const changedFiles = new Set(prFiles.map((f) => f.filename));
+
+    // Filter annotations to only include files that are in the PR diff
+    const annotationsInDiff = annotations.filter((ann) => changedFiles.has(ann.path));
+
+    if (annotationsInDiff.length === 0) {
+      core.info('No SDK locations in changed files (see main comment for all locations)');
+      return;
+    }
+
     // Get the PR to get commit SHA
     const { data: pr } = await octokit.rest.pulls.get({
       owner,
@@ -149,7 +177,7 @@ export async function postInlineAnnotations(
     const commentIdentifier = '<!-- rudderstack-sdk-location -->';
 
     // Filter out annotations that already have comments
-    const newAnnotations = annotations.filter((ann) => {
+    const newAnnotations = annotationsInDiff.filter((ann) => {
       return !existingComments.some(
         (comment) =>
           comment.path === ann.path &&
@@ -159,7 +187,7 @@ export async function postInlineAnnotations(
     });
 
     if (newAnnotations.length === 0) {
-      core.info('All locations already have comments, skipping');
+      core.info('All locations in changed files already have comments');
       return;
     }
 
@@ -179,12 +207,14 @@ export async function postInlineAnnotations(
         successCount++;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        core.warning(`Failed to post comment on ${ann.path}:${ann.line}: ${errorMessage}`);
+        core.debug(`Could not post inline comment on ${ann.path}:${ann.line}: ${errorMessage}`);
         // Continue with other annotations
       }
     }
 
-    core.info(`✅ Posted ${successCount}/${newAnnotations.length} inline comment(s)`);
+    if (successCount > 0) {
+      core.info(`✅ Posted ${successCount} inline comment(s) on changed files`);
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     core.warning(`Failed to post inline annotations: ${errorMessage}`);

@@ -71,17 +71,19 @@ async function run(): Promise<void> {
       token: config.githubToken,
     });
 
-    // Create inline annotations for SDK locations
+    // Try to create inline annotations for SDK locations in changed files
     if (sdkDetection.locations.length > 0) {
-      core.info(`📍 Creating ${sdkDetection.locations.length} inline annotation(s)...`);
+      core.info(`📍 Attempting to create inline comments for ${sdkDetection.locations.length} location(s)...`);
 
       const annotations: InlineAnnotation[] = sdkDetection.locations.map((loc) => ({
         path: loc.file,
         line: loc.line,
         annotation_level: 'notice',
-        message: `🔍 RudderStack SDK detected (${loc.type.toUpperCase()})\n\n\`\`\`\n${loc.snippet}\n\`\`\``,
+        message: `🔍 **RudderStack SDK detected (${loc.type.toUpperCase()})**\n\n\`\`\`\n${loc.snippet}\n\`\`\``,
       }));
 
+      // This will only post comments on files that are part of the PR diff
+      // All locations are listed in the main PR comment
       await postInlineAnnotations(annotations, {
         owner,
         repo,
