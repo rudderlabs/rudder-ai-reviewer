@@ -13,6 +13,13 @@ export interface PRCommentOptions {
   token: string;
 }
 
+export interface InlineAnnotation {
+  path: string;
+  line: number;
+  message: string;
+  annotation_level: 'notice' | 'warning' | 'failure';
+}
+
 /**
  * Format SDK detection results as markdown comment
  */
@@ -104,5 +111,59 @@ export async function postSDKDetectionComment(
     const errorMessage = error instanceof Error ? error.message : String(error);
     core.warning(`Failed to post PR comment: ${errorMessage}`);
     throw error;
+  }
+}
+
+/**
+ * Post inline annotations to PR files
+ */
+export async function postInlineAnnotations(
+  annotations: InlineAnnotation[],
+  options: PRCommentOptions
+): Promise<void> {
+  if (annotations.length === 0) {
+    core.info('No inline annotations to post');
+    return;
+  }
+
+  const { owner, repo, pullNumber, token } = options;
+  const octokit = github.getOctokit(token);
+
+  try {
+    // Get the PR to get the head SHA
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
+
+    const headSha = pr.head.sha;
+
+    // Create a check run with annotations
+    const { data: checkRun } = await octokit.rest.checks.create({
+      owner,
+      repo,
+      name: 'RudderStack SDK Detection',
+      head_sha: headSha,
+      status: 'completed',
+      conclusion: 'success',
+      output: {
+        title: 'RudderStack SDK Detection Results',
+        summary: `Found ${annotations.length} SDK usage location(s)`,
+        annotations: annotations.map((ann) => ({
+          path: ann.path,
+          start_line: ann.line,
+          end_line: ann.line,
+          annotation_level: ann.annotation_level,
+          message: ann.message,
+        })),
+      },
+    });
+
+    core.info(`✅ Posted ${annotations.length} inline annotation(s) via check run #${checkRun.id}`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    core.warning(`Failed to post inline annotations: ${errorMessage}`);
+    // Don't throw - inline annotations are nice-to-have
   }
 }

@@ -29972,6 +29972,7 @@ const path = __importStar(__nccwpck_require__(6928));
  */
 async function detectSDKInstallation(repoPath) {
     const details = [];
+    const locations = [];
     let hasNPM = false;
     let hasCDN = false;
     let npmVersion;
@@ -30007,6 +30008,7 @@ async function detectSDKInstallation(repoPath) {
             details.push(`   CDN version: ${cdnVersion}`);
         }
         details.push(`   Files with CDN usage: ${cdnDetection.files.join(', ')}`);
+        locations.push(...cdnDetection.locations);
     }
     // Determine installation type
     let installationType;
@@ -30029,6 +30031,7 @@ async function detectSDKInstallation(repoPath) {
         npmVersion,
         cdnVersion,
         details,
+        locations,
     };
 }
 /**
@@ -30084,6 +30087,7 @@ async function getExactNPMVersion(repoPath) {
  */
 async function detectCDNUsage(repoPath) {
     const files = [];
+    const locations = [];
     let version;
     // Patterns to search for
     const cdnPatterns = [
@@ -30108,21 +30112,34 @@ async function detectCDNUsage(repoPath) {
         if (fs.existsSync(filePath)) {
             try {
                 const content = fs.readFileSync(filePath, 'utf-8');
-                // Check for CDN patterns
-                for (const pattern of cdnPatterns) {
-                    const match = content.match(pattern);
-                    if (match) {
-                        files.push(file);
-                        // Extract version if found
-                        if (match[1] && !version) {
-                            if (match[2] && match[3]) {
-                                version = `${match[1]}.${match[2]}.${match[3]}`;
+                const lines = content.split('\n');
+                // Check for CDN patterns line by line
+                for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+                    const line = lines[lineIndex];
+                    for (const pattern of cdnPatterns) {
+                        const match = line.match(pattern);
+                        if (match) {
+                            if (!files.includes(file)) {
+                                files.push(file);
                             }
-                            else {
-                                version = `v${match[1]}`;
+                            // Store location
+                            locations.push({
+                                file,
+                                line: lineIndex + 1, // Line numbers are 1-indexed
+                                type: 'cdn',
+                                snippet: line.trim(),
+                            });
+                            // Extract version if found
+                            if (match[1] && !version) {
+                                if (match[2] && match[3]) {
+                                    version = `${match[1]}.${match[2]}.${match[3]}`;
+                                }
+                                else {
+                                    version = `v${match[1]}`;
+                                }
                             }
+                            break; // Move to next line
                         }
-                        break; // Found CDN in this file, move to next
                     }
                 }
             }
@@ -30135,6 +30152,7 @@ async function detectCDNUsage(repoPath) {
         found: files.length > 0,
         version,
         files,
+        locations,
     };
 }
 
@@ -30185,6 +30203,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.formatSDKDetectionComment = formatSDKDetectionComment;
 exports.postSDKDetectionComment = postSDKDetectionComment;
+exports.postInlineAnnotations = postInlineAnnotations;
 const github = __importStar(__nccwpck_require__(3228));
 const core = __importStar(__nccwpck_require__(7484));
 /**
@@ -30262,6 +30281,52 @@ async function postSDKDetectionComment(result, options) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         core.warning(`Failed to post PR comment: ${errorMessage}`);
         throw error;
+    }
+}
+/**
+ * Post inline annotations to PR files
+ */
+async function postInlineAnnotations(annotations, options) {
+    if (annotations.length === 0) {
+        core.info('No inline annotations to post');
+        return;
+    }
+    const { owner, repo, pullNumber, token } = options;
+    const octokit = github.getOctokit(token);
+    try {
+        // Get the PR to get the head SHA
+        const { data: pr } = await octokit.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        const headSha = pr.head.sha;
+        // Create a check run with annotations
+        const { data: checkRun } = await octokit.rest.checks.create({
+            owner,
+            repo,
+            name: 'RudderStack SDK Detection',
+            head_sha: headSha,
+            status: 'completed',
+            conclusion: 'success',
+            output: {
+                title: 'RudderStack SDK Detection Results',
+                summary: `Found ${annotations.length} SDK usage location(s)`,
+                annotations: annotations.map((ann) => ({
+                    path: ann.path,
+                    start_line: ann.line,
+                    end_line: ann.line,
+                    annotation_level: ann.annotation_level,
+                    message: ann.message,
+                })),
+            },
+        });
+        core.info(`✅ Posted ${annotations.length} inline annotation(s) via check run #${checkRun.id}`);
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to post inline annotations: ${errorMessage}`);
+        // Don't throw - inline annotations are nice-to-have
     }
 }
 
@@ -30365,6 +30430,22 @@ async function run() {
             pullNumber: prNumber,
             token: config.githubToken,
         });
+        // Create inline annotations for SDK locations
+        if (sdkDetection.locations.length > 0) {
+            core.info(`📍 Creating ${sdkDetection.locations.length} inline annotation(s)...`);
+            const annotations = sdkDetection.locations.map((loc) => ({
+                path: loc.file,
+                line: loc.line,
+                annotation_level: 'notice',
+                message: `🔍 RudderStack SDK detected (${loc.type.toUpperCase()})\n\n\`\`\`\n${loc.snippet}\n\`\`\``,
+            }));
+            await (0, pr_client_1.postInlineAnnotations)(annotations, {
+                owner,
+                repo,
+                pullNumber: prNumber,
+                token: config.githubToken,
+            });
+        }
         // Set outputs
         core.setOutput('analysis_status', 'success');
         core.setOutput('error_count', 0);

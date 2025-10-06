@@ -7,11 +7,19 @@ import * as path from 'path';
 
 export type SDKInstallationType = 'npm' | 'cdn' | 'both' | 'none';
 
+export interface SDKLocation {
+  file: string;
+  line: number;
+  type: 'npm' | 'cdn';
+  snippet: string;
+}
+
 export interface SDKDetectionResult {
   installationType: SDKInstallationType;
   npmVersion?: string;
   cdnVersion?: string;
   details: string[];
+  locations: SDKLocation[];
 }
 
 /**
@@ -19,6 +27,7 @@ export interface SDKDetectionResult {
  */
 export async function detectSDKInstallation(repoPath: string): Promise<SDKDetectionResult> {
   const details: string[] = [];
+  const locations: SDKLocation[] = [];
   let hasNPM = false;
   let hasCDN = false;
   let npmVersion: string | undefined;
@@ -59,6 +68,7 @@ export async function detectSDKInstallation(repoPath: string): Promise<SDKDetect
       details.push(`   CDN version: ${cdnVersion}`);
     }
     details.push(`   Files with CDN usage: ${cdnDetection.files.join(', ')}`);
+    locations.push(...cdnDetection.locations);
   }
 
   // Determine installation type
@@ -80,6 +90,7 @@ export async function detectSDKInstallation(repoPath: string): Promise<SDKDetect
     npmVersion,
     cdnVersion,
     details,
+    locations,
   };
 }
 
@@ -137,8 +148,9 @@ async function getExactNPMVersion(repoPath: string): Promise<string | undefined>
  */
 async function detectCDNUsage(
   repoPath: string
-): Promise<{ found: boolean; version?: string; files: string[] }> {
+): Promise<{ found: boolean; version?: string; files: string[]; locations: SDKLocation[] }> {
   const files: string[] = [];
+  const locations: SDKLocation[] = [];
   let version: string | undefined;
 
   // Patterns to search for
@@ -166,22 +178,37 @@ async function detectCDNUsage(
     if (fs.existsSync(filePath)) {
       try {
         const content = fs.readFileSync(filePath, 'utf-8');
+        const lines = content.split('\n');
 
-        // Check for CDN patterns
-        for (const pattern of cdnPatterns) {
-          const match = content.match(pattern);
-          if (match) {
-            files.push(file);
+        // Check for CDN patterns line by line
+        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+          const line = lines[lineIndex];
 
-            // Extract version if found
-            if (match[1] && !version) {
-              if (match[2] && match[3]) {
-                version = `${match[1]}.${match[2]}.${match[3]}`;
-              } else {
-                version = `v${match[1]}`;
+          for (const pattern of cdnPatterns) {
+            const match = line.match(pattern);
+            if (match) {
+              if (!files.includes(file)) {
+                files.push(file);
               }
+
+              // Store location
+              locations.push({
+                file,
+                line: lineIndex + 1, // Line numbers are 1-indexed
+                type: 'cdn',
+                snippet: line.trim(),
+              });
+
+              // Extract version if found
+              if (match[1] && !version) {
+                if (match[2] && match[3]) {
+                  version = `${match[1]}.${match[2]}.${match[3]}`;
+                } else {
+                  version = `v${match[1]}`;
+                }
+              }
+              break; // Move to next line
             }
-            break; // Found CDN in this file, move to next
           }
         }
       } catch {
@@ -194,5 +221,6 @@ async function detectCDNUsage(
     found: files.length > 0,
     version,
     files,
+    locations,
   };
 }

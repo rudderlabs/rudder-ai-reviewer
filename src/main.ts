@@ -8,7 +8,7 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ActionConfig } from './types/common';
 import { detectSDKInstallation } from './core/sdk-detector';
-import { postSDKDetectionComment } from './integrations/github/pr-client';
+import { postSDKDetectionComment, postInlineAnnotations, InlineAnnotation } from './integrations/github/pr-client';
 
 /**
  * Main action entry point
@@ -70,6 +70,25 @@ async function run(): Promise<void> {
       pullNumber: prNumber,
       token: config.githubToken,
     });
+
+    // Create inline annotations for SDK locations
+    if (sdkDetection.locations.length > 0) {
+      core.info(`📍 Creating ${sdkDetection.locations.length} inline annotation(s)...`);
+
+      const annotations: InlineAnnotation[] = sdkDetection.locations.map((loc) => ({
+        path: loc.file,
+        line: loc.line,
+        annotation_level: 'notice',
+        message: `🔍 RudderStack SDK detected (${loc.type.toUpperCase()})\n\n\`\`\`\n${loc.snippet}\n\`\`\``,
+      }));
+
+      await postInlineAnnotations(annotations, {
+        owner,
+        repo,
+        pullNumber: prNumber,
+        token: config.githubToken,
+      });
+    }
 
     // Set outputs
     core.setOutput('analysis_status', 'success');
