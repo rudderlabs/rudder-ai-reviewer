@@ -1,0 +1,51 @@
+name: 'RudderStack PR Reviewer'
+description: 'Analyzes RudderStack SDK instrumentation changes in pull requests'
+author: 'RudderStack'
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  service_access_token:
+    description: 'RudderStack service access token for API access (Basic auth)'
+    required: true
+  source_id:
+    description: 'Optional source ID for multi-source workspaces'
+    required: false
+  github_token:
+    description: 'GitHub token for PR comments and annotations'
+    required: true
+    default: ${{ github.token }}
+  config_path:
+    description: 'Path to config file'
+    required: false
+    default: '.rudderstack-pr-reviewer.yml'
+  file_patterns:
+    description: 'File patterns to include (comma-separated)'
+    required: false
+  exclude_patterns:
+    description: 'File patterns to exclude (comma-separated)'
+    required: false
+  annotate_existing_code:
+    description: 'Annotate existing code or only changed lines (true/false)'
+    required: false
+    default: 'false'
+  output_verbosity:
+    description: 'Output verbosity level: minimal, standard, detailed'
+    required: false
+    default: 'standard'
+
+outputs:
+  analysis_status:
+    description: 'Status of the analysis: success, partial, failed'
+  error_count:
+    description: 'Number of errors found'
+  warning_count:
+    description: 'Number of warnings found'
+  suggestion_count:
+    description: 'Number of suggestions found'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
