@@ -19,7 +19,6 @@ jobs:
       - name: Run RudderStack PR Reviewer
         uses: ./
         with:
-          service_access_token: ${{ secrets.RUDDERSTACK_ACCESS_TOKEN }}
-          source_id: ${{ secrets.RUDDERSTACK_SOURCE_ID }} # Optional
+          service_access_token: ${{ secrets.RUDDERSTACK_ACCESS_TOKEN || 'test-token' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           output_verbosity: standard # minimal | standard | detailed
