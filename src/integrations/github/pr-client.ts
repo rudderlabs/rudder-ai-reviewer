@@ -150,6 +150,9 @@ export async function postInlineAnnotations(
 
     const changedFiles = new Set(prFiles.map((f) => f.filename));
 
+    core.info(`Changed files in PR: ${Array.from(changedFiles).join(', ')}`);
+    core.info(`SDK locations to annotate: ${annotations.map(a => a.path).join(', ')}`);
+
     // Filter annotations to only include files that are in the PR diff
     const annotationsInDiff = annotations.filter((ann) => changedFiles.has(ann.path));
 
