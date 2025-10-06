@@ -195,31 +195,36 @@ export async function postInlineAnnotations(
 
     const commitSha = pr.head.sha;
 
-    // Get existing review comments to avoid duplicates
+    const commentIdentifier = '<!-- rudderstack-sdk-location -->';
+
+    // Get existing review comments created by us to avoid duplicates
     const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
       owner,
       repo,
       pull_number: pullNumber,
     });
 
-    const commentIdentifier = '<!-- rudderstack-sdk-location -->';
+    const ourExistingComments = existingComments.filter((comment) =>
+      comment.body?.includes(commentIdentifier)
+    );
 
-    // Filter out annotations that already have comments
-    const newAnnotations = annotationsInDiff.filter((ann) => {
-      return !existingComments.some(
-        (comment) =>
-          comment.path === ann.path &&
-          comment.line === ann.line &&
-          comment.body?.includes(commentIdentifier)
-      );
-    });
+    core.info(`Found ${ourExistingComments.length} existing SDK location comment(s)`);
+
+    // Filter out annotations that already have comments (avoid duplicates)
+    const existingCommentLocations = new Set(
+      ourExistingComments.map((c) => `${c.path}:${c.line}`)
+    );
+
+    const newAnnotations = annotationsInDiff.filter(
+      (ann) => !existingCommentLocations.has(`${ann.path}:${ann.line}`)
+    );
 
     if (newAnnotations.length === 0) {
-      core.info('All locations in changed files already have comments');
+      core.info('All locations already have comments');
       return;
     }
 
-    // Create review comments for each location
+    // Create review comments for each new location
     let successCount = 0;
     for (const ann of newAnnotations) {
       try {
@@ -241,7 +246,7 @@ export async function postInlineAnnotations(
     }
 
     if (successCount > 0) {
-      core.info(`✅ Posted ${successCount} inline comment(s) on changed files`);
+      core.info(`✅ Posted ${successCount} new inline comment(s) on changed files`);
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

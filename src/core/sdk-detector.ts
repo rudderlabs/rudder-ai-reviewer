@@ -4,6 +4,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as parser from '@babel/parser';
+import traverse from '@babel/traverse';
+import * as t from '@babel/types';
 
 export type SDKInstallationType = 'npm' | 'cdn' | 'both' | 'none';
 
@@ -144,7 +147,7 @@ async function getExactNPMVersion(repoPath: string): Promise<string | undefined>
 }
 
 /**
- * Detect CDN usage by scanning common file patterns
+ * Detect CDN usage by parsing JavaScript code with AST
  */
 async function detectCDNUsage(
   repoPath: string
@@ -152,12 +155,6 @@ async function detectCDNUsage(
   const files: string[] = [];
   const locations: SDKLocation[] = [];
   let version: string | undefined;
-
-  // Patterns to search for CDN usage
-  // Note: Only the CDN URL pattern extracts the SDK version. Other patterns just detect CDN presence.
-  const cdnPatterns: Array<{ pattern: RegExp; extractsVersion: boolean }> = [
-    { pattern: /cdn\.rudderlabs\.com\/v(\d+)(?:\.(\d+)\.(\d+))?\/(modern|legacy)\/rsa\.min\.js/, extractsVersion: true },
-  ];
 
   // Files to check (limit to common patterns for now)
   const filesToCheck = [
@@ -177,42 +174,28 @@ async function detectCDNUsage(
     if (fs.existsSync(filePath)) {
       try {
         const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n');
 
-        // Check for CDN patterns line by line
-        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-          const line = lines[lineIndex];
+        // Extract JavaScript code from the file
+        const jsCode = extractJavaScriptCode(content, file);
 
-          for (const { pattern, extractsVersion } of cdnPatterns) {
-            const match = line.match(pattern);
-            if (match) {
-              if (!files.includes(file)) {
-                files.push(file);
-              }
+        if (jsCode) {
+          // Parse the JavaScript and look for RudderStack CDN variables
+          const cdnInfo = parseRudderStackCDN(jsCode, file);
 
-              // Store location
-              locations.push({
-                file,
-                line: lineIndex + 1, // Line numbers are 1-indexed
-                type: 'cdn',
-                snippet: line.trim(),
-              });
-
-              // Extract SDK version only from CDN URL (not from snippet version or buffer)
-              if (!version && extractsVersion && match[1]) {
-                // CDN URL: v3 or v3.0.0 format
-                if (match[2] && match[3]) {
-                  version = `v${match[1]}.${match[2]}.${match[3]}`;
-                } else {
-                  version = `v${match[1]}`;
-                }
-              }
-              break; // Move to next line
+          if (cdnInfo.found) {
+            if (!files.includes(file)) {
+              files.push(file);
             }
+
+            if (cdnInfo.version && !version) {
+              version = cdnInfo.version;
+            }
+
+            locations.push(...cdnInfo.locations);
           }
         }
       } catch {
-        // Ignore read errors
+        // Ignore parse errors
       }
     }
   }
@@ -223,4 +206,183 @@ async function detectCDNUsage(
     files,
     locations,
   };
+}
+
+/**
+ * Extract JavaScript code from various file types
+ */
+function extractJavaScriptCode(content: string, filename: string): string | null {
+  const ext = path.extname(filename);
+
+  // For .tsx/.jsx/.ts/.js files, return as-is
+  if (['.tsx', '.jsx', '.ts', '.js'].includes(ext)) {
+    return content;
+  }
+
+  // For HTML files, extract script tags
+  if (ext === '.html') {
+    const scriptMatches = content.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+    const scripts: string[] = [];
+
+    for (const match of scriptMatches) {
+      scripts.push(match[1]);
+    }
+
+    return scripts.length > 0 ? scripts.join('\n\n') : null;
+  }
+
+  return null;
+}
+
+/**
+ * Parse JavaScript code to find RudderStack CDN configuration
+ */
+function parseRudderStackCDN(
+  code: string,
+  filename: string
+): { found: boolean; version?: string; locations: SDKLocation[] } {
+  const locations: SDKLocation[] = [];
+  let sdkVersion: string | undefined;
+
+  try {
+    // Parse with Babel
+    const ast = parser.parse(code, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+      errorRecovery: true,
+    });
+
+    // Track variable declarations and JSX template literals
+    const variables: Map<string, { value: string; line: number; snippet: string }> = new Map();
+    const jsxScriptContents: string[] = [];
+
+    traverse(ast, {
+      VariableDeclarator(path) {
+        const { node } = path;
+
+        // Check if it's an identifier with string literal
+        if (t.isIdentifier(node.id) && t.isStringLiteral(node.init)) {
+          const varName = node.id.name;
+          const value = node.init.value;
+
+          variables.set(varName, {
+            value,
+            line: node.loc?.start.line || 0,
+            snippet: code.split('\n')[node.loc?.start.line ? node.loc.start.line - 1 : 0]?.trim() || '',
+          });
+        }
+      },
+      JSXElement(path) {
+        const { node } = path;
+
+        // Check if it's a Script or script element
+        const openingElement = node.openingElement;
+        if (
+          t.isJSXIdentifier(openingElement.name) &&
+          (openingElement.name.name === 'Script' || openingElement.name.name === 'script')
+        ) {
+          // Look for template literal children
+          for (const child of node.children) {
+            if (t.isJSXExpressionContainer(child) && t.isTemplateLiteral(child.expression)) {
+              // Extract the template literal content
+              const quasis = child.expression.quasis;
+              const content = quasis.map((q) => q.value.cooked || q.value.raw).join('');
+              jsxScriptContents.push(content);
+            }
+          }
+        }
+      },
+    });
+
+    // If we found JSX script content, parse it recursively
+    if (jsxScriptContents.length > 0) {
+      for (const scriptContent of jsxScriptContents) {
+        try {
+          const scriptAst = parser.parse(scriptContent, {
+            sourceType: 'script',
+            errorRecovery: true,
+          });
+
+          traverse(scriptAst, {
+            VariableDeclarator(path) {
+              const { node } = path;
+
+              if (t.isIdentifier(node.id) && t.isStringLiteral(node.init)) {
+                const varName = node.id.name;
+                const value = node.init.value;
+
+                variables.set(varName, {
+                  value,
+                  line: node.loc?.start.line || 0,
+                  snippet: code.split('\n')[node.loc?.start.line ? node.loc.start.line - 1 : 0]?.trim() || '',
+                });
+              }
+            },
+          });
+        } catch {
+          // Ignore parse errors in JSX script content
+        }
+      }
+    }
+
+    // Look for RudderStack CDN indicators
+    // Note: We don't rely on sdkBaseUrl domain since customers may proxy it
+
+    // Check for sdkBaseUrl (any domain)
+    if (variables.has('sdkBaseUrl')) {
+      const info = variables.get('sdkBaseUrl')!;
+      locations.push({
+        file: filename,
+        line: info.line,
+        type: 'cdn',
+        snippet: info.snippet,
+      });
+    }
+
+    // Check for sdkVersion (most reliable CDN indicator)
+    if (variables.has('sdkVersion')) {
+      const info = variables.get('sdkVersion')!;
+      sdkVersion = info.value;
+
+      // If we didn't find sdkBaseUrl location yet, use sdkVersion location
+      if (locations.length === 0) {
+        locations.push({
+          file: filename,
+          line: info.line,
+          type: 'cdn',
+          snippet: info.snippet,
+        });
+      }
+    }
+
+    // Check for sdkFileName
+    const hasSdkFileName = variables.has('sdkFileName') &&
+                          variables.get('sdkFileName')?.value.includes('rsa.min.js');
+
+    // CDN is detected only if we have ALL required variables:
+    // - sdkBaseUrl (any domain)
+    // - sdkVersion (RudderStack CDN pattern)
+    // - sdkFileName containing rsa.min.js
+    const isCDN = variables.has('sdkBaseUrl') &&
+                  sdkVersion !== undefined &&
+                  hasSdkFileName === true;
+
+    // Extract version from sdkVersion variable
+    let version: string | undefined;
+    if (sdkVersion) {
+      // Extract the major version number (remove custom prefixes and 'v')
+      // Examples: "v3" -> "3", "v3.0.0" -> "3.0.0", "/custom/path/v3" -> "3"
+      const versionMatch = sdkVersion.match(/v?(\d+(?:\.\d+\.\d+)?)/);
+      version = versionMatch ? versionMatch[1] : undefined;
+    }
+
+    return {
+      found: isCDN,
+      version,
+      locations,
+    };
+  } catch {
+    // If parsing fails, return not found
+    return { found: false, locations: [] };
+  }
 }
