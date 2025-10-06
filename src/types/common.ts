@@ -20,6 +20,7 @@ export interface ActionConfig {
   serviceAccessToken: string;
   sourceId?: string;
   githubToken: string;
+  rootDirectory?: string;
   configPath: string;
   filePatterns?: string[];
   excludePatterns?: string[];

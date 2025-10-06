@@ -4,7 +4,8 @@
   "description": "GitHub Action to analyze RudderStack SDK instrumentation changes in pull requests",
   "main": "dist/index.js",
   "scripts": {
-    "build": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
+    "build": "ncc build src/main.ts -o dist && npm run clean:declarations",
+    "clean:declarations": "find dist -name '*.d.ts' -delete && find dist -name '*.d.ts.map' -delete && find dist -type d -empty -delete",
     "dev": "tsc --watch",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",

@@ -17,6 +17,9 @@ inputs:
     description: 'GitHub token for PR comments and annotations'
     required: true
     default: ${{ github.token }}
+  root_directory:
+    description: 'Root directory to analyze (defaults to repository root, useful for testing with sample apps)'
+    required: false
   config_path:
     description: 'Path to config file'
     required: false

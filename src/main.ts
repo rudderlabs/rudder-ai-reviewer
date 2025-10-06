@@ -38,11 +38,16 @@ async function run(): Promise<void> {
 
     core.info(`Analyzing PR #${prNumber} in ${owner}/${repo}`);
 
-    // Get workspace path
-    const workspacePath = process.env.GITHUB_WORKSPACE;
+    // Get workspace path (use root_directory if provided, otherwise GitHub workspace)
+    let workspacePath = config.rootDirectory;
     if (!workspacePath) {
-      throw new Error('GITHUB_WORKSPACE environment variable is not set');
+      workspacePath = process.env.GITHUB_WORKSPACE;
+      if (!workspacePath) {
+        throw new Error('GITHUB_WORKSPACE environment variable is not set');
+      }
     }
+
+    core.info(`Analyzing directory: ${workspacePath}`);
 
     core.info('🔍 Detecting RudderStack SDK installation...');
 
@@ -90,6 +95,7 @@ function getActionConfig(): ActionConfig {
     serviceAccessToken: core.getInput('service_access_token', { required: true }),
     sourceId: core.getInput('source_id') || undefined,
     githubToken: core.getInput('github_token', { required: true }),
+    rootDirectory: core.getInput('root_directory') || undefined,
     configPath: core.getInput('config_path') || '.rudderstack-pr-reviewer.yml',
     filePatterns: parseCommaSeparated(core.getInput('file_patterns')),
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
