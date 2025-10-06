@@ -153,11 +153,10 @@ async function detectCDNUsage(
   const locations: SDKLocation[] = [];
   let version: string | undefined;
 
-  // Patterns to search for (with identifiers)
-  const cdnPatterns: Array<{ pattern: RegExp; type: 'url' | 'snippet' | 'buffer' }> = [
-    { pattern: /cdn\.rudderlabs\.com\/v(\d+)(?:\.(\d+)\.(\d+))?\/(modern|legacy)\/rsa\.min\.js/, type: 'url' },
-    { pattern: /window\.RudderSnippetVersion\s*=\s*["']([^"']+)["']/, type: 'snippet' },
-    { pattern: /window\.rudderanalytics\s*=\s*\[\]/, type: 'buffer' },
+  // Patterns to search for CDN usage
+  // Note: Only the CDN URL pattern extracts the SDK version. Other patterns just detect CDN presence.
+  const cdnPatterns: Array<{ pattern: RegExp; extractsVersion: boolean }> = [
+    { pattern: /cdn\.rudderlabs\.com\/v(\d+)(?:\.(\d+)\.(\d+))?\/(modern|legacy)\/rsa\.min\.js/, extractsVersion: true },
   ];
 
   // Files to check (limit to common patterns for now)
@@ -184,7 +183,7 @@ async function detectCDNUsage(
         for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
           const line = lines[lineIndex];
 
-          for (const { pattern, type } of cdnPatterns) {
+          for (const { pattern, extractsVersion } of cdnPatterns) {
             const match = line.match(pattern);
             if (match) {
               if (!files.includes(file)) {
@@ -199,18 +198,13 @@ async function detectCDNUsage(
                 snippet: line.trim(),
               });
 
-              // Extract version based on pattern type
-              if (!version && match[1]) {
-                if (type === 'url') {
-                  // CDN URL: v3 or v3.0.0 format
-                  if (match[2] && match[3]) {
-                    version = `v${match[1]}.${match[2]}.${match[3]}`;
-                  } else {
-                    version = `v${match[1]}`;
-                  }
-                } else if (type === 'snippet') {
-                  // Snippet version: use as-is (already includes 'v' or is semver)
-                  version = match[1];
+              // Extract SDK version only from CDN URL (not from snippet version or buffer)
+              if (!version && extractsVersion && match[1]) {
+                // CDN URL: v3 or v3.0.0 format
+                if (match[2] && match[3]) {
+                  version = `v${match[1]}.${match[2]}.${match[3]}`;
+                } else {
+                  version = `v${match[1]}`;
                 }
               }
               break; // Move to next line
