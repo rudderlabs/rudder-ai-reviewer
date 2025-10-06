@@ -130,11 +130,12 @@ Use in subsequent steps:
 
 ## Supported Frameworks
 
-- ✅ React
-- ✅ Next.js
-- ✅ Vue
-- ✅ Angular
+- ✅ React (Hooks, Class Components, Vite)
+- ✅ Next.js (App Router, Pages Router)
+- ✅ Angular (Services, Components)
 - ✅ Vanilla JavaScript/TypeScript
+- ✅ Gatsby (via React patterns)
+- 🔄 Vue (Coming Soon - framework-agnostic detection will work)
 
 ## Privacy & Security
 
