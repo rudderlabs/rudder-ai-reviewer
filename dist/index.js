@@ -87616,6 +87616,13 @@ class JavaScriptAnalyzer extends base_analyzer_1.BaseAnalyzer {
         return issues;
     }
     /**
+     * Get files with SDK usage (separate method to avoid breaking interface)
+     */
+    async getFilesWithSDK(repoPath) {
+        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(repoPath);
+        return [...new Set(scanResult.methodCalls.map(call => call.file))];
+    }
+    /**
      * Get supported file extensions
      */
     getSupportedExtensions() {
@@ -89701,8 +89708,11 @@ async function runSimplifiedAnalysis(config) {
         // Step 5: Validate API usage
         core.info('Validating SDK API usage...');
         const issues = await analyzer.validateAPI(changedFiles, repoPath);
+        // Step 6: Get files with SDK usage
+        const filesWithSDK = await analyzer.getFilesWithSDK(repoPath);
         core.info(`Found ${issues.length} issues`);
-        // Step 6: Build result
+        core.info(`Files with SDK usage: ${filesWithSDK.join(', ')}`);
+        const filesWithSDKSet = new Set(filesWithSDK);
         const result = {
             status: issues.some((i) => i.severity === 'error') ? 'partial' : 'success',
             issues,
@@ -89715,7 +89725,7 @@ async function runSimplifiedAnalysis(config) {
             filesAnalyzed: changedFiles.map((f) => ({
                 path: f,
                 analyzed: true,
-                sdkDetected: sdkUsage.locations.some((loc) => loc.file.includes(f)),
+                sdkDetected: filesWithSDKSet.has(f),
             })),
         };
         // Step 7: Generate and post report

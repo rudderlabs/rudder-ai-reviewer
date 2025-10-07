@@ -195,6 +195,14 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
   }
 
   /**
+   * Get files with SDK usage (separate method to avoid breaking interface)
+   */
+  async getFilesWithSDK(repoPath: string): Promise<string[]> {
+    const scanResult = await scanFilesForSDKUsage(repoPath);
+    return [...new Set(scanResult.methodCalls.map(call => call.file))];
+  }
+
+  /**
    * Get supported file extensions
    */
   getSupportedExtensions(): string[] {

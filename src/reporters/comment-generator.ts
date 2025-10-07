@@ -28,7 +28,7 @@ export function generatePRComment(
   const sections: string[] = [];
 
   // Header with icon
-  sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="24" height="24" /> RudderStack Instrumentation Review\n');
+  sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review\n');
 
   // Summary
   sections.push(generateSummary(result));
@@ -374,7 +374,7 @@ function hasChanges(changes: ChangesSummary): boolean {
  * Generate progress comment (for updates)
  */
 export function generateProgressComment(stage: string): string {
-  return `## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="24" height="24" /> RudderStack Instrumentation Review
+  return `## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review
 
 ### ⏳ Analysis in Progress
 

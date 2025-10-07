@@ -67,9 +67,13 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     core.info('Validating SDK API usage...');
     const issues = await analyzer.validateAPI(changedFiles, repoPath);
 
+    // Step 6: Get files with SDK usage
+    const filesWithSDK = await analyzer.getFilesWithSDK(repoPath);
     core.info(`Found ${issues.length} issues`);
+    core.info(`Files with SDK usage: ${filesWithSDK.join(', ')}`);
 
-    // Step 6: Build result
+    const filesWithSDKSet = new Set(filesWithSDK);
+
     const result: AnalysisResult = {
       status: issues.some((i) => i.severity === 'error') ? 'partial' : 'success',
       issues,
@@ -82,7 +86,7 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
       filesAnalyzed: changedFiles.map((f) => ({
         path: f,
         analyzed: true,
-        sdkDetected: sdkUsage.locations.some((loc) => loc.file.includes(f)),
+        sdkDetected: filesWithSDKSet.has(f),
       })),
     };
 

@@ -31,7 +31,7 @@ export async function postNoSDKComment(options: PRCommentOptions): Promise<void>
   const { owner, repo, pullNumber, token } = options;
   const octokit = github.getOctokit(token);
 
-  const commentBody = `## <img src="https://github.com/rudderlabs/pr-reviewer/blob/test.sdk-changes-detection/icon.png?raw=true" alt="RudderStack" width="24" height="24" align="center"> RudderStack Instrumentation Review
+  const commentBody = `## <img src="https://github.com/rudderlabs/pr-reviewer/blob/test.sdk-changes-detection/icon.png?raw=true" alt="RudderStack" width="22" height="22" align="center"> RudderStack Instrumentation Review
 
 ### ℹ️ No RudderStack SDK instrumentation detected
 
@@ -91,7 +91,7 @@ export function formatAnalysisReport(
   changes: ChangeDetectionResult,
   _options: { owner: string; repo: string; commitSha: string; pathPrefix?: string }
 ): string {
-  let report = `## <img src="https://github.com/rudderlabs/pr-reviewer/blob/test.sdk-changes-detection/icon.png?raw=true" alt="RudderStack" width="24" height="24" align="center"> RudderStack Instrumentation Review
+  let report = `## <img src="https://github.com/rudderlabs/pr-reviewer/blob/test.sdk-changes-detection/icon.png?raw=true" alt="RudderStack" width="22" height="22" align="center"> RudderStack Instrumentation Review
 
 `;
 
