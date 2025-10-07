@@ -70,9 +70,17 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     // Step 6: Get files with SDK usage
     const filesWithSDK = await analyzer.getFilesWithSDK(repoPath);
     core.info(`Found ${issues.length} issues`);
-    core.info(`Files with SDK usage: ${filesWithSDK.join(', ')}`);
+    core.info(`Files with SDK usage: ${JSON.stringify(filesWithSDK)}`);
+    core.info(`Changed files: ${JSON.stringify(changedFiles)}`);
 
     const filesWithSDKSet = new Set(filesWithSDK);
+
+    // Debug: Check matching
+    const debugMatches = changedFiles.map(f => ({
+      file: f,
+      hasSDK: filesWithSDKSet.has(f),
+    }));
+    core.info(`File matching debug: ${JSON.stringify(debugMatches, null, 2)}`);
 
     const result: AnalysisResult = {
       status: issues.some((i) => i.severity === 'error') ? 'partial' : 'success',

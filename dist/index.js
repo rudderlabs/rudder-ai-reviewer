@@ -89711,8 +89711,15 @@ async function runSimplifiedAnalysis(config) {
         // Step 6: Get files with SDK usage
         const filesWithSDK = await analyzer.getFilesWithSDK(repoPath);
         core.info(`Found ${issues.length} issues`);
-        core.info(`Files with SDK usage: ${filesWithSDK.join(', ')}`);
+        core.info(`Files with SDK usage: ${JSON.stringify(filesWithSDK)}`);
+        core.info(`Changed files: ${JSON.stringify(changedFiles)}`);
         const filesWithSDKSet = new Set(filesWithSDK);
+        // Debug: Check matching
+        const debugMatches = changedFiles.map(f => ({
+            file: f,
+            hasSDK: filesWithSDKSet.has(f),
+        }));
+        core.info(`File matching debug: ${JSON.stringify(debugMatches, null, 2)}`);
         const result = {
             status: issues.some((i) => i.severity === 'error') ? 'partial' : 'success',
             issues,
@@ -90442,7 +90449,7 @@ exports.generateProgressComment = generateProgressComment;
 function generatePRComment(result, options = { verbosity: 'standard', includePropertyDetails: false }) {
     const sections = [];
     // Header with icon
-    sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="24" height="24" /> RudderStack Instrumentation Review\n');
+    sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review\n');
     // Summary
     sections.push(generateSummary(result));
     // Files Analyzed
@@ -90709,7 +90716,7 @@ function hasChanges(changes) {
  * Generate progress comment (for updates)
  */
 function generateProgressComment(stage) {
-    return `## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="24" height="24" /> RudderStack Instrumentation Review
+    return `## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review
 
 ### ⏳ Analysis in Progress
 
