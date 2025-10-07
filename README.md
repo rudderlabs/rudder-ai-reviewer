@@ -1,6 +1,8 @@
-# RudderStack PR Reviewer
-
-Automatically review and validate RudderStack SDK instrumentation changes in your pull requests. Get instant feedback on API correctness, tracking plan compliance, and downstream destination impacts.
+<div align="center">
+  <img src="icon.png" alt="RudderStack" width="128" height="128">
+  <h1>RudderStack PR Reviewer</h1>
+  <p>Automatically review and validate RudderStack SDK instrumentation changes in your pull requests. Get instant feedback on API correctness, tracking plan compliance, and downstream destination impacts.</p>
+</div>
 
 > **Status:** 🚧 In Development - Coming Soon!
 

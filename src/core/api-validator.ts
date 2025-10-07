@@ -1,6 +1,5 @@
 import * as core from '@actions/core';
 import { SDKMethodCall, SDKArgument } from './file-scanner';
-import { getSDKMethodSignatures, MethodSignature as SDKMethodSignature, isTypeCompatible } from './type-extractor';
 
 /**
  * Represents a validation issue found in SDK usage
@@ -26,32 +25,447 @@ export interface ValidationResult {
   suggestions: ValidationIssue[];
 }
 
+/**
+ * Method overload signature
+ */
+interface MethodOverload {
+  params: Array<{
+    name: string;
+    type: string;
+    optional: boolean;
+  }>;
+  description: string;
+}
+
+/**
+ * Comprehensive SDK method signatures with all overloads
+ * Based on @rudderstack/analytics-js v3 API
+ */
+const SDK_METHOD_OVERLOADS: Record<string, MethodOverload[]> = {
+  track: [
+    // track(event: string)
+    {
+      params: [{ name: 'event', type: 'string', optional: false }],
+      description: 'Track an event without properties',
+    },
+    // track(event: string, properties: object)
+    {
+      params: [
+        { name: 'event', type: 'string', optional: false },
+        { name: 'properties', type: 'object', optional: false },
+      ],
+      description: 'Track an event with properties',
+    },
+    // track(event: string, properties: object, options: object)
+    {
+      params: [
+        { name: 'event', type: 'string', optional: false },
+        { name: 'properties', type: 'object', optional: false },
+        { name: 'options', type: 'object', optional: true },
+      ],
+      description: 'Track an event with properties and options',
+    },
+    // track(event: string, properties: object, callback: function)
+    {
+      params: [
+        { name: 'event', type: 'string', optional: false },
+        { name: 'properties', type: 'object', optional: false },
+        { name: 'callback', type: 'function', optional: true },
+      ],
+      description: 'Track an event with properties and callback',
+    },
+    // track(event: string, callback: function)
+    {
+      params: [
+        { name: 'event', type: 'string', optional: false },
+        { name: 'callback', type: 'function', optional: true },
+      ],
+      description: 'Track an event with callback',
+    },
+    // track(event: string, properties: object, options: object, callback: function)
+    {
+      params: [
+        { name: 'event', type: 'string', optional: false },
+        { name: 'properties', type: 'object', optional: false },
+        { name: 'options', type: 'object', optional: false },
+        { name: 'callback', type: 'function', optional: true },
+      ],
+      description: 'Track an event with properties, options, and callback',
+    },
+  ],
+  identify: [
+    // identify(userId: string)
+    {
+      params: [{ name: 'userId', type: 'string', optional: false }],
+      description: 'Identify with userId only',
+    },
+    // identify(userId: string, traits: object)
+    {
+      params: [
+        { name: 'userId', type: 'string', optional: false },
+        { name: 'traits', type: 'object', optional: false },
+      ],
+      description: 'Identify with userId and traits',
+    },
+    // identify(userId: string, traits: object, options: object)
+    {
+      params: [
+        { name: 'userId', type: 'string', optional: false },
+        { name: 'traits', type: 'object', optional: false },
+        { name: 'options', type: 'object', optional: false },
+      ],
+      description: 'Identify with userId, traits, and options',
+    },
+    // identify(userId: string, traits: object, callback: function)
+    {
+      params: [
+        { name: 'userId', type: 'string', optional: false },
+        { name: 'traits', type: 'object', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Identify with userId, traits, and callback',
+    },
+    // identify(userId: string, callback: function)
+    {
+      params: [
+        { name: 'userId', type: 'string', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Identify with userId and callback',
+    },
+    // identify(traits: object)
+    {
+      params: [{ name: 'traits', type: 'object', optional: false }],
+      description: 'Identify with traits only (anonymous user)',
+    },
+    // identify(userId: string, traits: object, options: object, callback: function)
+    {
+      params: [
+        { name: 'userId', type: 'string', optional: false },
+        { name: 'traits', type: 'object', optional: false },
+        { name: 'options', type: 'object', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Identify with all parameters',
+    },
+  ],
+  page: [
+    // page()
+    {
+      params: [],
+      description: 'Track page view without parameters',
+    },
+    // page(category: string)
+    {
+      params: [{ name: 'category', type: 'string', optional: false }],
+      description: 'Track page view with category',
+    },
+    // page(name: string)
+    {
+      params: [{ name: 'name', type: 'string', optional: false }],
+      description: 'Track page view with name',
+    },
+    // page(category: string, name: string)
+    {
+      params: [
+        { name: 'category', type: 'string', optional: false },
+        { name: 'name', type: 'string', optional: false },
+      ],
+      description: 'Track page view with category and name',
+    },
+    // page(category: string, name: string, properties: object)
+    {
+      params: [
+        { name: 'category', type: 'string', optional: false },
+        { name: 'name', type: 'string', optional: false },
+        { name: 'properties', type: 'object', optional: false },
+      ],
+      description: 'Track page view with category, name, and properties',
+    },
+    // page(category: string, name: string, properties: object, options: object)
+    {
+      params: [
+        { name: 'category', type: 'string', optional: false },
+        { name: 'name', type: 'string', optional: false },
+        { name: 'properties', type: 'object', optional: false },
+        { name: 'options', type: 'object', optional: false },
+      ],
+      description: 'Track page view with category, name, properties, and options',
+    },
+    // page(category: string, name: string, properties: object, callback: function)
+    {
+      params: [
+        { name: 'category', type: 'string', optional: false },
+        { name: 'name', type: 'string', optional: false },
+        { name: 'properties', type: 'object', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Track page view with category, name, properties, and callback',
+    },
+    // page(properties: object)
+    {
+      params: [{ name: 'properties', type: 'object', optional: false }],
+      description: 'Track page view with properties only',
+    },
+  ],
+  group: [
+    // group(groupId: string)
+    {
+      params: [{ name: 'groupId', type: 'string', optional: false }],
+      description: 'Associate user with group',
+    },
+    // group(groupId: string, traits: object)
+    {
+      params: [
+        { name: 'groupId', type: 'string', optional: false },
+        { name: 'traits', type: 'object', optional: false },
+      ],
+      description: 'Associate user with group and traits',
+    },
+    // group(groupId: string, traits: object, options: object)
+    {
+      params: [
+        { name: 'groupId', type: 'string', optional: false },
+        { name: 'traits', type: 'object', optional: false },
+        { name: 'options', type: 'object', optional: false },
+      ],
+      description: 'Associate user with group, traits, and options',
+    },
+    // group(groupId: string, traits: object, callback: function)
+    {
+      params: [
+        { name: 'groupId', type: 'string', optional: false },
+        { name: 'traits', type: 'object', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Associate user with group, traits, and callback',
+    },
+    // group(groupId: string, callback: function)
+    {
+      params: [
+        { name: 'groupId', type: 'string', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Associate user with group and callback',
+    },
+    // group(groupId: string, traits: object, options: object, callback: function)
+    {
+      params: [
+        { name: 'groupId', type: 'string', optional: false },
+        { name: 'traits', type: 'object', optional: false },
+        { name: 'options', type: 'object', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Associate user with group with all parameters',
+    },
+  ],
+  alias: [
+    // alias(to: string)
+    {
+      params: [{ name: 'to', type: 'string', optional: false }],
+      description: 'Create alias for current user',
+    },
+    // alias(to: string, from: string)
+    {
+      params: [
+        { name: 'to', type: 'string', optional: false },
+        { name: 'from', type: 'string', optional: false },
+      ],
+      description: 'Create alias with explicit from userId',
+    },
+    // alias(to: string, options: object)
+    {
+      params: [
+        { name: 'to', type: 'string', optional: false },
+        { name: 'options', type: 'object', optional: false },
+      ],
+      description: 'Create alias with options',
+    },
+    // alias(to: string, from: string, options: object)
+    {
+      params: [
+        { name: 'to', type: 'string', optional: false },
+        { name: 'from', type: 'string', optional: false },
+        { name: 'options', type: 'object', optional: false },
+      ],
+      description: 'Create alias with from userId and options',
+    },
+    // alias(to: string, from: string, callback: function)
+    {
+      params: [
+        { name: 'to', type: 'string', optional: false },
+        { name: 'from', type: 'string', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Create alias with from userId and callback',
+    },
+    // alias(to: string, callback: function)
+    {
+      params: [
+        { name: 'to', type: 'string', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Create alias with callback',
+    },
+    // alias(to: string, from: string, options: object, callback: function)
+    {
+      params: [
+        { name: 'to', type: 'string', optional: false },
+        { name: 'from', type: 'string', optional: false },
+        { name: 'options', type: 'object', optional: false },
+        { name: 'callback', type: 'function', optional: false },
+      ],
+      description: 'Create alias with all parameters',
+    },
+  ],
+  reset: [
+    // reset()
+    {
+      params: [],
+      description: 'Reset user identity',
+    },
+    // reset(resetAnonymousId: boolean)
+    {
+      params: [{ name: 'resetAnonymousId', type: 'boolean', optional: false }],
+      description: 'Reset user identity with anonymous ID control',
+    },
+    // reset(options: object)
+    {
+      params: [{ name: 'options', type: 'object', optional: true }],
+      description: 'Reset user identity with options',
+    },
+  ],
+  load: [
+    // load(writeKey: string, dataPlaneUrl: string)
+    {
+      params: [
+        { name: 'writeKey', type: 'string', optional: false },
+        { name: 'dataPlaneUrl', type: 'string', optional: false },
+      ],
+      description: 'Initialize SDK with write key and data plane URL',
+    },
+    // load(writeKey: string, dataPlaneUrl: string, options: object)
+    {
+      params: [
+        { name: 'writeKey', type: 'string', optional: false },
+        { name: 'dataPlaneUrl', type: 'string', optional: false },
+        { name: 'options', type: 'object', optional: false },
+      ],
+      description: 'Initialize SDK with write key, data plane URL, and options',
+    },
+  ],
+  ready: [
+    // ready(callback: function)
+    {
+      params: [{ name: 'callback', type: 'function', optional: false }],
+      description: 'Execute callback when SDK is ready',
+    },
+  ],
+  getAnonymousId: [
+    // getAnonymousId()
+    {
+      params: [],
+      description: 'Get current anonymous ID',
+    },
+    // getAnonymousId(options: object)
+    {
+      params: [{ name: 'options', type: 'object', optional: false }],
+      description: 'Get anonymous ID with options',
+    },
+  ],
+  getUserId: [
+    // getUserId()
+    {
+      params: [],
+      description: 'Get current user ID',
+    },
+  ],
+  getUserTraits: [
+    // getUserTraits()
+    {
+      params: [],
+      description: 'Get current user traits',
+    },
+  ],
+  getGroupId: [
+    // getGroupId()
+    {
+      params: [],
+      description: 'Get current group ID',
+    },
+  ],
+  getGroupTraits: [
+    // getGroupTraits()
+    {
+      params: [],
+      description: 'Get current group traits',
+    },
+  ],
+  setAnonymousId: [
+    // setAnonymousId(anonymousId: string)
+    {
+      params: [{ name: 'anonymousId', type: 'string', optional: false }],
+      description: 'Set anonymous ID',
+    },
+    // setAnonymousId(anonymousId: string, options: object)
+    {
+      params: [
+        { name: 'anonymousId', type: 'string', optional: false },
+        { name: 'options', type: 'object', optional: false },
+      ],
+      description: 'Set anonymous ID with options',
+    },
+  ],
+  consent: [
+    // consent(options: object)
+    {
+      params: [{ name: 'options', type: 'object', optional: false }],
+      description: 'Set consent options',
+    },
+  ],
+  startSession: [
+    // startSession()
+    {
+      params: [],
+      description: 'Start a new session',
+    },
+    // startSession(sessionId: number)
+    {
+      params: [{ name: 'sessionId', type: 'number', optional: false }],
+      description: 'Start a new session with custom session ID',
+    },
+  ],
+  endSession: [
+    // endSession()
+    {
+      params: [],
+      description: 'End current session',
+    },
+  ],
+  getSessionId: [
+    // getSessionId()
+    {
+      params: [],
+      description: 'Get current session ID',
+    },
+  ],
+};
 
 /**
  * Validates SDK method calls against official API signatures
  */
 export async function validateSDKMethodCalls(
   methodCalls: SDKMethodCall[],
-  sdkVersion?: string
+  _sdkVersion?: string
 ): Promise<ValidationResult> {
   core.info(`Validating ${methodCalls.length} SDK method calls...`);
-
-  // Get method signatures (either from SDK types or built-in fallback)
-  let methodSignatures: Map<string, SDKMethodSignature>;
-  if (sdkVersion) {
-    core.info(`Using SDK version ${sdkVersion} for type validation`);
-    methodSignatures = await getSDKMethodSignatures(sdkVersion);
-  } else {
-    core.info('No SDK version detected, using built-in method signatures');
-    methodSignatures = await getSDKMethodSignatures('latest');
-  }
 
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
   const suggestions: ValidationIssue[] = [];
 
   for (const call of methodCalls) {
-    const issues = validateMethodCall(call, methodSignatures);
+    const issues = validateMethodCall(call);
     errors.push(...issues.filter((i) => i.severity === 'error'));
     warnings.push(...issues.filter((i) => i.severity === 'warning'));
     suggestions.push(...issues.filter((i) => i.severity === 'suggestion'));
@@ -68,25 +482,65 @@ export async function validateSDKMethodCalls(
 }
 
 /**
- * Validates a single SDK method call using dynamic type signatures
+ * Validates a single SDK method call against all overloads
  */
-function validateMethodCall(call: SDKMethodCall, methodSignatures: Map<string, SDKMethodSignature>): ValidationIssue[] {
+function validateMethodCall(call: SDKMethodCall): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const signature = methodSignatures.get(call.method);
+  const overloads = SDK_METHOD_OVERLOADS[call.method];
 
-  if (!signature) {
-    // Unknown method (shouldn't happen based on scanner)
-    core.debug(`No signature found for method: ${call.method}`);
+  if (!overloads) {
+    core.debug(`No overloads found for method: ${call.method}`);
     return issues;
   }
 
-  // Check argument count
-  const argCount = call.arguments.length;
-  const requiredParams = signature.parameters.filter((p) => !p.optional);
-  const minArgs = requiredParams.length;
-  const maxArgs = signature.parameters.length;
+  // Check if the call matches any overload and collect detailed errors
+  const { matchingOverload, detailedErrors } = findMatchingOverloadWithErrors(call, overloads);
 
-  if (argCount < minArgs) {
+  if (!matchingOverload) {
+    // No overload matches - generate detailed error message
+    let errorMessage = `Invalid call to ${call.method}().\n\n`;
+
+    // Show what we got
+    if (call.arguments.length === 0) {
+      errorMessage += `**Problem:** Missing required arguments.\n\n`;
+    } else {
+      errorMessage += `**Problem:** Got ${call.arguments.length} argument(s) but they don't match any valid signature:\n`;
+      call.arguments.forEach((arg, i) => {
+        const argDesc = arg.isStatic
+          ? `${arg.type}${arg.value !== undefined ? ` (value: ${JSON.stringify(arg.value)})` : ''}`
+          : `${arg.type} (dynamic value)`;
+        errorMessage += `  - Argument ${i + 1}: ${argDesc}\n`;
+      });
+      errorMessage += '\n';
+    }
+
+    // Show specific errors from attempted matches
+    if (detailedErrors.length > 0) {
+      errorMessage += `**Issues found:**\n`;
+      detailedErrors.forEach(err => {
+        errorMessage += `  - ${err}\n`;
+      });
+      errorMessage += '\n';
+    }
+
+    // Show valid signatures
+    errorMessage += `**Valid signatures:**\n`;
+    overloads.forEach((o, i) => {
+      const params = o.params.map((p) => `${p.name}: ${p.type}`).join(', ');
+      errorMessage += `  ${i + 1}. ${call.method}(${params})\n`;
+    });
+
+    // Generate a fix suggestion
+    const suggestedOverload = overloads[0];
+    const fixArgs = suggestedOverload.params.map(p => {
+      if (p.type === 'string') return `'${p.name}'`;
+      if (p.type === 'number') return '0';
+      if (p.type === 'boolean') return 'false';
+      if (p.type === 'object') return '{}';
+      if (p.type === 'function') return '() => {}';
+      return p.name;
+    }).join(', ');
+
     issues.push({
       file: call.file,
       line: call.line,
@@ -94,71 +548,115 @@ function validateMethodCall(call: SDKMethodCall, methodSignatures: Map<string, S
       severity: 'error',
       method: call.method,
       code: call.code,
-      message: `Missing required arguments for ${call.method}(). Expected at least ${minArgs} argument(s), got ${argCount}.`,
-      fix: generateFixForMissingArgs(call, signature),
+      message: errorMessage.trim(),
+      fix: `${call.method}(${fixArgs})`,
     });
-  }
-
-  if (argCount > maxArgs) {
-    issues.push({
-      file: call.file,
-      line: call.line,
-      column: call.column,
-      severity: 'warning',
-      method: call.method,
-      code: call.code,
-      message: `Too many arguments for ${call.method}(). Expected at most ${maxArgs} argument(s), got ${argCount}.`,
-    });
-  }
-
-  // Validate argument types (only for static arguments)
-  for (let i = 0; i < call.arguments.length && i < signature.parameters.length; i++) {
-    const arg = call.arguments[i];
-    const param = signature.parameters[i];
-
-    if (arg.isStatic) {
-      const typeIssue = validateArgumentTypeAgainstSignature(arg, param, call);
-      if (typeIssue) {
-        issues.push(typeIssue);
-      }
-    }
   }
 
   // Method-specific validations
-  const methodSpecificIssues = validateMethodSpecificRules(call);
-  issues.push(...methodSpecificIssues);
+  issues.push(...validateMethodSpecificRules(call));
 
   return issues;
 }
 
 /**
- * Validates an argument's type against SDK signature parameter
+ * Finds a matching overload and collects detailed error messages
  */
-function validateArgumentTypeAgainstSignature(
-  arg: SDKArgument,
-  param: SDKMethodSignature['parameters'][0],
-  call: SDKMethodCall
-): ValidationIssue | null {
-  // Check if argument type is compatible with expected type
-  if (!isTypeCompatible(arg.type, param.type)) {
-    return {
-      file: call.file,
-      line: call.line,
-      column: call.column,
-      severity: 'error',
-      method: call.method,
-      code: call.code,
-      message: `Invalid type for argument '${param.name}' in ${call.method}(). Expected ${param.type}, got ${arg.type}.`,
-      fix: `Provide a ${param.type} for the '${param.name}' parameter`,
-    };
+function findMatchingOverloadWithErrors(
+  call: SDKMethodCall,
+  overloads: MethodOverload[]
+): { matchingOverload: MethodOverload | null; detailedErrors: string[] } {
+  const argCount = call.arguments.length;
+  const detailedErrors: string[] = [];
+  const attemptedOverloads: { overload: MethodOverload; errors: string[] }[] = [];
+
+  // Try each overload and collect errors
+  for (const overload of overloads) {
+    const overloadErrors: string[] = [];
+
+    // Check argument count
+    if (overload.params.length !== argCount) {
+      if (argCount < overload.params.length) {
+        overloadErrors.push(
+          `Signature with ${overload.params.length} parameter(s) needs ${overload.params.length - argCount} more argument(s)`
+        );
+      } else {
+        overloadErrors.push(
+          `Signature with ${overload.params.length} parameter(s) has ${argCount - overload.params.length} too many argument(s)`
+        );
+      }
+      attemptedOverloads.push({ overload, errors: overloadErrors });
+      continue;
+    }
+
+    // Check if argument types match
+    let matches = true;
+    for (let i = 0; i < argCount; i++) {
+      const arg = call.arguments[i];
+      const param = overload.params[i];
+
+      if (!isArgumentCompatible(arg, param.type)) {
+        matches = false;
+        const argTypeDesc = arg.isStatic
+          ? `${arg.type}${arg.value !== undefined ? ` (${JSON.stringify(arg.value)})` : ''}`
+          : `${arg.type} (dynamic)`;
+        overloadErrors.push(
+          `Argument ${i + 1} ('${param.name}'): expected ${param.type}, got ${argTypeDesc}`
+        );
+      }
+    }
+
+    if (matches) {
+      return { matchingOverload: overload, detailedErrors: [] };
+    }
+
+    attemptedOverloads.push({ overload, errors: overloadErrors });
   }
 
-  return null;
+  // Collect the most relevant errors (from overload with fewest errors or matching arg count)
+  const bestMatch = attemptedOverloads
+    .filter(a => a.overload.params.length === argCount)
+    .sort((a, b) => a.errors.length - b.errors.length)[0];
+
+  if (bestMatch) {
+    detailedErrors.push(...bestMatch.errors);
+  } else if (attemptedOverloads.length > 0) {
+    // Show errors from first overload if no matching arg count
+    detailedErrors.push(...attemptedOverloads[0].errors);
+  }
+
+  return { matchingOverload: null, detailedErrors };
 }
 
+/**
+ * Checks if an argument is compatible with expected type
+ */
+function isArgumentCompatible(arg: SDKArgument, expectedType: string): boolean {
+  // For non-static arguments (dynamic values), we can't validate type
+  if (!arg.isStatic) {
+    return true; // Assume compatible
+  }
+
+  // Map argument types to expected types
+  switch (expectedType) {
+    case 'string':
+      return arg.type === 'string';
+    case 'number':
+      return arg.type === 'number';
+    case 'boolean':
+      return arg.type === 'boolean';
+    case 'object':
+      return arg.type === 'object' || arg.type === 'null';
+    case 'function':
+      // Functions are rarely static in the code
+      return arg.type === 'identifier' || arg.type === 'unknown';
+    default:
+      return true;
+  }
+}
 
 /**
- * Validates method-specific business rules
+ * Validates method-specific business rules that type checking can't catch
  */
 function validateMethodSpecificRules(call: SDKMethodCall): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -170,9 +668,6 @@ function validateMethodSpecificRules(call: SDKMethodCall): ValidationIssue[] {
     case 'identify':
       issues.push(...validateIdentifyCall(call));
       break;
-    case 'page':
-      issues.push(...validatePageCall(call));
-      break;
     case 'load':
       issues.push(...validateLoadCall(call));
       break;
@@ -182,45 +677,19 @@ function validateMethodSpecificRules(call: SDKMethodCall): ValidationIssue[] {
 }
 
 /**
- * Validates track() method call
+ * Validates track() method specific rules
  */
 function validateTrackCall(call: SDKMethodCall): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const eventArg = call.arguments[0];
 
-  // Event name should be a non-empty string
-  if (eventArg && eventArg.isStatic && eventArg.type === 'string' && typeof eventArg.value === 'string') {
-    if (!eventArg.value || eventArg.value.trim() === '') {
-      issues.push({
-        file: call.file,
-        line: call.line,
-        column: call.column,
-        severity: 'error',
-        method: call.method,
-        code: call.code,
-        message: 'Event name cannot be empty',
-        fix: "Provide a descriptive event name like 'button_clicked' or 'form_submitted'",
-      });
-    }
-
-    // Suggest snake_case naming convention
-    if (eventArg.value && !/^[a-z0-9_]+$/.test(eventArg.value)) {
-      issues.push({
-        file: call.file,
-        line: call.line,
-        column: call.column,
-        severity: 'suggestion',
-        method: call.method,
-        code: call.code,
-        message: 'Event names should follow snake_case convention (lowercase with underscores)',
-        fix: `Use snake_case: '${toSnakeCase(eventArg.value)}'`,
-      });
-    }
+  if (call.arguments.length === 0) {
+    return issues; // Type validation will catch this
   }
 
-  // Properties should be an object if provided
-  const propsArg = call.arguments[1];
-  if (propsArg && propsArg.isStatic && propsArg.type !== 'object' && propsArg.type !== 'null' && propsArg.type !== 'undefined') {
+  const eventArg = call.arguments[0];
+
+  // Check for empty event name
+  if (eventArg.isStatic && eventArg.type === 'string' && eventArg.value === '') {
     issues.push({
       file: call.file,
       line: call.line,
@@ -228,13 +697,13 @@ function validateTrackCall(call: SDKMethodCall): ValidationIssue[] {
       severity: 'error',
       method: call.method,
       code: call.code,
-      message: 'Properties parameter must be an object',
-      fix: 'Pass an object with event properties: { key: "value" }',
+      message: 'Event name cannot be empty',
+      fix: `rudderanalytics.track('event_name', properties)`,
     });
   }
 
-  // Warn if no properties provided
-  if (!propsArg || propsArg.type === 'null' || propsArg.type === 'undefined') {
+  // Check if properties are provided (suggestion)
+  if (call.arguments.length === 1 && eventArg.isStatic) {
     issues.push({
       file: call.file,
       line: call.line,
@@ -242,8 +711,8 @@ function validateTrackCall(call: SDKMethodCall): ValidationIssue[] {
       severity: 'suggestion',
       method: call.method,
       code: call.code,
-      message: 'Consider adding properties to provide context for this event',
-      fix: 'rudderanalytics.track("event_name", { /* properties */ })',
+      message: 'Consider adding properties to provide more context for this event',
+      fix: `rudderanalytics.track('${eventArg.value}', { /* properties */ })`,
     });
   }
 
@@ -251,12 +720,12 @@ function validateTrackCall(call: SDKMethodCall): ValidationIssue[] {
 }
 
 /**
- * Validates identify() method call
+ * Validates identify() method specific rules
  */
 function validateIdentifyCall(call: SDKMethodCall): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
-  // Warn if both userId and traits are missing
+  // Check if both userId and traits are missing (warning)
   if (call.arguments.length === 0) {
     issues.push({
       file: call.file,
@@ -265,13 +734,22 @@ function validateIdentifyCall(call: SDKMethodCall): ValidationIssue[] {
       severity: 'warning',
       method: call.method,
       code: call.code,
-      message: 'identify() called without userId or traits. At least one should be provided.',
-      fix: 'rudderanalytics.identify(userId, { /* traits */ })',
+      message: 'identify() called without userId or traits. Consider providing user information.',
+      fix: `rudderanalytics.identify('userId', { email: 'user@example.com' })`,
     });
   }
 
-  const traitsArg = call.arguments[1];
-  if (traitsArg && traitsArg.isStatic && traitsArg.type !== 'object' && traitsArg.type !== 'null' && traitsArg.type !== 'undefined') {
+  return issues;
+}
+
+/**
+ * Validates load() method specific rules
+ */
+function validateLoadCall(call: SDKMethodCall): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  if (call.arguments.length < 2) {
+    // Type validation will catch this, but add specific message
     issues.push({
       file: call.file,
       line: call.line,
@@ -279,117 +757,10 @@ function validateIdentifyCall(call: SDKMethodCall): ValidationIssue[] {
       severity: 'error',
       method: call.method,
       code: call.code,
-      message: 'Traits parameter must be an object',
-      fix: 'Pass an object with user traits: { email: "user@example.com" }',
+      message: 'load() requires writeKey and dataPlaneUrl parameters',
+      fix: `rudderanalytics.load('YOUR_WRITE_KEY', 'https://your-dataplane-url.com')`,
     });
   }
 
   return issues;
-}
-
-/**
- * Validates page() method call
- */
-function validatePageCall(call: SDKMethodCall): ValidationIssue[] {
-  const issues: ValidationIssue[] = [];
-
-  // Check if properties are at the right position
-  // page() can be called as: page(category, name, properties) or page(name, properties)
-  const lastArg = call.arguments[call.arguments.length - 1];
-  if (lastArg && lastArg.type === 'object' && lastArg.isStatic) {
-    // Good - properties provided
-  } else {
-    issues.push({
-      file: call.file,
-      line: call.line,
-      column: call.column,
-      severity: 'suggestion',
-      method: call.method,
-      code: call.code,
-      message: 'Consider adding properties to provide context for this page view',
-      fix: 'rudderanalytics.page("Page Name", { /* properties */ })',
-    });
-  }
-
-  return issues;
-}
-
-/**
- * Validates load() method call
- */
-function validateLoadCall(call: SDKMethodCall): ValidationIssue[] {
-  const issues: ValidationIssue[] = [];
-
-  const writeKeyArg = call.arguments[0];
-  const dataPlaneArg = call.arguments[1];
-
-  // Check for hardcoded write key (security issue)
-  if (writeKeyArg && writeKeyArg.isStatic && writeKeyArg.type === 'string') {
-    issues.push({
-      file: call.file,
-      line: call.line,
-      column: call.column,
-      severity: 'warning',
-      method: call.method,
-      code: call.code,
-      message: 'Write key appears to be hardcoded. Consider using environment variables.',
-      fix: 'Use process.env.RUDDERSTACK_WRITE_KEY or import from config',
-    });
-  }
-
-  // Check data plane URL format
-  if (dataPlaneArg && dataPlaneArg.isStatic && dataPlaneArg.type === 'string') {
-    const url = dataPlaneArg.value as string;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      issues.push({
-        file: call.file,
-        line: call.line,
-        column: call.column,
-        severity: 'error',
-        method: call.method,
-        code: call.code,
-        message: 'Data plane URL must be a valid HTTP/HTTPS URL',
-        fix: 'Ensure the URL starts with https:// (e.g., "https://example.dataplane.rudderstack.com")',
-      });
-    }
-  }
-
-  return issues;
-}
-
-/**
- * Generates a fix suggestion for missing arguments (SDK signature version)
- */
-function generateFixForMissingArgs(call: SDKMethodCall, signature: SDKMethodSignature): string {
-  const requiredParams = signature.parameters.filter((p) => !p.optional);
-  const argExamples = requiredParams.map((param) => {
-    const type = param.type.toLowerCase();
-    if (type.includes('string')) {
-      return `"${param.name}"`;
-    } else if (type.includes('number')) {
-      return '123';
-    } else if (type.includes('object')) {
-      return '{}';
-    } else if (type.includes('boolean')) {
-      return 'true';
-    } else if (type.includes('function')) {
-      return '() => {}';
-    } else {
-      return param.name;
-    }
-  });
-
-  return `rudderanalytics.${call.method}(${argExamples.join(', ')})`;
-}
-
-
-/**
- * Converts a string to snake_case
- */
-function toSnakeCase(str: string): string {
-  return str
-    .replace(/([A-Z])/g, '_$1')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
 }

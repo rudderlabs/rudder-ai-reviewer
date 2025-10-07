@@ -13,7 +13,6 @@ import { validateSDKMethodCalls } from './core/api-validator';
 import { detectSDKChanges } from './core/change-detector';
 import { postAnalysisReport, postInlineAnnotations, postNoSDKComment, InlineAnnotation } from './integrations/github/pr-client';
 import { getPRDiff, isLineChanged } from './integrations/github/diff-parser';
-import * as path from 'path';
 
 /**
  * Main action entry point
@@ -87,6 +86,18 @@ async function run(): Promise<void> {
         token: config.githubToken,
       });
 
+      // Clear previous inline comments if configured
+      if (config.clearPreviousComments) {
+        core.info('📍 Clearing previous inline comments...');
+        await postInlineAnnotations([], {
+          owner,
+          repo,
+          pullNumber: prNumber,
+          token: config.githubToken,
+          clearPrevious: true,
+        });
+      }
+
       core.setOutput('analysis_status', 'success');
       core.setOutput('error_count', 0);
       core.setOutput('warning_count', 0);
@@ -143,52 +154,58 @@ async function run(): Promise<void> {
       pathPrefix: pathPrefix || undefined,
     });
 
-    // Step 8: Create inline annotations for validation issues
-    if (validation.totalIssues > 0) {
-      core.info(`📍 Step 8: Creating inline comments for ${validation.totalIssues} issue(s)...`);
+    // Step 8: Create inline annotations for validation issues (or clear previous if configured)
+    core.info(`📍 Step 8: Processing inline comments...`);
 
-      const annotations: InlineAnnotation[] = [];
+    const annotations: InlineAnnotation[] = [];
 
-      // Add error annotations
-      for (const error of validation.errors) {
-        const githubPath = pathPrefix ? `${pathPrefix}/${error.file}` : error.file;
+    // Add error annotations
+    for (const error of validation.errors) {
+      const githubPath = pathPrefix ? `${pathPrefix}/${error.file}` : error.file;
+      const fixBlock = error.fix ? `\n\n**Fix:**\n\`\`\`javascript\n${error.fix}\n\`\`\`` : '';
+      annotations.push({
+        path: githubPath,
+        line: error.line,
+        annotation_level: 'failure',
+        message: `❌ **Error in \`${error.method}()\`**\n\n**Issue:** ${error.message}${fixBlock}\n\n**Current code:**\n\`\`\`javascript\n${error.code}\n\`\`\``,
+      });
+    }
+
+    // Add warning annotations
+    for (const warning of validation.warnings) {
+      const githubPath = pathPrefix ? `${pathPrefix}/${warning.file}` : warning.file;
+      const fixBlock = warning.fix ? `\n\n**Recommendation:**\n\`\`\`javascript\n${warning.fix}\n\`\`\`` : '';
+      annotations.push({
+        path: githubPath,
+        line: warning.line,
+        annotation_level: 'warning',
+        message: `⚠️ **Warning in \`${warning.method}()\`**\n\n**Issue:** ${warning.message}${fixBlock}`,
+      });
+    }
+
+    // Add suggestion annotations (only if verbosity is high)
+    if (config.outputVerbosity === 'detailed') {
+      for (const suggestion of validation.suggestions) {
+        const githubPath = pathPrefix ? `${pathPrefix}/${suggestion.file}` : suggestion.file;
+        const fixBlock = suggestion.fix ? `\n\n**Suggestion:**\n\`\`\`javascript\n${suggestion.fix}\n\`\`\`` : '';
         annotations.push({
           path: githubPath,
-          line: error.line,
-          annotation_level: 'failure',
-          message: `❌ **Error in \`${error.method}()\`**\n\n${error.message}\n\n${error.fix ? `**Fix:** \`${error.fix}\`\n\n` : ''}\`\`\`\n${error.code}\n\`\`\``,
+          line: suggestion.line,
+          annotation_level: 'notice',
+          message: `💡 **Suggestion for \`${suggestion.method}()\`**\n\n**Issue:** ${suggestion.message}${fixBlock}`,
         });
       }
+    }
 
-      // Add warning annotations
-      for (const warning of validation.warnings) {
-        const githubPath = pathPrefix ? `${pathPrefix}/${warning.file}` : warning.file;
-        annotations.push({
-          path: githubPath,
-          line: warning.line,
-          annotation_level: 'warning',
-          message: `⚠️ **Warning in \`${warning.method}()\`**\n\n${warning.message}\n\n${warning.fix ? `**Recommendation:** \`${warning.fix}\`\n\n` : ''}`,
-        });
-      }
-
-      // Add suggestion annotations (only if verbosity is high)
-      if (config.outputVerbosity === 'detailed') {
-        for (const suggestion of validation.suggestions) {
-          const githubPath = pathPrefix ? `${pathPrefix}/${suggestion.file}` : suggestion.file;
-          annotations.push({
-            path: githubPath,
-            line: suggestion.line,
-            annotation_level: 'notice',
-            message: `💡 **Suggestion for \`${suggestion.method}()\`**\n\n${suggestion.message}\n\n${suggestion.fix ? `**Suggestion:** \`${suggestion.fix}\`\n\n` : ''}`,
-          });
-        }
-      }
-
+    // Always call postInlineAnnotations if clearPrevious is true (to clear old comments)
+    // or if we have new annotations to post
+    if (config.clearPreviousComments || annotations.length > 0) {
       await postInlineAnnotations(annotations, {
         owner,
         repo,
         pullNumber: prNumber,
         token: config.githubToken,
+        clearPrevious: config.clearPreviousComments,
       });
     }
 
@@ -222,6 +239,7 @@ function getActionConfig(): ActionConfig {
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
     annotateExistingCode: core.getBooleanInput('annotate_existing_code'),
     outputVerbosity: (core.getInput('output_verbosity') || 'standard') as 'minimal' | 'standard' | 'detailed',
+    clearPreviousComments: core.getBooleanInput('clear_previous_comments'),
   };
 }
 
@@ -241,15 +259,13 @@ function parseCommaSeparated(input: string): string[] | undefined {
 function filterCallsToChangedLines(
   allCalls: SDKMethodCall[],
   diffInfo: ReturnType<typeof getPRDiff> extends Promise<infer T> ? T : never,
-  workspacePath: string,
+  _workspacePath: string,
   pathPrefix: string
 ): SDKMethodCall[] {
   return allCalls.filter((call) => {
-    // Get relative path from workspace
-    const relativePath = path.relative(workspacePath, call.file);
-
+    // call.file is already relative to workspacePath (from file scanner)
     // If we have a path prefix, we need to add it for GitHub comparison
-    const githubPath = pathPrefix ? `${pathPrefix}/${relativePath}` : relativePath;
+    const githubPath = pathPrefix ? `${pathPrefix}/${call.file}` : call.file;
 
     // Check if this line was changed in the PR
     const isChanged = isLineChanged(diffInfo, githubPath, call.line);

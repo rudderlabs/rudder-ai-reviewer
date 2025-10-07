@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CDN Invalid Test App</title>
+</head>
+<body>
+  <h1>RudderStack CDN Invalid Test</h1>
+
+  <script>
+    // RudderStack CDN Snippet (v3)
+    window.RudderSnippetVersion = "3.2.0";
+    var sdkBaseUrl = "https://cdn.rudderlabs.com";
+    var sdkVersion = "v3";
+    var sdkFileName = "rsa.min.js";
+
+    !function(){var e=window.rudderanalytics=window.rudderanalytics||[];e.methods=["load","page","track","identify","alias","group","ready","reset","getAnonymousId","setAnonymousId"],e.factory=function(t){return function(){var r=Array.prototype.slice.call(arguments);return r.unshift(t),e.push(r),e}};for(var t=0;t<e.methods.length;t++){var r=e.methods[t];e[r]=e.factory(r)}e.loadJS=function(e,t){var r=document.createElement("script");r.type="text/javascript",r.async=!0,r.src=e;var n=document.getElementsByTagName("script")[0];n.parentNode.insertBefore(r,n)},e.loadJS(sdkBaseUrl+"/"+sdkVersion+"/"+sdkFileName),e.load("WRITE_KEY","https://dataplane.rudderstack.com")}();
+
+    // ERROR: Missing event name
+    rudderanalytics.track();
+
+    // ERROR: Event name is not a string
+    const eventName = 1;
+    rudderanalytics.track(eventName);
+
+    // ERROR: Empty event name
+    rudderanalytics.track('', { prop: 'value' });
+
+    // WARNING: camelCase instead of snake_case
+    rudderanalytics.track('UserSignedUp', {
+      userId: '123',
+    });
+
+    // ERROR: Properties not an object
+    rudderanalytics.track('click', 'wrong type');
+
+    // WARNING: No properties
+    rudderanalytics.track('page_view');
+
+    // ERROR: identify with invalid traits type
+    rudderanalytics.identify('user123', 'not an object');
+
+    // WARNING: identify without userId or traits
+    rudderanalytics.identify();
+
+    // ERROR: Too many arguments
+    rudderanalytics.track('event', {}, {}, () => {}, 'extra');
+
+    // ERROR: Group without groupId
+    rudderanalytics.group();
+
+    // ERROR: Page with wrong parameter types
+    rudderanalytics.page(123, 456);
+  </script>
+</body>
+</html>
