@@ -31,21 +31,25 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
 
     // Step 3: Initialize analyzer
     const analyzer = new JavaScriptAnalyzer();
-    // Use config.rootDirectory if provided, otherwise use GITHUB_WORKSPACE (repo root)
-    // If rootDirectory is relative, resolve it from GITHUB_WORKSPACE
-    let repoPath: string;
+
+    // Get repo root (always the workspace root)
+    const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+
+    // Determine scan path: use config.rootDirectory if provided, otherwise repo root
+    let scanPath: string;
     if (config.rootDirectory) {
-      const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-      repoPath = path.isAbsolute(config.rootDirectory)
+      scanPath = path.isAbsolute(config.rootDirectory)
         ? config.rootDirectory
-        : path.join(workspace, config.rootDirectory);
+        : path.join(repoRoot, config.rootDirectory);
     } else {
-      repoPath = process.env.GITHUB_WORKSPACE || process.cwd();
+      scanPath = repoRoot;
     }
-    core.info(`Using repo path: ${repoPath}`);
+
+    core.info(`Repo root: ${repoRoot}`);
+    core.info(`Scan path: ${scanPath}`);
 
     // Step 4: Detect SDK
-    const sdkUsage = await analyzer.detectSDK(changedFiles, repoPath);
+    const sdkUsage = await analyzer.detectSDK(changedFiles, scanPath);
 
     if (!sdkUsage.detected) {
       core.info('No RudderStack SDK detected');
@@ -77,10 +81,10 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
 
     // Step 5: Validate API usage
     core.info('Validating SDK API usage...');
-    const issues = await analyzer.validateAPI(changedFiles, repoPath);
+    const issues = await analyzer.validateAPI(changedFiles, scanPath);
 
-    // Step 6: Get files with SDK usage
-    const filesWithSDK = await analyzer.getFilesWithSDK(repoPath);
+    // Step 6: Get files with SDK usage (pass repoRoot for correct relative paths)
+    const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
     core.info(`Found ${issues.length} issues`);
     core.info(`Files with SDK usage (${filesWithSDK.length}): ${JSON.stringify(filesWithSDK)}`);
     core.info(`Changed files (${changedFiles.length}): ${JSON.stringify(changedFiles.slice(0, 5))}...`);

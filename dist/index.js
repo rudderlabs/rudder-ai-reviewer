@@ -87618,9 +87618,11 @@ class JavaScriptAnalyzer extends base_analyzer_1.BaseAnalyzer {
     }
     /**
      * Get files with SDK usage (separate method to avoid breaking interface)
+     * @param scanPath - Directory to scan for SDK usage
+     * @param repoRoot - Repository root for relative paths (optional, defaults to scanPath)
      */
-    async getFilesWithSDK(repoPath) {
-        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(repoPath);
+    async getFilesWithSDK(scanPath, repoRoot) {
+        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(scanPath, repoRoot);
         return [...new Set(scanResult.methodCalls.map(call => call.file))];
     }
     /**
@@ -88657,16 +88659,18 @@ const RUDDERSTACK_METHODS = [
 /**
  * Scans repository for RudderStack SDK method calls
  */
-async function scanFilesForSDKUsage(repoPath) {
-    core.info(`Scanning files in ${repoPath} for RudderStack SDK usage...`);
-    const files = await findJavaScriptFiles(repoPath);
+async function scanFilesForSDKUsage(scanPath, repoRoot) {
+    core.info(`Scanning files in ${scanPath} for RudderStack SDK usage...`);
+    // Use repo root for relative paths, or default to scan path
+    const pathBase = repoRoot || scanPath;
+    const files = await findJavaScriptFiles(scanPath);
     core.info(`Found ${files.length} JavaScript/TypeScript files to scan`);
     let totalScanned = 0;
     let filesWithSDK = 0;
     const allMethodCalls = [];
     for (const file of files) {
         try {
-            const methodCalls = await scanFileForSDKCalls(file, repoPath);
+            const methodCalls = await scanFileForSDKCalls(file, pathBase);
             totalScanned++;
             if (methodCalls.length > 0) {
                 filesWithSDK++;
@@ -89716,21 +89720,22 @@ async function runSimplifiedAnalysis(config) {
         core.info(`Found ${changedFiles.length} changed files`);
         // Step 3: Initialize analyzer
         const analyzer = new javascript_analyzer_1.JavaScriptAnalyzer();
-        // Use config.rootDirectory if provided, otherwise use GITHUB_WORKSPACE (repo root)
-        // If rootDirectory is relative, resolve it from GITHUB_WORKSPACE
-        let repoPath;
+        // Get repo root (always the workspace root)
+        const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+        // Determine scan path: use config.rootDirectory if provided, otherwise repo root
+        let scanPath;
         if (config.rootDirectory) {
-            const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-            repoPath = path.isAbsolute(config.rootDirectory)
+            scanPath = path.isAbsolute(config.rootDirectory)
                 ? config.rootDirectory
-                : path.join(workspace, config.rootDirectory);
+                : path.join(repoRoot, config.rootDirectory);
         }
         else {
-            repoPath = process.env.GITHUB_WORKSPACE || process.cwd();
+            scanPath = repoRoot;
         }
-        core.info(`Using repo path: ${repoPath}`);
+        core.info(`Repo root: ${repoRoot}`);
+        core.info(`Scan path: ${scanPath}`);
         // Step 4: Detect SDK
-        const sdkUsage = await analyzer.detectSDK(changedFiles, repoPath);
+        const sdkUsage = await analyzer.detectSDK(changedFiles, scanPath);
         if (!sdkUsage.detected) {
             core.info('No RudderStack SDK detected');
             const comment = (0, comment_generator_1.generatePRComment)({
@@ -89755,9 +89760,9 @@ async function runSimplifiedAnalysis(config) {
         core.info(`SDK detected: ${sdkUsage.type} v${sdkUsage.version || 'unknown'}`);
         // Step 5: Validate API usage
         core.info('Validating SDK API usage...');
-        const issues = await analyzer.validateAPI(changedFiles, repoPath);
-        // Step 6: Get files with SDK usage
-        const filesWithSDK = await analyzer.getFilesWithSDK(repoPath);
+        const issues = await analyzer.validateAPI(changedFiles, scanPath);
+        // Step 6: Get files with SDK usage (pass repoRoot for correct relative paths)
+        const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
         core.info(`Found ${issues.length} issues`);
         core.info(`Files with SDK usage (${filesWithSDK.length}): ${JSON.stringify(filesWithSDK)}`);
         core.info(`Changed files (${changedFiles.length}): ${JSON.stringify(changedFiles.slice(0, 5))}...`);

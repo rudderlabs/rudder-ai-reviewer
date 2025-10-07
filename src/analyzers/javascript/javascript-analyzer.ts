@@ -197,9 +197,11 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
 
   /**
    * Get files with SDK usage (separate method to avoid breaking interface)
+   * @param scanPath - Directory to scan for SDK usage
+   * @param repoRoot - Repository root for relative paths (optional, defaults to scanPath)
    */
-  async getFilesWithSDK(repoPath: string): Promise<string[]> {
-    const scanResult = await scanFilesForSDKUsage(repoPath);
+  async getFilesWithSDK(scanPath: string, repoRoot?: string): Promise<string[]> {
+    const scanResult = await scanFilesForSDKUsage(scanPath, repoRoot);
     return [...new Set(scanResult.methodCalls.map(call => call.file))];
   }
 
