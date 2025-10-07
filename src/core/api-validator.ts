@@ -449,6 +449,23 @@ const SDK_METHOD_OVERLOADS: Record<string, MethodOverload[]> = {
       description: 'Get current session ID',
     },
   ],
+  setAuthToken: [
+    // setAuthToken(token: string)
+    {
+      params: [{ name: 'token', type: 'string', optional: false }],
+      description: 'Set authorization token',
+    },
+  ],
+  addCustomIntegration: [
+    // addCustomIntegration(destinationId: string, integration: object)
+    {
+      params: [
+        { name: 'destinationId', type: 'string', optional: false },
+        { name: 'integration', type: 'object', optional: false },
+      ],
+      description: 'Add custom integration for custom destination',
+    },
+  ],
 };
 
 /**
