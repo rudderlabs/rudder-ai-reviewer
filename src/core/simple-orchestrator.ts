@@ -83,10 +83,12 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     core.info('Validating SDK API usage...');
     const issues = await analyzer.validateAPI(changedFiles, scanPath);
 
-    // Step 6: Get files with SDK usage (pass repoRoot for correct relative paths)
+    // Step 6: Get files with SDK usage and method call count (pass repoRoot for correct relative paths)
     const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
+    const methodCallCount = await analyzer.getMethodCallCount(scanPath, repoRoot);
     core.info(`Found ${issues.length} issues`);
     core.info(`Files with SDK usage (${filesWithSDK.length}): ${JSON.stringify(filesWithSDK)}`);
+    core.info(`Total method calls: ${methodCallCount}`);
 
     // When root_directory is set, analyze ALL files in that directory, not just changed files
     // This is useful for testing/development with sample apps
@@ -116,10 +118,19 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
 
     // Step 7: Generate and post report
     core.info('Generating report...');
+
+    // Prepare SDK info for summary
+    const sdkInfo = {
+      type: sdkUsage.type,
+      version: sdkUsage.version,
+      methodCallsCount: methodCallCount,
+      framework: undefined as string | undefined, // Can be enhanced later with framework detection
+    };
+
     const comment = generatePRComment(result, {
       verbosity: config.outputVerbosity,
       includePropertyDetails: false,
-    });
+    }, sdkInfo);
 
     await postOrUpdateComment(prContext, config.githubToken, comment);
 

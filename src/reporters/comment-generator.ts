@@ -23,7 +23,8 @@ export interface CommentOptions {
  */
 export function generatePRComment(
   result: AnalysisResult,
-  options: CommentOptions = { verbosity: 'standard', includePropertyDetails: false }
+  options: CommentOptions = { verbosity: 'standard', includePropertyDetails: false },
+  sdkInfo?: { type: string; version?: string; methodCallsCount?: number; framework?: string }
 ): string {
   const sections: string[] = [];
 
@@ -31,7 +32,7 @@ export function generatePRComment(
   sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review\n');
 
   // Summary
-  sections.push(generateSummary(result));
+  sections.push(generateSummary(result, sdkInfo));
 
   // Files Analyzed
   sections.push(generateFilesSection(result.filesAnalyzed));
@@ -84,12 +85,29 @@ export function generatePRComment(
 /**
  * Generate summary section
  */
-function generateSummary(result: AnalysisResult): string {
+function generateSummary(result: AnalysisResult, sdkInfo?: { type: string; version?: string; methodCallsCount?: number; framework?: string }): string {
   const errors = result.issues.filter((i) => i.severity === 'error').length;
   const warnings = result.issues.filter((i) => i.severity === 'warning').length;
   const suggestions = result.issues.filter((i) => i.severity === 'suggestion').length;
 
   const lines: string[] = ['### 📊 Summary\n'];
+
+  // SDK Information
+  if (sdkInfo) {
+    const sdkVersion = sdkInfo.version ? ` v${sdkInfo.version}` : '';
+    const installType = sdkInfo.type.toUpperCase();
+    lines.push(`**SDK:** RudderStack JavaScript SDK${sdkVersion} (${installType})`);
+
+    if (sdkInfo.methodCallsCount !== undefined) {
+      lines.push(`**Method Calls:** ${sdkInfo.methodCallsCount} SDK call${sdkInfo.methodCallsCount !== 1 ? 's' : ''} analyzed`);
+    }
+
+    if (sdkInfo.framework) {
+      lines.push(`**Framework:** ${sdkInfo.framework}`);
+    }
+
+    lines.push('');
+  }
 
   // Status indicator
   let statusIcon = '✅';

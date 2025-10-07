@@ -87626,6 +87626,13 @@ class JavaScriptAnalyzer extends base_analyzer_1.BaseAnalyzer {
         return [...new Set(scanResult.methodCalls.map(call => call.file))];
     }
     /**
+     * Get SDK method call count
+     */
+    async getMethodCallCount(scanPath, repoRoot) {
+        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(scanPath, repoRoot);
+        return scanResult.methodCalls.length;
+    }
+    /**
      * Get supported file extensions
      */
     getSupportedExtensions() {
@@ -89761,10 +89768,12 @@ async function runSimplifiedAnalysis(config) {
         // Step 5: Validate API usage
         core.info('Validating SDK API usage...');
         const issues = await analyzer.validateAPI(changedFiles, scanPath);
-        // Step 6: Get files with SDK usage (pass repoRoot for correct relative paths)
+        // Step 6: Get files with SDK usage and method call count (pass repoRoot for correct relative paths)
         const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
+        const methodCallCount = await analyzer.getMethodCallCount(scanPath, repoRoot);
         core.info(`Found ${issues.length} issues`);
         core.info(`Files with SDK usage (${filesWithSDK.length}): ${JSON.stringify(filesWithSDK)}`);
+        core.info(`Total method calls: ${methodCallCount}`);
         // When root_directory is set, analyze ALL files in that directory, not just changed files
         // This is useful for testing/development with sample apps
         const filesToReport = config.rootDirectory ? filesWithSDK : changedFiles;
@@ -89789,10 +89798,17 @@ async function runSimplifiedAnalysis(config) {
         core.info(`Result has ${result.filesAnalyzed.length} files analyzed, ${sdkCount} with SDK`);
         // Step 7: Generate and post report
         core.info('Generating report...');
+        // Prepare SDK info for summary
+        const sdkInfo = {
+            type: sdkUsage.type,
+            version: sdkUsage.version,
+            methodCallsCount: methodCallCount,
+            framework: undefined, // Can be enhanced later with framework detection
+        };
         const comment = (0, comment_generator_1.generatePRComment)(result, {
             verbosity: config.outputVerbosity,
             includePropertyDetails: false,
-        });
+        }, sdkInfo);
         await (0, github_1.postOrUpdateComment)(prContext, config.githubToken, comment);
         // Step 8: Set outputs
         const errorCount = issues.filter((i) => i.severity === 'error').length;
@@ -90498,12 +90514,12 @@ exports.generateProgressComment = generateProgressComment;
 /**
  * Generate complete PR comment
  */
-function generatePRComment(result, options = { verbosity: 'standard', includePropertyDetails: false }) {
+function generatePRComment(result, options = { verbosity: 'standard', includePropertyDetails: false }, sdkInfo) {
     const sections = [];
     // Header with icon
     sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review\n');
     // Summary
-    sections.push(generateSummary(result));
+    sections.push(generateSummary(result, sdkInfo));
     // Files Analyzed
     sections.push(generateFilesSection(result.filesAnalyzed));
     // Errors (always expanded)
@@ -90545,11 +90561,24 @@ function generatePRComment(result, options = { verbosity: 'standard', includePro
 /**
  * Generate summary section
  */
-function generateSummary(result) {
+function generateSummary(result, sdkInfo) {
     const errors = result.issues.filter((i) => i.severity === 'error').length;
     const warnings = result.issues.filter((i) => i.severity === 'warning').length;
     const suggestions = result.issues.filter((i) => i.severity === 'suggestion').length;
     const lines = ['### 📊 Summary\n'];
+    // SDK Information
+    if (sdkInfo) {
+        const sdkVersion = sdkInfo.version ? ` v${sdkInfo.version}` : '';
+        const installType = sdkInfo.type.toUpperCase();
+        lines.push(`**SDK:** RudderStack JavaScript SDK${sdkVersion} (${installType})`);
+        if (sdkInfo.methodCallsCount !== undefined) {
+            lines.push(`**Method Calls:** ${sdkInfo.methodCallsCount} SDK call${sdkInfo.methodCallsCount !== 1 ? 's' : ''} analyzed`);
+        }
+        if (sdkInfo.framework) {
+            lines.push(`**Framework:** ${sdkInfo.framework}`);
+        }
+        lines.push('');
+    }
     // Status indicator
     let statusIcon = '✅';
     let statusText = 'All checks passed';

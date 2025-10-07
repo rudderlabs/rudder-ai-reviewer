@@ -206,6 +206,14 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
   }
 
   /**
+   * Get SDK method call count
+   */
+  async getMethodCallCount(scanPath: string, repoRoot?: string): Promise<number> {
+    const scanResult = await scanFilesForSDKUsage(scanPath, repoRoot);
+    return scanResult.methodCalls.length;
+  }
+
+  /**
    * Get supported file extensions
    */
   getSupportedExtensions(): string[] {
