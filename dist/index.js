@@ -233437,7 +233437,6 @@ const api_validator_1 = __nccwpck_require__(7896);
 const change_detector_1 = __nccwpck_require__(1382);
 const pr_client_1 = __nccwpck_require__(3433);
 const diff_parser_1 = __nccwpck_require__(6342);
-const path = __importStar(__nccwpck_require__(6928));
 /**
  * Main action entry point
  */
@@ -233631,12 +233630,11 @@ function parseCommaSeparated(input) {
 /**
  * Filters SDK method calls to only those on changed lines
  */
-function filterCallsToChangedLines(allCalls, diffInfo, workspacePath, pathPrefix) {
+function filterCallsToChangedLines(allCalls, diffInfo, _workspacePath, pathPrefix) {
     return allCalls.filter((call) => {
-        // Get relative path from workspace
-        const relativePath = path.relative(workspacePath, call.file);
+        // call.file is already relative to workspacePath (from file scanner)
         // If we have a path prefix, we need to add it for GitHub comparison
-        const githubPath = pathPrefix ? `${pathPrefix}/${relativePath}` : relativePath;
+        const githubPath = pathPrefix ? `${pathPrefix}/${call.file}` : call.file;
         // Check if this line was changed in the PR
         const isChanged = (0, diff_parser_1.isLineChanged)(diffInfo, githubPath, call.line);
         if (isChanged) {

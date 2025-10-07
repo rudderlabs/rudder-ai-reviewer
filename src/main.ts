@@ -13,7 +13,6 @@ import { validateSDKMethodCalls } from './core/api-validator';
 import { detectSDKChanges } from './core/change-detector';
 import { postAnalysisReport, postInlineAnnotations, postNoSDKComment, InlineAnnotation } from './integrations/github/pr-client';
 import { getPRDiff, isLineChanged } from './integrations/github/diff-parser';
-import * as path from 'path';
 
 /**
  * Main action entry point
@@ -244,15 +243,13 @@ function parseCommaSeparated(input: string): string[] | undefined {
 function filterCallsToChangedLines(
   allCalls: SDKMethodCall[],
   diffInfo: ReturnType<typeof getPRDiff> extends Promise<infer T> ? T : never,
-  workspacePath: string,
+  _workspacePath: string,
   pathPrefix: string
 ): SDKMethodCall[] {
   return allCalls.filter((call) => {
-    // Get relative path from workspace
-    const relativePath = path.relative(workspacePath, call.file);
-
+    // call.file is already relative to workspacePath (from file scanner)
     // If we have a path prefix, we need to add it for GitHub comparison
-    const githubPath = pathPrefix ? `${pathPrefix}/${relativePath}` : relativePath;
+    const githubPath = pathPrefix ? `${pathPrefix}/${call.file}` : call.file;
 
     // Check if this line was changed in the PR
     const isChanged = isLineChanged(diffInfo, githubPath, call.line);
