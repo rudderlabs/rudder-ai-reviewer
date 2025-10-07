@@ -33258,7 +33258,7 @@ const SDK_METHOD_OVERLOADS = {
             params: [
                 { name: 'event', type: 'string', optional: false },
                 { name: 'properties', type: 'object', optional: false },
-                { name: 'options', type: 'object', optional: false },
+                { name: 'options', type: 'object', optional: true },
             ],
             description: 'Track an event with properties and options',
         },
@@ -33267,7 +33267,7 @@ const SDK_METHOD_OVERLOADS = {
             params: [
                 { name: 'event', type: 'string', optional: false },
                 { name: 'properties', type: 'object', optional: false },
-                { name: 'callback', type: 'function', optional: false },
+                { name: 'callback', type: 'function', optional: true },
             ],
             description: 'Track an event with properties and callback',
         },
@@ -33275,7 +33275,7 @@ const SDK_METHOD_OVERLOADS = {
         {
             params: [
                 { name: 'event', type: 'string', optional: false },
-                { name: 'callback', type: 'function', optional: false },
+                { name: 'callback', type: 'function', optional: true },
             ],
             description: 'Track an event with callback',
         },
@@ -33285,17 +33285,12 @@ const SDK_METHOD_OVERLOADS = {
                 { name: 'event', type: 'string', optional: false },
                 { name: 'properties', type: 'object', optional: false },
                 { name: 'options', type: 'object', optional: false },
-                { name: 'callback', type: 'function', optional: false },
+                { name: 'callback', type: 'function', optional: true },
             ],
             description: 'Track an event with properties, options, and callback',
         },
     ],
     identify: [
-        // identify()
-        {
-            params: [],
-            description: 'Identify without userId or traits',
-        },
         // identify(userId: string)
         {
             params: [{ name: 'userId', type: 'string', optional: false }],
@@ -33530,6 +33525,11 @@ const SDK_METHOD_OVERLOADS = {
         {
             params: [{ name: 'resetAnonymousId', type: 'boolean', optional: false }],
             description: 'Reset user identity with anonymous ID control',
+        },
+        // reset(options: object)
+        {
+            params: [{ name: 'options', type: 'object', optional: true }],
+            description: 'Reset user identity with options',
         },
     ],
     load: [
@@ -34353,8 +34353,8 @@ async function scanFileForSDKCalls(filePath, repoPath) {
                         // Extract code snippet (from the parsed content, not including line offset)
                         const codeLines = content.split('\n');
                         const snippet = codeLines[astLine - 1]?.trim() || '';
-                        // Parse arguments
-                        const args = node.arguments.map((arg) => parseArgument(arg, content));
+                        // Parse arguments with variable tracking from the current scope
+                        const args = node.arguments.map((arg) => parseArgument(arg, content, path));
                         methodCalls.push({
                             file: relativePath,
                             line,
@@ -34376,7 +34376,7 @@ async function scanFileForSDKCalls(filePath, repoPath) {
 /**
  * Parses an argument node to extract type and value information
  */
-function parseArgument(arg, sourceCode) {
+function parseArgument(arg, sourceCode, nodePath) {
     // String literal
     if (t.isStringLiteral(arg)) {
         return {
@@ -34450,7 +34450,20 @@ function parseArgument(arg, sourceCode) {
             isStatic: false,
         };
     }
-    // Identifier (variable reference)
+    // Identifier (variable reference) - try to resolve it
+    if (t.isIdentifier(arg) && nodePath) {
+        const resolved = resolveIdentifier(arg.name, nodePath);
+        if (resolved) {
+            // Mark as static since we resolved it
+            return { ...resolved, isStatic: true };
+        }
+        return {
+            type: 'identifier',
+            raw: arg.name,
+            isStatic: false,
+        };
+    }
+    // Identifier without path (can't resolve)
     if (t.isIdentifier(arg)) {
         return {
             type: 'identifier',
@@ -34464,6 +34477,72 @@ function parseArgument(arg, sourceCode) {
         raw: getCodeSnippet(arg, sourceCode),
         isStatic: false,
     };
+}
+/**
+ * Tries to resolve an identifier to its constant value
+ * Simple constant propagation for const/let declarations in the same scope
+ */
+function resolveIdentifier(name, nodePath) {
+    try {
+        // Get the binding for this identifier
+        const binding = nodePath.scope.getBinding(name);
+        if (!binding || !binding.constant) {
+            // Not a constant binding
+            return null;
+        }
+        const bindingPath = binding.path;
+        // Check if it's a variable declarator (const x = 1)
+        if (bindingPath.isVariableDeclarator() && bindingPath.node.init) {
+            const init = bindingPath.node.init;
+            // Recursively parse the initializer
+            if (t.isStringLiteral(init)) {
+                return {
+                    type: 'string',
+                    value: init.value,
+                    raw: JSON.stringify(init.value),
+                    isStatic: true,
+                };
+            }
+            if (t.isNumericLiteral(init)) {
+                return {
+                    type: 'number',
+                    value: init.value,
+                    raw: init.value.toString(),
+                    isStatic: true,
+                };
+            }
+            if (t.isBooleanLiteral(init)) {
+                return {
+                    type: 'boolean',
+                    value: init.value,
+                    raw: init.value.toString(),
+                    isStatic: true,
+                };
+            }
+            if (t.isNullLiteral(init)) {
+                return {
+                    type: 'null',
+                    value: null,
+                    raw: 'null',
+                    isStatic: true,
+                };
+            }
+            if (t.isObjectExpression(init)) {
+                const properties = parseObjectExpression(init);
+                return {
+                    type: 'object',
+                    value: properties,
+                    raw: '{ ... }',
+                    isStatic: isStaticObject(init),
+                };
+            }
+        }
+    }
+    catch (error) {
+        // Failed to resolve, return null
+        core.debug(`Failed to resolve identifier ${name}: ${error}`);
+    }
+    return null;
 }
 /**
  * Parses an object expression into a key-value map
