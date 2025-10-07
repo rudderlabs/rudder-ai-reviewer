@@ -34382,15 +34382,36 @@ async function scanFileForSDKCalls(filePath, repoPath) {
             plugins: ['jsx', 'typescript'],
             errorRecovery: true,
         });
+        // Track variable names that hold RudderAnalytics instances
+        const rudderAnalyticsVars = new Set();
+        // First pass: Find all variables that are assigned to new RudderAnalytics()
+        (0, traverse_1.default)(ast, {
+            VariableDeclarator(path) {
+                const { node } = path;
+                if (t.isIdentifier(node.id) &&
+                    node.init &&
+                    t.isNewExpression(node.init) &&
+                    t.isIdentifier(node.init.callee) &&
+                    node.init.callee.name === 'RudderAnalytics') {
+                    rudderAnalyticsVars.add(node.id.name);
+                    core.debug(`Detected RudderAnalytics instance variable: ${node.id.name}`);
+                }
+            },
+        });
+        // Second pass: Find method calls on rudderanalytics or any tracked variables
         (0, traverse_1.default)(ast, {
             CallExpression(path) {
                 const { node } = path;
-                // Check if this is a call to rudderanalytics.method()
+                // Check if this is a call to <object>.method()
                 if (t.isMemberExpression(node.callee)) {
                     const object = node.callee.object;
                     const property = node.callee.property;
-                    // Check for rudderanalytics.track(), window.rudderanalytics.page(), etc.
+                    // Check for:
+                    // 1. rudderanalytics.track()
+                    // 2. window.rudderanalytics.page()
+                    // 3. analytics.track() where analytics = new RudderAnalytics()
                     const isRudderObject = (t.isIdentifier(object) && object.name === 'rudderanalytics') ||
+                        (t.isIdentifier(object) && rudderAnalyticsVars.has(object.name)) ||
                         (t.isMemberExpression(object) &&
                             t.isIdentifier(object.object) &&
                             object.object.name === 'window' &&
