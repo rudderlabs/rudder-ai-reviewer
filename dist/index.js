@@ -87467,7 +87467,8 @@ class JavaScriptAnalyzer extends base_analyzer_1.BaseAnalyzer {
      */
     async detectSDK(files, repoPath) {
         const rootPath = repoPath || process.cwd();
-        const detection = await (0, sdk_detector_1.detectSDKInstallation)(rootPath);
+        // Pass files to help SDK detector find package.json in subdirectories
+        const detection = await (0, sdk_detector_1.detectSDKInstallation)(rootPath, files);
         // Convert detection result to SDKUsage interface
         const sdkType = detection.installationType === 'both' ? 'npm' : detection.installationType === 'none' ? 'npm' : detection.installationType;
         return {
@@ -89296,31 +89297,58 @@ const t = __importStar(__nccwpck_require__(16535));
 /**
  * Detect SDK installation in the repository
  */
-async function detectSDKInstallation(repoPath) {
+async function detectSDKInstallation(repoPath, searchPaths) {
     const details = [];
     const locations = [];
     let hasNPM = false;
     let hasCDN = false;
     let npmVersion;
     let cdnVersion;
-    // Check for NPM installation
-    const packageJsonPath = path.join(repoPath, 'package.json');
-    if (fs.existsSync(packageJsonPath)) {
-        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-        // Check dependencies and devDependencies
-        const allDeps = {
-            ...packageJson.dependencies,
-            ...packageJson.devDependencies,
-        };
-        if (allDeps['@rudderstack/analytics-js']) {
-            hasNPM = true;
-            npmVersion = allDeps['@rudderstack/analytics-js'].replace(/[\^~]/, '');
-            details.push(`✅ NPM: Found @rudderstack/analytics-js@${npmVersion} in package.json`);
-            // Try to get exact version from lock files
-            const exactVersion = await getExactNPMVersion(repoPath);
-            if (exactVersion) {
-                npmVersion = exactVersion;
-                details.push(`   Exact version from lock file: ${exactVersion}`);
+    // Determine paths to search for package.json
+    const pathsToCheck = [repoPath];
+    // If searchPaths provided, also check subdirectories from those paths
+    if (searchPaths && searchPaths.length > 0) {
+        const subdirs = new Set();
+        searchPaths.forEach(filePath => {
+            const dir = path.dirname(filePath);
+            const parts = dir.split(path.sep);
+            // Check each level of directory (e.g., if file is "a/b/c/file.js", check "a", "a/b", "a/b/c")
+            for (let i = 1; i <= parts.length; i++) {
+                const subdir = parts.slice(0, i).join(path.sep);
+                if (subdir) {
+                    subdirs.add(path.join(repoPath, subdir));
+                }
+            }
+        });
+        pathsToCheck.push(...subdirs);
+    }
+    // Check for NPM installation in all paths
+    for (const checkPath of pathsToCheck) {
+        const packageJsonPath = path.join(checkPath, 'package.json');
+        if (fs.existsSync(packageJsonPath)) {
+            try {
+                const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+                // Check dependencies and devDependencies
+                const allDeps = {
+                    ...packageJson.dependencies,
+                    ...packageJson.devDependencies,
+                };
+                if (allDeps['@rudderstack/analytics-js']) {
+                    hasNPM = true;
+                    npmVersion = allDeps['@rudderstack/analytics-js'].replace(/[\^~]/, '');
+                    const relPath = path.relative(repoPath, packageJsonPath);
+                    details.push(`✅ NPM: Found @rudderstack/analytics-js@${npmVersion} in ${relPath}`);
+                    // Try to get exact version from lock files
+                    const exactVersion = await getExactNPMVersion(checkPath);
+                    if (exactVersion) {
+                        npmVersion = exactVersion;
+                        details.push(`   Exact version from lock file: ${exactVersion}`);
+                    }
+                    break; // Found SDK, stop searching
+                }
+            }
+            catch (error) {
+                // Ignore parsing errors for invalid package.json files
             }
         }
     }

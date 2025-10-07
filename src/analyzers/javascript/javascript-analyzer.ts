@@ -27,7 +27,8 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
    */
   async detectSDK(files: string[], repoPath?: string): Promise<SDKUsage> {
     const rootPath = repoPath || process.cwd();
-    const detection = await detectSDKInstallation(rootPath);
+    // Pass files to help SDK detector find package.json in subdirectories
+    const detection = await detectSDKInstallation(rootPath, files);
 
     // Convert detection result to SDKUsage interface
     const sdkType = detection.installationType === 'both' ? 'npm' : detection.installationType === 'none' ? 'npm' : detection.installationType;
