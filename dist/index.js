@@ -232353,6 +232353,18 @@ async function validateWithTypeScript(methodCalls, sdkVersion) {
         // Create TypeScript program and get diagnostics
         const diagnostics = await getTypeScriptDiagnostics(virtualCode, sdkPath);
         core.debug(`TypeScript found ${diagnostics.length} diagnostic(s)`);
+        // Log all diagnostics for debugging
+        diagnostics.forEach((diag, idx) => {
+            if (diag.file && diag.start !== undefined) {
+                const position = diag.file.getLineAndCharacterOfPosition(diag.start);
+                const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
+                core.debug(`  Diagnostic ${idx + 1}: Line ${position.line + 1}: ${message} (code: ${diag.code})`);
+            }
+            else {
+                const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
+                core.debug(`  Diagnostic ${idx + 1}: ${message} (code: ${diag.code})`);
+            }
+        });
         // Convert diagnostics to validation issues
         const issues = convertDiagnosticsToIssues(diagnostics, callMap, methodCalls);
         // Also run method-specific validations (empty strings, naming conventions, etc.)
