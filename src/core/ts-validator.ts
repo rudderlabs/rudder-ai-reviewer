@@ -176,11 +176,17 @@ async function getTypeScriptDiagnostics(
   const virtualFilePath = path.join(tempDir, 'validation.ts');
   await fs.writeFile(virtualFilePath, virtualCode);
 
+  // Get TypeScript's lib files directory
+  const tsLibPath = path.dirname(require.resolve('typescript/lib/lib.d.ts'));
+
+  core.debug(`TypeScript lib path: ${tsLibPath}`);
+
   // Create compiler options
   const compilerOptions: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2020,
     module: ts.ModuleKind.CommonJS,
     moduleResolution: ts.ModuleResolutionKind.NodeJs,
+    lib: ['lib.es2020.full.d.ts'],
     esModuleInterop: true,
     skipLibCheck: true,
     strict: false, // Disable strict mode to reduce unrelated errors
@@ -193,6 +199,20 @@ async function getTypeScriptDiagnostics(
 
   // Create compiler host with custom module resolution
   const host = ts.createCompilerHost(compilerOptions);
+  const defaultGetSourceFile = host.getSourceFile;
+
+  // Override getSourceFile to handle lib files from TypeScript's installation
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    // If it's a lib file, resolve from TypeScript's lib directory
+    if (fileName.includes('lib.') && fileName.endsWith('.d.ts')) {
+      const libFileName = path.basename(fileName);
+      const libFilePath = path.join(tsLibPath, libFileName);
+      core.debug(`Resolving lib file ${fileName} to ${libFilePath}`);
+      return defaultGetSourceFile(libFilePath, languageVersion, onError, shouldCreateNewSourceFile);
+    }
+    return defaultGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  };
+
   const originalResolveModuleNames = host.resolveModuleNames;
 
   // Override resolveModuleNames to manually handle SDK imports
