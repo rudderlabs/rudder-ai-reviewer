@@ -232348,8 +232348,11 @@ async function validateWithTypeScript(methodCalls, sdkVersion) {
         const sdkPath = await downloadSDKPackage(sdkVersion || 'latest');
         // Generate virtual TypeScript file
         const { virtualCode, callMap } = generateVirtualTypeScriptFile(methodCalls);
+        core.debug('Generated virtual TypeScript code:');
+        core.debug(virtualCode);
         // Create TypeScript program and get diagnostics
         const diagnostics = await getTypeScriptDiagnostics(virtualCode, sdkPath);
+        core.debug(`TypeScript found ${diagnostics.length} diagnostic(s)`);
         // Convert diagnostics to validation issues
         const issues = convertDiagnosticsToIssues(diagnostics, callMap, methodCalls);
         // Also run method-specific validations (empty strings, naming conventions, etc.)
@@ -232402,10 +232405,17 @@ function generateVirtualTypeScriptFile(methodCalls) {
     for (const call of methodCalls) {
         // Map this line to the original call
         callMap.set(lineNumber, call);
+        // Debug: log what arguments we're generating
+        core.debug(`Generating call for ${call.method} with ${call.arguments.length} argument(s) from ${call.file}:${call.line}`);
+        call.arguments.forEach((arg, idx) => {
+            core.debug(`  Arg ${idx}: type=${arg.type}, value=${JSON.stringify(arg.value)}, isStatic=${arg.isStatic}`);
+        });
         // Generate the call with actual arguments
         const args = call.arguments.map(arg => {
             if (arg.type === 'string') {
-                return `"${arg.value || ''}"`;
+                // Escape quotes in the string value
+                const escaped = String(arg.value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                return `"${escaped}"`;
             }
             else if (arg.type === 'number') {
                 return String(arg.value);
@@ -232422,11 +232432,17 @@ function generateVirtualTypeScriptFile(methodCalls) {
             else if (arg.type === 'object') {
                 return '{}'; // Simplified object
             }
+            else if (arg.type === 'identifier' || arg.type === 'template' || arg.type === 'unknown') {
+                // For non-static arguments, use appropriate placeholder
+                return 'undefined as any'; // Use 'any' to avoid type errors for dynamic values
+            }
             else {
                 return 'undefined';
             }
         }).join(', ');
-        code += `  analytics.${call.method}(${args});\n`;
+        const generatedCall = `analytics.${call.method}(${args})`;
+        code += `  ${generatedCall};\n`;
+        core.debug(`  Generated: ${generatedCall}`);
         lineNumber++;
     }
     code += `}\n`;
@@ -232435,11 +232451,27 @@ function generateVirtualTypeScriptFile(methodCalls) {
 /**
  * Gets TypeScript diagnostics for the virtual file
  */
-async function getTypeScriptDiagnostics(virtualCode, sdkPath) {
-    // Write virtual file to temp location
+async function getTypeScriptDiagnostics(virtualCode, _sdkPath) {
+    // Use the same temp directory where we downloaded the SDK
     const tempDir = path.join(process.cwd(), '.rudderstack-temp-validation');
     const virtualFilePath = path.join(tempDir, 'validation.ts');
     await fs.writeFile(virtualFilePath, virtualCode);
+    // Create tsconfig.json in temp directory
+    const tsConfig = {
+        compilerOptions: {
+            target: 'ES2020',
+            module: 'commonjs',
+            moduleResolution: 'node',
+            esModuleInterop: true,
+            skipLibCheck: true,
+            strict: false, // Less strict to avoid unrelated errors
+            noEmit: true,
+            typeRoots: [path.join(tempDir, 'node_modules/@types')],
+            baseUrl: tempDir,
+        },
+        include: ['validation.ts'],
+    };
+    await fs.writeFile(path.join(tempDir, 'tsconfig.json'), JSON.stringify(tsConfig, null, 2));
     // Create compiler options
     const compilerOptions = {
         target: ts.ScriptTarget.ES2020,
@@ -232447,17 +232479,21 @@ async function getTypeScriptDiagnostics(virtualCode, sdkPath) {
         moduleResolution: ts.ModuleResolutionKind.NodeJs,
         esModuleInterop: true,
         skipLibCheck: true,
-        strict: true,
+        strict: false, // Disable strict mode to reduce unrelated errors
         noEmit: true,
-        baseUrl: tempDir,
-        paths: {
-            '@rudderstack/analytics-js': [sdkPath],
-        },
+        rootDir: tempDir,
     };
-    // Create program
-    const program = ts.createProgram([virtualFilePath], compilerOptions);
-    // Get diagnostics
-    const diagnostics = ts.getPreEmitDiagnostics(program);
+    // Create compiler host that can resolve modules from node_modules
+    const host = ts.createCompilerHost(compilerOptions);
+    // Create program with proper module resolution
+    const program = ts.createProgram([virtualFilePath], compilerOptions, host);
+    // Get diagnostics (only semantic, not syntactic or global)
+    const sourceFile = program.getSourceFile(virtualFilePath);
+    if (!sourceFile) {
+        return [];
+    }
+    // Only get semantic diagnostics for our file (not module resolution errors)
+    const diagnostics = program.getSemanticDiagnostics(sourceFile);
     return diagnostics;
 }
 /**
