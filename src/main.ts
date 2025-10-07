@@ -8,7 +8,12 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ActionConfig } from './types/common';
 import { detectSDKInstallation } from './core/sdk-detector';
-import { postSDKDetectionComment, postInlineAnnotations, InlineAnnotation } from './integrations/github/pr-client';
+import { scanFilesForSDKUsage, SDKMethodCall } from './core/file-scanner';
+import { validateSDKMethodCalls } from './core/api-validator';
+import { detectSDKChanges } from './core/change-detector';
+import { postAnalysisReport, postInlineAnnotations, InlineAnnotation } from './integrations/github/pr-client';
+import { getPRDiff, isLineChanged } from './integrations/github/diff-parser';
+import * as path from 'path';
 
 /**
  * Main action entry point
@@ -59,9 +64,8 @@ async function run(): Promise<void> {
       core.info(`Path prefix for annotations: ${pathPrefix}`);
     }
 
-    core.info('🔍 Detecting RudderStack SDK installation...');
-
-    // Detect SDK installation
+    // Step 1: Detect SDK installation
+    core.info('🔍 Step 1: Detecting RudderStack SDK installation...');
     const sdkDetection = await detectSDKInstallation(workspacePath);
 
     core.info(`SDK detection complete: ${sdkDetection.installationType}`);
@@ -72,9 +76,46 @@ async function run(): Promise<void> {
       core.info(`- CDN version: ${sdkDetection.cdnVersion}`);
     }
 
-    // Post PR comment with detection results
-    core.info('💬 Posting SDK detection comment to PR...');
-    await postSDKDetectionComment(sdkDetection, {
+    // Step 2: Get PR diff information
+    core.info('📋 Step 2: Getting PR diff information...');
+    const diffInfo = await getPRDiff(owner, repo, prNumber, config.githubToken);
+    core.info(`PR has ${diffInfo.changedFiles.size} changed file(s)`);
+
+    // Step 3: Scan files for SDK method calls
+    core.info('📂 Step 3: Scanning files for SDK usage...');
+    const scanResult = await scanFilesForSDKUsage(workspacePath);
+    core.info(`Found ${scanResult.methodCalls.length} SDK method calls in ${scanResult.filesWithSDK} file(s)`);
+
+    // Step 4: Filter SDK calls based on annotate_existing_code config
+    let callsToValidate = scanResult.methodCalls;
+
+    if (!config.annotateExistingCode) {
+      core.info('🔍 Filtering to only validate changed lines (annotate_existing_code=false)...');
+      callsToValidate = filterCallsToChangedLines(scanResult.methodCalls, diffInfo, workspacePath, pathPrefix);
+      core.info(`Filtered to ${callsToValidate.length} SDK calls on changed lines`);
+    } else {
+      core.info('🔍 Validating all SDK calls (annotate_existing_code=true)');
+    }
+
+    // Step 5: Validate SDK method calls
+    core.info('✅ Step 5: Validating SDK method calls...');
+    // Use NPM version if available, otherwise CDN version, otherwise latest
+    const sdkVersionForValidation = sdkDetection.npmVersion || sdkDetection.cdnVersion;
+    const validation = await validateSDKMethodCalls(callsToValidate, sdkVersionForValidation);
+    core.info(`Validation complete: ${validation.errors.length} errors, ${validation.warnings.length} warnings, ${validation.suggestions.length} suggestions`);
+
+    // Step 6: Detect changes from base branch
+    core.info('🔄 Step 6: Detecting changes from base branch...');
+    const baseBranch = context.payload.pull_request.base.ref;
+    const headBranch = context.payload.pull_request.head.ref;
+    core.info(`Comparing ${baseBranch}...${headBranch}`);
+
+    const changes = await detectSDKChanges(workspacePath, baseBranch, headBranch);
+    core.info(`Changes: ${changes.addedCalls.length} added, ${changes.removedCalls.length} removed, ${changes.modifiedCalls.length} modified`);
+
+    // Step 7: Post analysis report
+    core.info('💬 Step 7: Posting analysis report to PR...');
+    await postAnalysisReport(sdkDetection, validation, changes, {
       owner,
       repo,
       pullNumber: prNumber,
@@ -82,24 +123,47 @@ async function run(): Promise<void> {
       pathPrefix: pathPrefix || undefined,
     });
 
-    // Try to create inline annotations for SDK locations in changed files
-    if (sdkDetection.locations.length > 0) {
-      core.info(`📍 Attempting to create inline comments for ${sdkDetection.locations.length} location(s)...`);
+    // Step 8: Create inline annotations for validation issues
+    if (validation.totalIssues > 0) {
+      core.info(`📍 Step 8: Creating inline comments for ${validation.totalIssues} issue(s)...`);
 
-      const annotations: InlineAnnotation[] = sdkDetection.locations.map((loc) => {
-        // Adjust path for GitHub (add prefix if analyzing subdirectory)
-        const githubPath = pathPrefix ? `${pathPrefix}/${loc.file}` : loc.file;
+      const annotations: InlineAnnotation[] = [];
 
-        return {
+      // Add error annotations
+      for (const error of validation.errors) {
+        const githubPath = pathPrefix ? `${pathPrefix}/${error.file}` : error.file;
+        annotations.push({
           path: githubPath,
-          line: loc.line,
-          annotation_level: 'notice',
-          message: `🔍 **RudderStack SDK detected (${loc.type.toUpperCase()})**\n\n\`\`\`\n${loc.snippet}\n\`\`\``,
-        };
-      });
+          line: error.line,
+          annotation_level: 'failure',
+          message: `❌ **Error in \`${error.method}()\`**\n\n${error.message}\n\n${error.fix ? `**Fix:** \`${error.fix}\`\n\n` : ''}\`\`\`\n${error.code}\n\`\`\``,
+        });
+      }
 
-      // This will only post comments on files that are part of the PR diff
-      // All locations are listed in the main PR comment
+      // Add warning annotations
+      for (const warning of validation.warnings) {
+        const githubPath = pathPrefix ? `${pathPrefix}/${warning.file}` : warning.file;
+        annotations.push({
+          path: githubPath,
+          line: warning.line,
+          annotation_level: 'warning',
+          message: `⚠️ **Warning in \`${warning.method}()\`**\n\n${warning.message}\n\n${warning.fix ? `**Recommendation:** \`${warning.fix}\`\n\n` : ''}`,
+        });
+      }
+
+      // Add suggestion annotations (only if verbosity is high)
+      if (config.outputVerbosity === 'detailed') {
+        for (const suggestion of validation.suggestions) {
+          const githubPath = pathPrefix ? `${pathPrefix}/${suggestion.file}` : suggestion.file;
+          annotations.push({
+            path: githubPath,
+            line: suggestion.line,
+            annotation_level: 'notice',
+            message: `💡 **Suggestion for \`${suggestion.method}()\`**\n\n${suggestion.message}\n\n${suggestion.fix ? `**Suggestion:** \`${suggestion.fix}\`\n\n` : ''}`,
+          });
+        }
+      }
+
       await postInlineAnnotations(annotations, {
         owner,
         repo,
@@ -110,9 +174,9 @@ async function run(): Promise<void> {
 
     // Set outputs
     core.setOutput('analysis_status', 'success');
-    core.setOutput('error_count', 0);
-    core.setOutput('warning_count', 0);
-    core.setOutput('suggestion_count', 0);
+    core.setOutput('error_count', validation.errors.length);
+    core.setOutput('warning_count', validation.warnings.length);
+    core.setOutput('suggestion_count', validation.suggestions.length);
 
     core.info('✅ Analysis complete');
   } catch (error) {
@@ -149,6 +213,35 @@ function parseCommaSeparated(input: string): string[] | undefined {
     return undefined;
   }
   return input.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Filters SDK method calls to only those on changed lines
+ */
+function filterCallsToChangedLines(
+  allCalls: SDKMethodCall[],
+  diffInfo: ReturnType<typeof getPRDiff> extends Promise<infer T> ? T : never,
+  workspacePath: string,
+  pathPrefix: string
+): SDKMethodCall[] {
+  return allCalls.filter((call) => {
+    // Get relative path from workspace
+    const relativePath = path.relative(workspacePath, call.file);
+
+    // If we have a path prefix, we need to add it for GitHub comparison
+    const githubPath = pathPrefix ? `${pathPrefix}/${relativePath}` : relativePath;
+
+    // Check if this line was changed in the PR
+    const isChanged = isLineChanged(diffInfo, githubPath, call.line);
+
+    if (isChanged) {
+      core.debug(`Including ${githubPath}:${call.line} - line was changed`);
+    } else {
+      core.debug(`Skipping ${githubPath}:${call.line} - line was not changed`);
+    }
+
+    return isChanged;
+  });
 }
 
 // Run the action

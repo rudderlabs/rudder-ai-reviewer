@@ -5,6 +5,8 @@
 import * as github from '@actions/github';
 import * as core from '@actions/core';
 import type { SDKDetectionResult } from '../../core/sdk-detector';
+import type { ValidationResult } from '../../core/api-validator';
+import type { ChangeDetectionResult } from '../../core/change-detector';
 
 export interface PRCommentOptions {
   owner: string;
@@ -146,6 +148,218 @@ export async function postSDKDetectionComment(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     core.warning(`Failed to post PR comment: ${errorMessage}`);
+    throw error;
+  }
+}
+
+/**
+ * Format full analysis report with validation issues and changes
+ */
+export function formatAnalysisReport(
+  sdkDetection: SDKDetectionResult,
+  validation: ValidationResult,
+  changes: ChangeDetectionResult,
+  options: { owner: string; repo: string; commitSha: string; pathPrefix?: string }
+): string {
+  let report = '## 🔍 RudderStack Instrumentation Review\n\n';
+
+  // Summary statistics
+  report += '### 📊 Summary\n\n';
+
+  const totalIssues = validation.errors.length + validation.warnings.length + validation.suggestions.length;
+  const statusEmoji = validation.errors.length > 0 ? '❌' : validation.warnings.length > 0 ? '⚠️' : '✅';
+
+  report += `${statusEmoji} **${totalIssues}** issue(s) found\n\n`;
+  report += `- **Errors:** ${validation.errors.length}\n`;
+  report += `- **Warnings:** ${validation.warnings.length}\n`;
+  report += `- **Suggestions:** ${validation.suggestions.length}\n\n`;
+
+  // SDK Installation Info
+  report += '### 📦 SDK Installation\n\n';
+  const badge = {
+    npm: '📦 NPM',
+    cdn: '🌐 CDN',
+    both: '📦🌐 NPM + CDN',
+    none: '❌ Not Found',
+  }[sdkDetection.installationType];
+
+  report += `**Type:** ${badge}\n`;
+  if (sdkDetection.npmVersion) {
+    report += `**NPM Version:** \`${sdkDetection.npmVersion}\`\n`;
+  }
+  if (sdkDetection.cdnVersion) {
+    report += `**CDN Version:** \`${sdkDetection.cdnVersion}\`\n`;
+  }
+  report += '\n';
+
+  // Changes section
+  if (changes.isFirstTimeInstrumentation) {
+    report += '### 🎉 First-Time Instrumentation\n\n';
+    report += `This PR adds RudderStack instrumentation for the first time. Found **${changes.addedCalls.length}** SDK method call(s).\n\n`;
+  } else if (changes.hasChanges) {
+    report += '### 🔄 Changes Detected\n\n';
+    report += `- **Added:** ${changes.addedCalls.length} call(s)\n`;
+    report += `- **Removed:** ${changes.removedCalls.length} call(s)\n`;
+    report += `- **Modified:** ${changes.modifiedCalls.length} call(s)\n`;
+    report += `- **Unchanged:** ${changes.unchangedCalls.length} call(s)\n\n`;
+
+    if (changes.addedCalls.length > 0) {
+      report += '<details>\n<summary><strong>➕ Added Calls</strong></summary>\n\n';
+      changes.addedCalls.forEach((call) => {
+        const fullPath = options.pathPrefix ? `${options.pathPrefix}/${call.file}` : call.file;
+        const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${call.line}`;
+        report += `- [\`${call.method}()\`](${fileLink}) at [${fullPath}:${call.line}](${fileLink})\n`;
+      });
+      report += '\n</details>\n\n';
+    }
+
+    if (changes.removedCalls.length > 0) {
+      report += '<details>\n<summary><strong>➖ Removed Calls</strong></summary>\n\n';
+      changes.removedCalls.forEach((call) => {
+        report += `- \`${call.method}()\` at ${call.file}:${call.line}\n`;
+      });
+      report += '\n</details>\n\n';
+    }
+
+    if (changes.modifiedCalls.length > 0) {
+      report += '<details>\n<summary><strong>✏️ Modified Calls</strong></summary>\n\n';
+      changes.modifiedCalls.forEach((change) => {
+        const fullPath = options.pathPrefix ? `${options.pathPrefix}/${change.file}` : change.file;
+        const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${change.line}`;
+        report += `- [\`${change.method}()\`](${fileLink}) at [${fullPath}:${change.line}](${fileLink})\n`;
+        report += `  - ${change.description}\n`;
+      });
+      report += '\n</details>\n\n';
+    }
+  } else {
+    report += '### ✅ No SDK Changes Detected\n\n';
+    report += 'No changes to RudderStack SDK usage in this PR.\n\n';
+  }
+
+  // Errors section (always expanded if present)
+  if (validation.errors.length > 0) {
+    report += '### ❌ Errors\n\n';
+    report += '_These issues must be fixed_\n\n';
+    validation.errors.forEach((issue, idx) => {
+      const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
+      const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
+
+      report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
+      report += `   **Issue:** ${issue.message}\n\n`;
+      if (issue.fix) {
+        report += `   **Fix:** \`${issue.fix}\`\n\n`;
+      }
+      report += `   \`\`\`\n   ${issue.code}\n   \`\`\`\n\n`;
+    });
+  }
+
+  // Warnings section (collapsible)
+  if (validation.warnings.length > 0) {
+    report += '<details>\n<summary><strong>⚠️ Warnings</strong> (click to expand)</summary>\n\n';
+    report += '_These issues should be addressed_\n\n';
+    validation.warnings.forEach((issue, idx) => {
+      const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
+      const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
+
+      report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
+      report += `   ${issue.message}\n\n`;
+      if (issue.fix) {
+        report += `   **Recommendation:** \`${issue.fix}\`\n\n`;
+      }
+    });
+    report += '</details>\n\n';
+  }
+
+  // Suggestions section (collapsible)
+  if (validation.suggestions.length > 0) {
+    report += '<details>\n<summary><strong>💡 Suggestions</strong> (click to expand)</summary>\n\n';
+    report += '_Optional improvements to consider_\n\n';
+    validation.suggestions.forEach((issue, idx) => {
+      const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
+      const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
+
+      report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
+      report += `   ${issue.message}\n\n`;
+      if (issue.fix) {
+        report += `   **Suggestion:** \`${issue.fix}\`\n\n`;
+      }
+    });
+    report += '</details>\n\n';
+  }
+
+  report += '---\n';
+  report += '_🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer)_\n';
+
+  return report;
+}
+
+/**
+ * Post or update PR comment with full analysis report
+ */
+export async function postAnalysisReport(
+  sdkDetection: SDKDetectionResult,
+  validation: ValidationResult,
+  changes: ChangeDetectionResult,
+  options: PRCommentOptions
+): Promise<void> {
+  const { owner, repo, pullNumber, token, pathPrefix } = options;
+  const octokit = github.getOctokit(token);
+
+  try {
+    // Get PR to get commit SHA
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
+
+    const commitSha = pr.head.sha;
+
+    const commentBody = formatAnalysisReport(sdkDetection, validation, changes, {
+      owner,
+      repo,
+      commitSha,
+      pathPrefix,
+    });
+
+    const commentIdentifier = '<!-- rudderstack-pr-reviewer-analysis -->';
+    const fullCommentBody = `${commentIdentifier}\n${commentBody}`;
+
+    // Find existing comment
+    const { data: comments } = await octokit.rest.issues.listComments({
+      owner,
+      repo,
+      issue_number: pullNumber,
+    });
+
+    const existingComment = comments.find((comment) =>
+      comment.body?.includes(commentIdentifier)
+    );
+
+    if (existingComment) {
+      // Update existing comment
+      core.info(`Updating existing analysis comment #${existingComment.id}`);
+      await octokit.rest.issues.updateComment({
+        owner,
+        repo,
+        comment_id: existingComment.id,
+        body: fullCommentBody,
+      });
+    } else {
+      // Create new comment
+      core.info('Creating new analysis comment');
+      await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: pullNumber,
+        body: fullCommentBody,
+      });
+    }
+
+    core.info('✅ Successfully posted analysis report');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    core.warning(`Failed to post analysis report: ${errorMessage}`);
     throw error;
   }
 }
