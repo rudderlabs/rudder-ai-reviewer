@@ -35898,6 +35898,17 @@ async function run() {
                 pullNumber: prNumber,
                 token: config.githubToken,
             });
+            // Clear previous inline comments if configured
+            if (config.clearPreviousComments) {
+                core.info('📍 Clearing previous inline comments...');
+                await (0, pr_client_1.postInlineAnnotations)([], {
+                    owner,
+                    repo,
+                    pullNumber: prNumber,
+                    token: config.githubToken,
+                    clearPrevious: true,
+                });
+            }
             core.setOutput('analysis_status', 'success');
             core.setOutput('error_count', 0);
             core.setOutput('warning_count', 0);
