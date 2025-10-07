@@ -206,20 +206,6 @@ function validateTrackCall(call: SDKMethodCall): ValidationIssue[] {
         fix: "Provide a descriptive event name like 'button_clicked' or 'form_submitted'",
       });
     }
-
-    // Suggest snake_case naming convention
-    if (eventArg.value && !/^[a-z0-9_]+$/.test(eventArg.value)) {
-      issues.push({
-        file: call.file,
-        line: call.line,
-        column: call.column,
-        severity: 'suggestion',
-        method: call.method,
-        code: call.code,
-        message: 'Event names should follow snake_case convention (lowercase with underscores)',
-        fix: `Use snake_case: '${toSnakeCase(eventArg.value)}'`,
-      });
-    }
   }
 
   // Properties should be an object if provided
@@ -387,13 +373,3 @@ function generateFixForMissingArgs(call: SDKMethodCall, signature: SDKMethodSign
 }
 
 
-/**
- * Converts a string to snake_case
- */
-function toSnakeCase(str: string): string {
-  return str
-    .replace(/([A-Z])/g, '_$1')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}

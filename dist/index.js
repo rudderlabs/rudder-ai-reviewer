@@ -232506,11 +232506,26 @@ async function getTypeScriptDiagnostics(virtualCode, sdkPath) {
         return moduleNames.map(moduleName => {
             if (moduleName === '@rudderstack/analytics-js') {
                 // Manually resolve to the SDK package we downloaded
-                const typesPath = path.join(sdkPath, 'dist', 'npm', 'index.d.ts');
+                // Try .d.cts first (CommonJS types), then .d.mts (ESM types)
+                const typesPathCts = path.join(sdkPath, 'dist', 'npm', 'index.d.cts');
+                const typesPathMts = path.join(sdkPath, 'dist', 'npm', 'index.d.mts');
+                let typesPath = typesPathCts;
+                let extension = ts.Extension.Dcts;
+                // Check which file exists
+                try {
+                    (__nccwpck_require__(9896).accessSync)(typesPathCts);
+                    core.debug(`Using CTS types: ${typesPathCts}`);
+                }
+                catch {
+                    typesPath = typesPathMts;
+                    extension = ts.Extension.Dmts;
+                    core.debug(`Using MTS types: ${typesPathMts}`);
+                }
                 core.debug(`Resolving ${moduleName} to ${typesPath}`);
                 return {
                     resolvedFileName: typesPath,
                     isExternalLibraryImport: true,
+                    extension,
                 };
             }
             // Use default resolution for other modules
@@ -232655,22 +232670,6 @@ function validateTrackCall(call) {
             message: 'Event name cannot be empty',
             fix: `rudderanalytics.track('event_name', properties)`,
         });
-    }
-    // Check naming convention (snake_case recommended)
-    if (eventArg.isStatic && eventArg.type === 'string' && typeof eventArg.value === 'string') {
-        const eventName = eventArg.value;
-        if (eventName && !/^[a-z0-9_]+$/.test(eventName)) {
-            issues.push({
-                file: call.file,
-                line: call.line,
-                column: call.column,
-                severity: 'warning',
-                method: call.method,
-                code: call.code,
-                message: `Event name '${eventName}' should use snake_case naming convention (e.g., 'user_signed_up')`,
-                fix: eventName.replace(/[A-Z]/g, (match, offset) => (offset > 0 ? '_' : '') + match.toLowerCase()),
-            });
-        }
     }
     // Check if properties are provided (suggestion)
     if (call.arguments.length === 1) {
