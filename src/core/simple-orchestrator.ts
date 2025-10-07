@@ -33,7 +33,7 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     const repoPath = config.rootDirectory || process.cwd();
 
     // Step 4: Detect SDK
-    const sdkUsage = await analyzer.detectSDK(changedFiles);
+    const sdkUsage = await analyzer.detectSDK(changedFiles, repoPath);
 
     if (!sdkUsage.detected) {
       core.info('No RudderStack SDK detected');
@@ -47,7 +47,11 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
             eventsRemoved: [],
             propertyChanges: [],
           },
-          filesAnalyzed: [],
+          filesAnalyzed: changedFiles.map((f) => ({
+            path: f,
+            analyzed: true,
+            sdkDetected: false,
+          })),
         },
         { verbosity: config.outputVerbosity, includePropertyDetails: false }
       );
@@ -61,7 +65,7 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
 
     // Step 5: Validate API usage
     core.info('Validating SDK API usage...');
-    const issues = await analyzer.validateAPI(changedFiles);
+    const issues = await analyzer.validateAPI(changedFiles, repoPath);
 
     core.info(`Found ${issues.length} issues`);
 

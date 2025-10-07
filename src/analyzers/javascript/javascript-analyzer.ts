@@ -25,9 +25,9 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
   /**
    * Detect if RudderStack JavaScript SDK is present
    */
-  async detectSDK(files: string[]): Promise<SDKUsage> {
-    const repoPath = files.length > 0 ? path.dirname(files[0]) : process.cwd();
-    const detection = await detectSDKInstallation(repoPath);
+  async detectSDK(files: string[], repoPath?: string): Promise<SDKUsage> {
+    const rootPath = repoPath || process.cwd();
+    const detection = await detectSDKInstallation(rootPath);
 
     // Convert detection result to SDKUsage interface
     const sdkType = detection.installationType === 'both' ? 'npm' : detection.installationType === 'none' ? 'npm' : detection.installationType;
@@ -170,10 +170,10 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
   /**
    * Validate SDK API calls
    */
-  async validateAPI(files: string[]): Promise<Issue[]> {
-    const repoPath = files.length > 0 ? path.dirname(files[0]) : process.cwd();
+  async validateAPI(files: string[], repoPath?: string): Promise<Issue[]> {
+    const rootPath = repoPath || process.cwd();
 
-    const scanResult = await scanFilesForSDKUsage(repoPath);
+    const scanResult = await scanFilesForSDKUsage(rootPath);
     const validation = await validateSDKMethodCalls(scanResult.methodCalls);
 
     const issues: Issue[] = [];

@@ -87465,9 +87465,9 @@ class JavaScriptAnalyzer extends base_analyzer_1.BaseAnalyzer {
     /**
      * Detect if RudderStack JavaScript SDK is present
      */
-    async detectSDK(files) {
-        const repoPath = files.length > 0 ? path.dirname(files[0]) : process.cwd();
-        const detection = await (0, sdk_detector_1.detectSDKInstallation)(repoPath);
+    async detectSDK(files, repoPath) {
+        const rootPath = repoPath || process.cwd();
+        const detection = await (0, sdk_detector_1.detectSDKInstallation)(rootPath);
         // Convert detection result to SDKUsage interface
         const sdkType = detection.installationType === 'both' ? 'npm' : detection.installationType === 'none' ? 'npm' : detection.installationType;
         return {
@@ -87596,9 +87596,9 @@ class JavaScriptAnalyzer extends base_analyzer_1.BaseAnalyzer {
     /**
      * Validate SDK API calls
      */
-    async validateAPI(files) {
-        const repoPath = files.length > 0 ? path.dirname(files[0]) : process.cwd();
-        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(repoPath);
+    async validateAPI(files, repoPath) {
+        const rootPath = repoPath || process.cwd();
+        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(rootPath);
         const validation = await (0, api_validator_1.validateSDKMethodCalls)(scanResult.methodCalls);
         const issues = [];
         [...validation.errors, ...validation.warnings, ...validation.suggestions].forEach((issue) => {
@@ -89675,7 +89675,7 @@ async function runSimplifiedAnalysis(config) {
         const analyzer = new javascript_analyzer_1.JavaScriptAnalyzer();
         const repoPath = config.rootDirectory || process.cwd();
         // Step 4: Detect SDK
-        const sdkUsage = await analyzer.detectSDK(changedFiles);
+        const sdkUsage = await analyzer.detectSDK(changedFiles, repoPath);
         if (!sdkUsage.detected) {
             core.info('No RudderStack SDK detected');
             const comment = (0, comment_generator_1.generatePRComment)({
@@ -89687,7 +89687,11 @@ async function runSimplifiedAnalysis(config) {
                     eventsRemoved: [],
                     propertyChanges: [],
                 },
-                filesAnalyzed: [],
+                filesAnalyzed: changedFiles.map((f) => ({
+                    path: f,
+                    analyzed: true,
+                    sdkDetected: false,
+                })),
             }, { verbosity: config.outputVerbosity, includePropertyDetails: false });
             await (0, github_1.postOrUpdateComment)(prContext, config.githubToken, comment);
             (0, github_1.setOutputs)({ status: 'success', errorCount: 0, warningCount: 0, suggestionCount: 0 });
@@ -89696,7 +89700,7 @@ async function runSimplifiedAnalysis(config) {
         core.info(`SDK detected: ${sdkUsage.type} v${sdkUsage.version || 'unknown'}`);
         // Step 5: Validate API usage
         core.info('Validating SDK API usage...');
-        const issues = await analyzer.validateAPI(changedFiles);
+        const issues = await analyzer.validateAPI(changedFiles, repoPath);
         core.info(`Found ${issues.length} issues`);
         // Step 6: Build result
         const result = {
