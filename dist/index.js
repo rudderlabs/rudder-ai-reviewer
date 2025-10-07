@@ -233090,7 +233090,7 @@ const core = __importStar(__nccwpck_require__(7484));
 async function postNoSDKComment(options) {
     const { owner, repo, pullNumber, token } = options;
     const octokit = github.getOctokit(token);
-    const commentBody = `## <img src="https://raw.githubusercontent.com/rudderlabs/pr-reviewer/main/icon.png" alt="RudderStack" width="24" height="24" align="center"> RudderStack Instrumentation Review
+    const commentBody = `## <img src="https://raw.githubusercontent.com/rudderlabs/pr-reviewer/test.sdk-changes-detection/icon.png" alt="RudderStack" width="24" height="24" align="center"> RudderStack Instrumentation Review
 
 ### ℹ️ No RudderStack SDK instrumentation detected
 
