@@ -115,8 +115,34 @@ export function formatAnalysisReport(
   report += `- ⚠️ **Warnings:** ${validation.warnings.length}\n`;
   report += `- 💡 **Suggestions:** ${validation.suggestions.length}\n\n`;
 
-  if (totalIssues > 0) {
-    report += '_See inline comments on the changed files for details._\n\n';
+  if (validation.errors.length > 0 || validation.warnings.length > 0) {
+    report += '_See inline comments on the changed files for error and warning details._\n\n';
+  }
+
+  // Add suggestions section if there are any
+  if (validation.suggestions.length > 0) {
+    report += '### 💡 Suggestions\n\n';
+    report += '_Consider these improvements to enhance your tracking implementation:_\n\n';
+
+    // Group suggestions by file
+    const suggestionsByFile = new Map<string, typeof validation.suggestions>();
+    validation.suggestions.forEach(s => {
+      if (!suggestionsByFile.has(s.file)) {
+        suggestionsByFile.set(s.file, []);
+      }
+      suggestionsByFile.get(s.file)!.push(s);
+    });
+
+    suggestionsByFile.forEach((suggestions, file) => {
+      report += `**${file}**\n`;
+      suggestions.forEach(s => {
+        report += `- Line ${s.line}: ${s.message}\n`;
+        if (s.fix) {
+          report += `  \`\`\`javascript\n  ${s.fix}\n  \`\`\`\n`;
+        }
+      });
+      report += '\n';
+    });
   }
 
   report += '---\n';

@@ -33679,14 +33679,54 @@ function validateMethodCall(call) {
         core.debug(`No overloads found for method: ${call.method}`);
         return issues;
     }
-    // Check if the call matches any overload
-    const matchingOverload = findMatchingOverload(call, overloads);
+    // Check if the call matches any overload and collect detailed errors
+    const { matchingOverload, detailedErrors } = findMatchingOverloadWithErrors(call, overloads);
     if (!matchingOverload) {
-        // No overload matches - generate error with all possible signatures
-        const signatures = overloads.map((o) => {
+        // No overload matches - generate detailed error message
+        let errorMessage = `Invalid call to ${call.method}().\n\n`;
+        // Show what we got
+        if (call.arguments.length === 0) {
+            errorMessage += `**Problem:** Missing required arguments.\n\n`;
+        }
+        else {
+            errorMessage += `**Problem:** Got ${call.arguments.length} argument(s) but they don't match any valid signature:\n`;
+            call.arguments.forEach((arg, i) => {
+                const argDesc = arg.isStatic
+                    ? `${arg.type}${arg.value !== undefined ? ` (value: ${JSON.stringify(arg.value)})` : ''}`
+                    : `${arg.type} (dynamic value)`;
+                errorMessage += `  - Argument ${i + 1}: ${argDesc}\n`;
+            });
+            errorMessage += '\n';
+        }
+        // Show specific errors from attempted matches
+        if (detailedErrors.length > 0) {
+            errorMessage += `**Issues found:**\n`;
+            detailedErrors.forEach(err => {
+                errorMessage += `  - ${err}\n`;
+            });
+            errorMessage += '\n';
+        }
+        // Show valid signatures
+        errorMessage += `**Valid signatures:**\n`;
+        overloads.forEach((o, i) => {
             const params = o.params.map((p) => `${p.name}: ${p.type}`).join(', ');
-            return `${call.method}(${params})`;
+            errorMessage += `  ${i + 1}. ${call.method}(${params})\n`;
         });
+        // Generate a fix suggestion
+        const suggestedOverload = overloads[0];
+        const fixArgs = suggestedOverload.params.map(p => {
+            if (p.type === 'string')
+                return `'${p.name}'`;
+            if (p.type === 'number')
+                return '0';
+            if (p.type === 'boolean')
+                return 'false';
+            if (p.type === 'object')
+                return '{}';
+            if (p.type === 'function')
+                return '() => {}';
+            return p.name;
+        }).join(', ');
         issues.push({
             file: call.file,
             line: call.line,
@@ -33694,8 +33734,8 @@ function validateMethodCall(call) {
             severity: 'error',
             method: call.method,
             code: call.code,
-            message: `Invalid arguments for ${call.method}(). Got ${call.arguments.length} argument(s). Valid signatures:\n${signatures.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}`,
-            fix: signatures[0], // Suggest first overload
+            message: errorMessage.trim(),
+            fix: `${call.method}(${fixArgs})`,
         });
     }
     // Method-specific validations
@@ -33703,12 +33743,24 @@ function validateMethodCall(call) {
     return issues;
 }
 /**
- * Finds a matching overload for the given call
+ * Finds a matching overload and collects detailed error messages
  */
-function findMatchingOverload(call, overloads) {
+function findMatchingOverloadWithErrors(call, overloads) {
     const argCount = call.arguments.length;
+    const detailedErrors = [];
+    const attemptedOverloads = [];
+    // Try each overload and collect errors
     for (const overload of overloads) {
+        const overloadErrors = [];
+        // Check argument count
         if (overload.params.length !== argCount) {
+            if (argCount < overload.params.length) {
+                overloadErrors.push(`Signature with ${overload.params.length} parameter(s) needs ${overload.params.length - argCount} more argument(s)`);
+            }
+            else {
+                overloadErrors.push(`Signature with ${overload.params.length} parameter(s) has ${argCount - overload.params.length} too many argument(s)`);
+            }
+            attemptedOverloads.push({ overload, errors: overloadErrors });
             continue;
         }
         // Check if argument types match
@@ -33718,14 +33770,29 @@ function findMatchingOverload(call, overloads) {
             const param = overload.params[i];
             if (!isArgumentCompatible(arg, param.type)) {
                 matches = false;
-                break;
+                const argTypeDesc = arg.isStatic
+                    ? `${arg.type}${arg.value !== undefined ? ` (${JSON.stringify(arg.value)})` : ''}`
+                    : `${arg.type} (dynamic)`;
+                overloadErrors.push(`Argument ${i + 1} ('${param.name}'): expected ${param.type}, got ${argTypeDesc}`);
             }
         }
         if (matches) {
-            return overload;
+            return { matchingOverload: overload, detailedErrors: [] };
         }
+        attemptedOverloads.push({ overload, errors: overloadErrors });
     }
-    return null;
+    // Collect the most relevant errors (from overload with fewest errors or matching arg count)
+    const bestMatch = attemptedOverloads
+        .filter(a => a.overload.params.length === argCount)
+        .sort((a, b) => a.errors.length - b.errors.length)[0];
+    if (bestMatch) {
+        detailedErrors.push(...bestMatch.errors);
+    }
+    else if (attemptedOverloads.length > 0) {
+        // Show errors from first overload if no matching arg count
+        detailedErrors.push(...attemptedOverloads[0].errors);
+    }
+    return { matchingOverload: null, detailedErrors };
 }
 /**
  * Checks if an argument is compatible with expected type
@@ -35259,8 +35326,31 @@ function formatAnalysisReport(sdkDetection, validation, changes, _options) {
     report += `- ❌ **Errors:** ${validation.errors.length}\n`;
     report += `- ⚠️ **Warnings:** ${validation.warnings.length}\n`;
     report += `- 💡 **Suggestions:** ${validation.suggestions.length}\n\n`;
-    if (totalIssues > 0) {
-        report += '_See inline comments on the changed files for details._\n\n';
+    if (validation.errors.length > 0 || validation.warnings.length > 0) {
+        report += '_See inline comments on the changed files for error and warning details._\n\n';
+    }
+    // Add suggestions section if there are any
+    if (validation.suggestions.length > 0) {
+        report += '### 💡 Suggestions\n\n';
+        report += '_Consider these improvements to enhance your tracking implementation:_\n\n';
+        // Group suggestions by file
+        const suggestionsByFile = new Map();
+        validation.suggestions.forEach(s => {
+            if (!suggestionsByFile.has(s.file)) {
+                suggestionsByFile.set(s.file, []);
+            }
+            suggestionsByFile.get(s.file).push(s);
+        });
+        suggestionsByFile.forEach((suggestions, file) => {
+            report += `**${file}**\n`;
+            suggestions.forEach(s => {
+                report += `- Line ${s.line}: ${s.message}\n`;
+                if (s.fix) {
+                    report += `  \`\`\`javascript\n  ${s.fix}\n  \`\`\`\n`;
+                }
+            });
+            report += '\n';
+        });
     }
     report += '---\n';
     report += '_🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer)_\n';
