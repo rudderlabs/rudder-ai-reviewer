@@ -28,7 +28,7 @@ export interface SDKDetectionResult {
 /**
  * Detect SDK installation in the repository
  */
-export async function detectSDKInstallation(repoPath: string): Promise<SDKDetectionResult> {
+export async function detectSDKInstallation(repoPath: string, searchPaths?: string[]): Promise<SDKDetectionResult> {
   const details: string[] = [];
   const locations: SDKLocation[] = [];
   let hasNPM = false;
@@ -36,27 +36,65 @@ export async function detectSDKInstallation(repoPath: string): Promise<SDKDetect
   let npmVersion: string | undefined;
   let cdnVersion: string | undefined;
 
-  // Check for NPM installation
-  const packageJsonPath = path.join(repoPath, 'package.json');
-  if (fs.existsSync(packageJsonPath)) {
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+  // Determine paths to search for package.json
+  const pathsToCheck = [repoPath];
 
-    // Check dependencies and devDependencies
-    const allDeps = {
-      ...packageJson.dependencies,
-      ...packageJson.devDependencies,
-    };
+  // If searchPaths provided, also check subdirectories from those paths
+  if (searchPaths && searchPaths.length > 0) {
+    const subdirs = new Set<string>();
+    console.log(`[SDK Detector] Received ${searchPaths.length} search paths`);
+    searchPaths.slice(0, 3).forEach(fp => console.log(`  - ${fp}`));
 
-    if (allDeps['@rudderstack/analytics-js']) {
-      hasNPM = true;
-      npmVersion = allDeps['@rudderstack/analytics-js'].replace(/[\^~]/, '');
-      details.push(`✅ NPM: Found @rudderstack/analytics-js@${npmVersion} in package.json`);
+    searchPaths.forEach(filePath => {
+      const dir = path.dirname(filePath);
+      const parts = dir.split(path.sep).filter(p => p && p !== '.');
 
-      // Try to get exact version from lock files
-      const exactVersion = await getExactNPMVersion(repoPath);
-      if (exactVersion) {
-        npmVersion = exactVersion;
-        details.push(`   Exact version from lock file: ${exactVersion}`);
+      // Check each level of directory (e.g., if file is "a/b/c/file.js", check "a", "a/b", "a/b/c")
+      for (let i = 1; i <= parts.length; i++) {
+        const subdir = parts.slice(0, i).join(path.sep);
+        if (subdir) {
+          const fullPath = path.join(repoPath, subdir);
+          subdirs.add(fullPath);
+        }
+      }
+    });
+    pathsToCheck.push(...subdirs);
+    console.log(`[SDK Detector] Generated ${subdirs.size} subdirectories to check`);
+    [...subdirs].slice(0, 5).forEach(dir => console.log(`  - ${dir}`));
+  }
+
+  console.log(`[SDK Detector] Total paths to check: ${pathsToCheck.length}`);
+
+  // Check for NPM installation in all paths
+  for (const checkPath of pathsToCheck) {
+    const packageJsonPath = path.join(checkPath, 'package.json');
+    console.log(`[SDK Detector] Checking: ${packageJsonPath} (exists: ${fs.existsSync(packageJsonPath)})`);
+    if (fs.existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+
+        // Check dependencies and devDependencies
+        const allDeps = {
+          ...packageJson.dependencies,
+          ...packageJson.devDependencies,
+        };
+
+        if (allDeps['@rudderstack/analytics-js']) {
+          hasNPM = true;
+          npmVersion = allDeps['@rudderstack/analytics-js'].replace(/[\^~]/, '');
+          const relPath = path.relative(repoPath, packageJsonPath);
+          details.push(`✅ NPM: Found @rudderstack/analytics-js@${npmVersion} in ${relPath}`);
+
+          // Try to get exact version from lock files
+          const exactVersion = await getExactNPMVersion(checkPath);
+          if (exactVersion) {
+            npmVersion = exactVersion;
+            details.push(`   Exact version from lock file: ${exactVersion}`);
+          }
+          break; // Found SDK, stop searching
+        }
+      } catch (error) {
+        // Ignore parsing errors for invalid package.json files
       }
     }
   }

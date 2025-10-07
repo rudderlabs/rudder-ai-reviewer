@@ -25,9 +25,10 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
   /**
    * Detect if RudderStack JavaScript SDK is present
    */
-  async detectSDK(files: string[]): Promise<SDKUsage> {
-    const repoPath = files.length > 0 ? path.dirname(files[0]) : process.cwd();
-    const detection = await detectSDKInstallation(repoPath);
+  async detectSDK(files: string[], repoPath?: string): Promise<SDKUsage> {
+    const rootPath = repoPath || process.cwd();
+    // Pass files to help SDK detector find package.json in subdirectories
+    const detection = await detectSDKInstallation(rootPath, files);
 
     // Convert detection result to SDKUsage interface
     const sdkType = detection.installationType === 'both' ? 'npm' : detection.installationType === 'none' ? 'npm' : detection.installationType;
@@ -170,10 +171,10 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
   /**
    * Validate SDK API calls
    */
-  async validateAPI(files: string[]): Promise<Issue[]> {
-    const repoPath = files.length > 0 ? path.dirname(files[0]) : process.cwd();
+  async validateAPI(files: string[], repoPath?: string): Promise<Issue[]> {
+    const rootPath = repoPath || process.cwd();
 
-    const scanResult = await scanFilesForSDKUsage(repoPath);
+    const scanResult = await scanFilesForSDKUsage(rootPath);
     const validation = await validateSDKMethodCalls(scanResult.methodCalls);
 
     const issues: Issue[] = [];
@@ -192,6 +193,24 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
     });
 
     return issues;
+  }
+
+  /**
+   * Get files with SDK usage (separate method to avoid breaking interface)
+   * @param scanPath - Directory to scan for SDK usage
+   * @param repoRoot - Repository root for relative paths (optional, defaults to scanPath)
+   */
+  async getFilesWithSDK(scanPath: string, repoRoot?: string): Promise<string[]> {
+    const scanResult = await scanFilesForSDKUsage(scanPath, repoRoot);
+    return [...new Set(scanResult.methodCalls.map(call => call.file))];
+  }
+
+  /**
+   * Get SDK method call count
+   */
+  async getMethodCallCount(scanPath: string, repoRoot?: string): Promise<number> {
+    const scanResult = await scanFilesForSDKUsage(scanPath, repoRoot);
+    return scanResult.methodCalls.length;
   }
 
   /**

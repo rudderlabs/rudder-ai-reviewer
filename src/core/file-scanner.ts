@@ -53,10 +53,13 @@ const RUDDERSTACK_METHODS = [
 /**
  * Scans repository for RudderStack SDK method calls
  */
-export async function scanFilesForSDKUsage(repoPath: string): Promise<FileScanResult> {
-  core.info(`Scanning files in ${repoPath} for RudderStack SDK usage...`);
+export async function scanFilesForSDKUsage(scanPath: string, repoRoot?: string): Promise<FileScanResult> {
+  core.info(`Scanning files in ${scanPath} for RudderStack SDK usage...`);
 
-  const files = await findJavaScriptFiles(repoPath);
+  // Use repo root for relative paths, or default to scan path
+  const pathBase = repoRoot || scanPath;
+
+  const files = await findJavaScriptFiles(scanPath);
   core.info(`Found ${files.length} JavaScript/TypeScript files to scan`);
 
   let totalScanned = 0;
@@ -65,7 +68,7 @@ export async function scanFilesForSDKUsage(repoPath: string): Promise<FileScanRe
 
   for (const file of files) {
     try {
-      const methodCalls = await scanFileForSDKCalls(file, repoPath);
+      const methodCalls = await scanFileForSDKCalls(file, pathBase);
       totalScanned++;
 
       if (methodCalls.length > 0) {
