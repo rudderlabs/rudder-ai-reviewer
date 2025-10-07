@@ -112,11 +112,15 @@ function validateMethodCall(call: SDKMethodCall, methodSignatures: Map<string, S
   }
 
   // Validate argument types (only for static arguments)
+  // Note: We skip type validation for optional parameters because TypeScript overloads
+  // can shift parameter positions (e.g., track(event, callback) vs track(event, properties, callback))
   for (let i = 0; i < call.arguments.length && i < signature.parameters.length; i++) {
     const arg = call.arguments[i];
     const param = signature.parameters[i];
 
-    if (arg.isStatic) {
+    // Only validate required parameters strictly
+    // For optional parameters, skip type validation to handle overload scenarios
+    if (arg.isStatic && !param.optional) {
       const typeIssue = validateArgumentTypeAgainstSignature(arg, param, call);
       if (typeIssue) {
         issues.push(typeIssue);

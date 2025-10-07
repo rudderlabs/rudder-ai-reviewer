@@ -89,7 +89,7 @@ export function formatAnalysisReport(
   sdkDetection: SDKDetectionResult,
   validation: ValidationResult,
   changes: ChangeDetectionResult,
-  options: { owner: string; repo: string; commitSha: string; pathPrefix?: string }
+  _options: { owner: string; repo: string; commitSha: string; pathPrefix?: string }
 ): string {
   let report = `## <img src="https://github.com/rudderlabs/pr-reviewer/blob/test.sdk-changes-detection/icon.png?raw=true" alt="RudderStack" width="24" height="24" align="center"> RudderStack Instrumentation Review
 
@@ -105,65 +105,18 @@ export function formatAnalysisReport(
     report += '🔄 Changes detected in the RudderStack instrumentation\n\n';
   }
 
-  report += `JavaScript SDK is installed via ${sdkDetection.installationType} (v${sdkDetection.installationType === 'npm' ? sdkDetection.npmVersion : sdkDetection.cdnVersion})\n\n`;
+  report += `JavaScript SDK is installed via ${sdkDetection.installationType === 'cdn' ? 'CDN snippet' : 'NPM package'} (v${sdkDetection.installationType === 'npm' ? sdkDetection.npmVersion : sdkDetection.cdnVersion})\n\n`;
 
-  const totalIssues = validation.errors.length + validation.warnings.length;
+  const totalIssues = validation.errors.length + validation.warnings.length + validation.suggestions.length;
   const statusEmoji = validation.errors.length > 0 ? '❌' : validation.warnings.length > 0 ? '⚠️' : '✅';
 
   report += `${statusEmoji} **${totalIssues}** issue(s) found\n\n`;
-  report += `- **Errors:** ${validation.errors.length}\n`;
-  report += `- **Warnings:** ${validation.warnings.length}\n`;
-  report += `- **Suggestions:** ${validation.suggestions.length}\n\n`;
+  report += `- ❌ **Errors:** ${validation.errors.length}\n`;
+  report += `- ⚠️ **Warnings:** ${validation.warnings.length}\n`;
+  report += `- 💡 **Suggestions:** ${validation.suggestions.length}\n\n`;
 
-  // Errors section (always expanded if present)
-  if (validation.errors.length > 0) {
-    report += '### ❌ Errors\n\n';
-    report += '_These issues must be fixed_\n\n';
-    validation.errors.forEach((issue, idx) => {
-      const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
-      const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
-
-      report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-      report += `   **Issue:** ${issue.message}\n\n`;
-      if (issue.fix) {
-        report += `   **Fix:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
-      }
-      report += `   **Current code:**\n   \`\`\`javascript\n   ${issue.code}\n   \`\`\`\n\n`;
-    });
-  }
-
-  // Warnings section (collapsible)
-  if (validation.warnings.length > 0) {
-    report += '<details>\n<summary><strong>⚠️ Warnings</strong></summary>\n\n';
-    report += '_These issues should be addressed_\n\n';
-    validation.warnings.forEach((issue, idx) => {
-      const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
-      const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
-
-      report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-      report += `   **Issue:** ${issue.message}\n\n`;
-      if (issue.fix) {
-        report += `   **Recommendation:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
-      }
-    });
-    report += '</details>\n\n';
-  }
-
-  // Suggestions section (collapsible)
-  if (validation.suggestions.length > 0) {
-    report += '<details>\n<summary><strong>💡 Suggestions</strong></summary>\n\n';
-    report += '_Optional improvements to consider_\n\n';
-    validation.suggestions.forEach((issue, idx) => {
-      const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
-      const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
-
-      report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-      report += `   **Issue:** ${issue.message}\n\n`;
-      if (issue.fix) {
-        report += `   **Suggestion:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
-      }
-    });
-    report += '</details>\n\n';
+  if (totalIssues > 0) {
+    report += '_See inline comments on the changed files for details._\n\n';
   }
 
   report += '---\n';

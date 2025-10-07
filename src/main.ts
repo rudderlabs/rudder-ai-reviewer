@@ -9,7 +9,7 @@ import * as github from '@actions/github';
 import { ActionConfig } from './types/common';
 import { detectSDKInstallation } from './core/sdk-detector';
 import { scanFilesForSDKUsage, SDKMethodCall } from './core/file-scanner';
-import { validateSDKMethodCalls } from './core/api-validator';
+import { validateWithTypeScript } from './core/ts-validator';
 import { detectSDKChanges } from './core/change-detector';
 import { postAnalysisReport, postInlineAnnotations, postNoSDKComment, InlineAnnotation } from './integrations/github/pr-client';
 import { getPRDiff, isLineChanged } from './integrations/github/diff-parser';
@@ -116,11 +116,11 @@ async function run(): Promise<void> {
       core.info('🔍 Validating all SDK calls (annotate_existing_code=true)');
     }
 
-    // Step 5: Validate SDK method calls
-    core.info('✅ Step 5: Validating SDK method calls...');
+    // Step 5: Validate SDK method calls using TypeScript Language Service
+    core.info('✅ Step 5: Validating SDK method calls with TypeScript...');
     // Use NPM version if available, otherwise CDN version, otherwise latest
     const sdkVersionForValidation = sdkDetection.npmVersion || sdkDetection.cdnVersion;
-    const validation = await validateSDKMethodCalls(callsToValidate, sdkVersionForValidation);
+    const validation = await validateWithTypeScript(callsToValidate, sdkVersionForValidation);
     core.info(`Validation complete: ${validation.errors.length} errors, ${validation.warnings.length} warnings, ${validation.suggestions.length} suggestions`);
 
     // Step 6: Detect changes from base branch

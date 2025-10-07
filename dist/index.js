@@ -231231,376 +231231,6 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
-/***/ 7896:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.validateSDKMethodCalls = validateSDKMethodCalls;
-const core = __importStar(__nccwpck_require__(7484));
-const type_extractor_1 = __nccwpck_require__(6902);
-/**
- * Validates SDK method calls against official API signatures
- */
-async function validateSDKMethodCalls(methodCalls, sdkVersion) {
-    core.info(`Validating ${methodCalls.length} SDK method calls...`);
-    // Get method signatures (either from SDK types or built-in fallback)
-    let methodSignatures;
-    if (sdkVersion) {
-        core.info(`Using SDK version ${sdkVersion} for type validation`);
-        methodSignatures = await (0, type_extractor_1.getSDKMethodSignatures)(sdkVersion);
-    }
-    else {
-        core.info('No SDK version detected, using built-in method signatures');
-        methodSignatures = await (0, type_extractor_1.getSDKMethodSignatures)('latest');
-    }
-    const errors = [];
-    const warnings = [];
-    const suggestions = [];
-    for (const call of methodCalls) {
-        const issues = validateMethodCall(call, methodSignatures);
-        errors.push(...issues.filter((i) => i.severity === 'error'));
-        warnings.push(...issues.filter((i) => i.severity === 'warning'));
-        suggestions.push(...issues.filter((i) => i.severity === 'suggestion'));
-    }
-    core.info(`Validation complete: ${errors.length} errors, ${warnings.length} warnings, ${suggestions.length} suggestions`);
-    return {
-        totalIssues: errors.length + warnings.length + suggestions.length,
-        errors,
-        warnings,
-        suggestions,
-    };
-}
-/**
- * Validates a single SDK method call using dynamic type signatures
- */
-function validateMethodCall(call, methodSignatures) {
-    const issues = [];
-    const signature = methodSignatures.get(call.method);
-    if (!signature) {
-        // Unknown method (shouldn't happen based on scanner)
-        core.debug(`No signature found for method: ${call.method}`);
-        return issues;
-    }
-    // Check argument count
-    const argCount = call.arguments.length;
-    const requiredParams = signature.parameters.filter((p) => !p.optional);
-    const minArgs = requiredParams.length;
-    const maxArgs = signature.parameters.length;
-    if (argCount < minArgs) {
-        issues.push({
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'error',
-            method: call.method,
-            code: call.code,
-            message: `Missing required arguments for ${call.method}(). Expected at least ${minArgs} argument(s), got ${argCount}.`,
-            fix: generateFixForMissingArgs(call, signature),
-        });
-    }
-    if (argCount > maxArgs) {
-        issues.push({
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'warning',
-            method: call.method,
-            code: call.code,
-            message: `Too many arguments for ${call.method}(). Expected at most ${maxArgs} argument(s), got ${argCount}.`,
-        });
-    }
-    // Validate argument types (only for static arguments)
-    for (let i = 0; i < call.arguments.length && i < signature.parameters.length; i++) {
-        const arg = call.arguments[i];
-        const param = signature.parameters[i];
-        if (arg.isStatic) {
-            const typeIssue = validateArgumentTypeAgainstSignature(arg, param, call);
-            if (typeIssue) {
-                issues.push(typeIssue);
-            }
-        }
-    }
-    // Method-specific validations
-    const methodSpecificIssues = validateMethodSpecificRules(call);
-    issues.push(...methodSpecificIssues);
-    return issues;
-}
-/**
- * Validates an argument's type against SDK signature parameter
- */
-function validateArgumentTypeAgainstSignature(arg, param, call) {
-    // Check if argument type is compatible with expected type
-    if (!(0, type_extractor_1.isTypeCompatible)(arg.type, param.type)) {
-        return {
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'error',
-            method: call.method,
-            code: call.code,
-            message: `Invalid type for argument '${param.name}' in ${call.method}(). Expected ${param.type}, got ${arg.type}.`,
-            fix: `Provide a ${param.type} for the '${param.name}' parameter`,
-        };
-    }
-    return null;
-}
-/**
- * Validates method-specific business rules
- */
-function validateMethodSpecificRules(call) {
-    const issues = [];
-    switch (call.method) {
-        case 'track':
-            issues.push(...validateTrackCall(call));
-            break;
-        case 'identify':
-            issues.push(...validateIdentifyCall(call));
-            break;
-        case 'page':
-            issues.push(...validatePageCall(call));
-            break;
-        case 'load':
-            issues.push(...validateLoadCall(call));
-            break;
-    }
-    return issues;
-}
-/**
- * Validates track() method call
- */
-function validateTrackCall(call) {
-    const issues = [];
-    const eventArg = call.arguments[0];
-    // Event name should be a non-empty string
-    if (eventArg && eventArg.isStatic && eventArg.type === 'string' && typeof eventArg.value === 'string') {
-        if (!eventArg.value || eventArg.value.trim() === '') {
-            issues.push({
-                file: call.file,
-                line: call.line,
-                column: call.column,
-                severity: 'error',
-                method: call.method,
-                code: call.code,
-                message: 'Event name cannot be empty',
-                fix: "Provide a descriptive event name like 'button_clicked' or 'form_submitted'",
-            });
-        }
-        // Suggest snake_case naming convention
-        if (eventArg.value && !/^[a-z0-9_]+$/.test(eventArg.value)) {
-            issues.push({
-                file: call.file,
-                line: call.line,
-                column: call.column,
-                severity: 'suggestion',
-                method: call.method,
-                code: call.code,
-                message: 'Event names should follow snake_case convention (lowercase with underscores)',
-                fix: `Use snake_case: '${toSnakeCase(eventArg.value)}'`,
-            });
-        }
-    }
-    // Properties should be an object if provided
-    const propsArg = call.arguments[1];
-    if (propsArg && propsArg.isStatic && propsArg.type !== 'object' && propsArg.type !== 'null' && propsArg.type !== 'undefined') {
-        issues.push({
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'error',
-            method: call.method,
-            code: call.code,
-            message: 'Properties parameter must be an object',
-            fix: 'Pass an object with event properties: { key: "value" }',
-        });
-    }
-    // Warn if no properties provided
-    if (!propsArg || propsArg.type === 'null' || propsArg.type === 'undefined') {
-        issues.push({
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'suggestion',
-            method: call.method,
-            code: call.code,
-            message: 'Consider adding properties to provide context for this event',
-            fix: 'rudderanalytics.track("event_name", { /* properties */ })',
-        });
-    }
-    return issues;
-}
-/**
- * Validates identify() method call
- */
-function validateIdentifyCall(call) {
-    const issues = [];
-    // Warn if both userId and traits are missing
-    if (call.arguments.length === 0) {
-        issues.push({
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'warning',
-            method: call.method,
-            code: call.code,
-            message: 'identify() called without userId or traits. At least one should be provided.',
-            fix: 'rudderanalytics.identify(userId, { /* traits */ })',
-        });
-    }
-    const traitsArg = call.arguments[1];
-    if (traitsArg && traitsArg.isStatic && traitsArg.type !== 'object' && traitsArg.type !== 'null' && traitsArg.type !== 'undefined') {
-        issues.push({
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'error',
-            method: call.method,
-            code: call.code,
-            message: 'Traits parameter must be an object',
-            fix: 'Pass an object with user traits: { email: "user@example.com" }',
-        });
-    }
-    return issues;
-}
-/**
- * Validates page() method call
- */
-function validatePageCall(call) {
-    const issues = [];
-    // Check if properties are at the right position
-    // page() can be called as: page(category, name, properties) or page(name, properties)
-    const lastArg = call.arguments[call.arguments.length - 1];
-    if (lastArg && lastArg.type === 'object' && lastArg.isStatic) {
-        // Good - properties provided
-    }
-    else {
-        issues.push({
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'suggestion',
-            method: call.method,
-            code: call.code,
-            message: 'Consider adding properties to provide context for this page view',
-            fix: 'rudderanalytics.page("Page Name", { /* properties */ })',
-        });
-    }
-    return issues;
-}
-/**
- * Validates load() method call
- */
-function validateLoadCall(call) {
-    const issues = [];
-    const writeKeyArg = call.arguments[0];
-    const dataPlaneArg = call.arguments[1];
-    // Check for hardcoded write key (security issue)
-    if (writeKeyArg && writeKeyArg.isStatic && writeKeyArg.type === 'string') {
-        issues.push({
-            file: call.file,
-            line: call.line,
-            column: call.column,
-            severity: 'warning',
-            method: call.method,
-            code: call.code,
-            message: 'Write key appears to be hardcoded. Consider using environment variables.',
-            fix: 'Use process.env.RUDDERSTACK_WRITE_KEY or import from config',
-        });
-    }
-    // Check data plane URL format
-    if (dataPlaneArg && dataPlaneArg.isStatic && dataPlaneArg.type === 'string') {
-        const url = dataPlaneArg.value;
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-            issues.push({
-                file: call.file,
-                line: call.line,
-                column: call.column,
-                severity: 'error',
-                method: call.method,
-                code: call.code,
-                message: 'Data plane URL must be a valid HTTP/HTTPS URL',
-                fix: 'Ensure the URL starts with https:// (e.g., "https://example.dataplane.rudderstack.com")',
-            });
-        }
-    }
-    return issues;
-}
-/**
- * Generates a fix suggestion for missing arguments (SDK signature version)
- */
-function generateFixForMissingArgs(call, signature) {
-    const requiredParams = signature.parameters.filter((p) => !p.optional);
-    const argExamples = requiredParams.map((param) => {
-        const type = param.type.toLowerCase();
-        if (type.includes('string')) {
-            return `"${param.name}"`;
-        }
-        else if (type.includes('number')) {
-            return '123';
-        }
-        else if (type.includes('object')) {
-            return '{}';
-        }
-        else if (type.includes('boolean')) {
-            return 'true';
-        }
-        else if (type.includes('function')) {
-            return '() => {}';
-        }
-        else {
-            return param.name;
-        }
-    });
-    return `rudderanalytics.${call.method}(${argExamples.join(', ')})`;
-}
-/**
- * Converts a string to snake_case
- */
-function toSnakeCase(str) {
-    return str
-        .replace(/([A-Z])/g, '_$1')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
-}
-
-
-/***/ }),
-
 /***/ 1382:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -232649,13 +232279,14 @@ function parseRudderStackCDN(code, filename) {
 
 /***/ }),
 
-/***/ 6902:
+/***/ 9477:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
 
 /**
- * Extracts and analyzes TypeScript type definitions from @rudderstack/analytics-js
+ * TypeScript-based validator using TypeScript Language Service
+ * This validates SDK calls by generating TypeScript code and using TS compiler diagnostics
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -232691,240 +232322,317 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getSDKMethodSignatures = getSDKMethodSignatures;
-exports.isTypeCompatible = isTypeCompatible;
+exports.validateWithTypeScript = validateWithTypeScript;
 const core = __importStar(__nccwpck_require__(7484));
 const fs = __importStar(__nccwpck_require__(1943));
 const path = __importStar(__nccwpck_require__(6928));
+const ts = __importStar(__nccwpck_require__(5672));
 const child_process_1 = __nccwpck_require__(5317);
 const util_1 = __nccwpck_require__(9023);
-const ts = __importStar(__nccwpck_require__(5672));
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 /**
- * Gets method signatures for RudderStack SDK by analyzing its TypeScript types
+ * Validates SDK method calls using TypeScript Language Service
  */
-async function getSDKMethodSignatures(version) {
-    core.info(`Extracting type information for @rudderstack/analytics-js@${version}...`);
+async function validateWithTypeScript(methodCalls, sdkVersion) {
+    core.info(`Validating ${methodCalls.length} SDK calls with TypeScript Language Service...`);
+    if (methodCalls.length === 0) {
+        return {
+            totalIssues: 0,
+            errors: [],
+            warnings: [],
+            suggestions: [],
+        };
+    }
     try {
-        // Create temporary directory for package download
-        const tempDir = path.join(process.cwd(), '.rudderstack-temp-types');
-        await fs.mkdir(tempDir, { recursive: true });
-        // Download the specific version of the package
-        core.debug(`Downloading @rudderstack/analytics-js@${version} to ${tempDir}`);
-        await execAsync(`npm install --prefix "${tempDir}" --no-save @rudderstack/analytics-js@${version}`, {
-            cwd: tempDir,
-        });
-        // Find the package's type definition file
-        const packagePath = path.join(tempDir, 'node_modules', '@rudderstack', 'analytics-js');
-        const packageJson = JSON.parse(await fs.readFile(path.join(packagePath, 'package.json'), 'utf-8'));
-        // Get types entry point (usually from "types" or "typings" field)
-        let typesFile = packageJson.types || packageJson.typings;
-        if (!typesFile) {
-            // Fallback: look for index.d.ts
-            typesFile = 'index.d.ts';
-        }
-        const typesPath = path.join(packagePath, typesFile);
-        core.debug(`Found types file: ${typesPath}`);
-        // Parse TypeScript types
-        const signatures = await parseTypeDefinitions(typesPath);
-        // Cleanup
-        await fs.rm(tempDir, { recursive: true, force: true });
-        core.info(`Extracted ${signatures.size} method signature(s) from SDK types`);
-        return signatures;
+        // Download SDK package
+        const sdkPath = await downloadSDKPackage(sdkVersion || 'latest');
+        // Generate virtual TypeScript file
+        const { virtualCode, callMap } = generateVirtualTypeScriptFile(methodCalls);
+        // Create TypeScript program and get diagnostics
+        const diagnostics = await getTypeScriptDiagnostics(virtualCode, sdkPath);
+        // Convert diagnostics to validation issues
+        const issues = convertDiagnosticsToIssues(diagnostics, callMap, methodCalls);
+        // Also run method-specific validations (empty strings, naming conventions, etc.)
+        const methodSpecificIssues = validateMethodSpecificRules(methodCalls);
+        const allErrors = [...issues.errors, ...methodSpecificIssues.filter(i => i.severity === 'error')];
+        const allWarnings = [...issues.warnings, ...methodSpecificIssues.filter(i => i.severity === 'warning')];
+        const allSuggestions = [...issues.suggestions, ...methodSpecificIssues.filter(i => i.severity === 'suggestion')];
+        core.info(`TypeScript validation complete: ${allErrors.length} errors, ${allWarnings.length} warnings, ${allSuggestions.length} suggestions`);
+        return {
+            totalIssues: allErrors.length + allWarnings.length + allSuggestions.length,
+            errors: allErrors,
+            warnings: allWarnings,
+            suggestions: allSuggestions,
+        };
     }
     catch (error) {
-        core.warning(`Failed to extract types from SDK package: ${error}`);
-        core.info('Falling back to built-in method signatures');
-        return getBuiltInSignatures();
+        core.warning(`TypeScript validation failed: ${error}`);
+        core.info('Falling back to basic validation');
+        return {
+            totalIssues: 0,
+            errors: [],
+            warnings: [],
+            suggestions: [],
+        };
     }
 }
 /**
- * Parses TypeScript type definitions to extract method signatures
+ * Downloads SDK package to temporary directory
  */
-async function parseTypeDefinitions(typesFilePath) {
-    const signatures = new Map();
-    try {
-        const sourceCode = await fs.readFile(typesFilePath, 'utf-8');
-        // Create TypeScript program
-        const sourceFile = ts.createSourceFile(typesFilePath, sourceCode, ts.ScriptTarget.Latest, true);
-        // Find the RudderAnalytics interface or class
-        function visit(node) {
-            // Look for interface or class named RudderAnalytics or similar
-            if (ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node)) {
-                const name = node.name?.getText(sourceFile);
-                if (name && (name.includes('RudderAnalytics') || name.includes('Analytics'))) {
-                    core.debug(`Found interface/class: ${name}`);
-                    // Extract method signatures
-                    node.members.forEach((member) => {
-                        if (ts.isMethodSignature(member) || ts.isMethodDeclaration(member)) {
-                            const methodName = member.name?.getText(sourceFile);
-                            if (methodName && isSDKMethod(methodName)) {
-                                const signature = extractMethodSignature(member, sourceFile);
-                                if (signature) {
-                                    signatures.set(methodName, signature);
-                                    core.debug(`Extracted signature for ${methodName}`);
-                                }
-                            }
-                        }
-                    });
-                }
+async function downloadSDKPackage(version) {
+    const tempDir = path.join(process.cwd(), '.rudderstack-temp-validation');
+    await fs.mkdir(tempDir, { recursive: true });
+    core.debug(`Downloading @rudderstack/analytics-js@${version}`);
+    await execAsync(`npm install --prefix "${tempDir}" --no-save @rudderstack/analytics-js@${version}`, {
+        cwd: tempDir,
+    });
+    return path.join(tempDir, 'node_modules', '@rudderstack', 'analytics-js');
+}
+/**
+ * Generates virtual TypeScript file with all SDK calls
+ */
+function generateVirtualTypeScriptFile(methodCalls) {
+    const callMap = new Map();
+    let lineNumber = 5; // Start after imports
+    let code = `import { RudderAnalytics } from '@rudderstack/analytics-js';\n`;
+    code += `const analytics = new RudderAnalytics();\n`;
+    code += `\n`;
+    code += `// SDK method calls for validation\n`;
+    code += `function validateCalls() {\n`;
+    for (const call of methodCalls) {
+        // Map this line to the original call
+        callMap.set(lineNumber, call);
+        // Generate the call with actual arguments
+        const args = call.arguments.map(arg => {
+            if (arg.type === 'string') {
+                return `"${arg.value || ''}"`;
             }
-            ts.forEachChild(node, visit);
-        }
-        visit(sourceFile);
+            else if (arg.type === 'number') {
+                return String(arg.value);
+            }
+            else if (arg.type === 'boolean') {
+                return String(arg.value);
+            }
+            else if (arg.type === 'null') {
+                return 'null';
+            }
+            else if (arg.type === 'undefined') {
+                return 'undefined';
+            }
+            else if (arg.type === 'object') {
+                return '{}'; // Simplified object
+            }
+            else {
+                return 'undefined';
+            }
+        }).join(', ');
+        code += `  analytics.${call.method}(${args});\n`;
+        lineNumber++;
     }
-    catch (error) {
-        core.warning(`Failed to parse type definitions: ${error}`);
-    }
-    return signatures;
+    code += `}\n`;
+    return { virtualCode: code, callMap };
 }
 /**
- * Checks if a method name is a RudderStack SDK method
+ * Gets TypeScript diagnostics for the virtual file
  */
-function isSDKMethod(name) {
-    const methods = ['track', 'identify', 'page', 'group', 'alias', 'reset', 'load', 'ready', 'setAnonymousId'];
-    return methods.includes(name);
-}
-/**
- * Extracts method signature information from a TypeScript method node
- */
-function extractMethodSignature(node, sourceFile) {
-    const methodName = node.name?.getText(sourceFile);
-    if (!methodName)
-        return null;
-    const parameters = [];
-    // Extract parameters
-    node.parameters.forEach((param) => {
-        const paramName = param.name.getText(sourceFile);
-        const paramType = param.type ? param.type.getText(sourceFile) : 'any';
-        const isOptional = !!param.questionToken;
-        parameters.push({
-            name: paramName,
-            type: paramType,
-            optional: isOptional,
-        });
-    });
-    // Extract return type
-    const returnType = node.type ? node.type.getText(sourceFile) : 'void';
-    return {
-        method: methodName,
-        parameters,
-        returnType,
+async function getTypeScriptDiagnostics(virtualCode, sdkPath) {
+    // Write virtual file to temp location
+    const tempDir = path.join(process.cwd(), '.rudderstack-temp-validation');
+    const virtualFilePath = path.join(tempDir, 'validation.ts');
+    await fs.writeFile(virtualFilePath, virtualCode);
+    // Create compiler options
+    const compilerOptions = {
+        target: ts.ScriptTarget.ES2020,
+        module: ts.ModuleKind.CommonJS,
+        moduleResolution: ts.ModuleResolutionKind.NodeJs,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        strict: true,
+        noEmit: true,
+        baseUrl: tempDir,
+        paths: {
+            '@rudderstack/analytics-js': [sdkPath],
+        },
     };
+    // Create program
+    const program = ts.createProgram([virtualFilePath], compilerOptions);
+    // Get diagnostics
+    const diagnostics = ts.getPreEmitDiagnostics(program);
+    return diagnostics;
 }
 /**
- * Returns built-in method signatures as fallback (SDK v3 common signatures)
+ * Converts TypeScript diagnostics to validation issues
  */
-function getBuiltInSignatures() {
-    const signatures = new Map();
-    signatures.set('track', {
-        method: 'track',
-        parameters: [
-            { name: 'event', type: 'string', optional: false },
-            { name: 'properties', type: 'object', optional: true },
-            { name: 'options', type: 'object', optional: true },
-            { name: 'callback', type: 'function', optional: true },
-        ],
-        returnType: 'void',
-    });
-    signatures.set('identify', {
-        method: 'identify',
-        parameters: [
-            { name: 'userId', type: 'string | number', optional: true },
-            { name: 'traits', type: 'object', optional: true },
-            { name: 'options', type: 'object', optional: true },
-            { name: 'callback', type: 'function', optional: true },
-        ],
-        returnType: 'void',
-    });
-    signatures.set('page', {
-        method: 'page',
-        parameters: [
-            { name: 'category', type: 'string', optional: true },
-            { name: 'name', type: 'string', optional: true },
-            { name: 'properties', type: 'object', optional: true },
-            { name: 'options', type: 'object', optional: true },
-            { name: 'callback', type: 'function', optional: true },
-        ],
-        returnType: 'void',
-    });
-    signatures.set('group', {
-        method: 'group',
-        parameters: [
-            { name: 'groupId', type: 'string | number', optional: false },
-            { name: 'traits', type: 'object', optional: true },
-            { name: 'options', type: 'object', optional: true },
-            { name: 'callback', type: 'function', optional: true },
-        ],
-        returnType: 'void',
-    });
-    signatures.set('alias', {
-        method: 'alias',
-        parameters: [
-            { name: 'to', type: 'string | number', optional: false },
-            { name: 'from', type: 'string | number', optional: true },
-            { name: 'options', type: 'object', optional: true },
-            { name: 'callback', type: 'function', optional: true },
-        ],
-        returnType: 'void',
-    });
-    signatures.set('reset', {
-        method: 'reset',
-        parameters: [
-            { name: 'resetAnonymousId', type: 'boolean', optional: true },
-        ],
-        returnType: 'void',
-    });
-    signatures.set('load', {
-        method: 'load',
-        parameters: [
-            { name: 'writeKey', type: 'string', optional: false },
-            { name: 'dataPlaneUrl', type: 'string', optional: false },
-            { name: 'options', type: 'object', optional: true },
-        ],
-        returnType: 'void',
-    });
-    signatures.set('ready', {
-        method: 'ready',
-        parameters: [
-            { name: 'callback', type: 'function', optional: false },
-        ],
-        returnType: 'void',
-    });
-    signatures.set('setAnonymousId', {
-        method: 'setAnonymousId',
-        parameters: [
-            { name: 'anonymousId', type: 'string', optional: false },
-        ],
-        returnType: 'void',
-    });
-    return signatures;
-}
-/**
- * Validates if an argument type matches expected type
- */
-function isTypeCompatible(actualType, expectedType) {
-    // Normalize types
-    const actual = actualType.toLowerCase().trim();
-    const expected = expectedType.toLowerCase().trim();
-    // Exact match
-    if (actual === expected)
-        return true;
-    // Handle union types (e.g., "string | number")
-    if (expected.includes('|')) {
-        const expectedTypes = expected.split('|').map((t) => t.trim());
-        return expectedTypes.some((t) => isTypeCompatible(actual, t));
+function convertDiagnosticsToIssues(diagnostics, callMap, _methodCalls) {
+    const errors = [];
+    const warnings = [];
+    const suggestions = [];
+    for (const diagnostic of diagnostics) {
+        if (!diagnostic.file || diagnostic.start === undefined) {
+            continue;
+        }
+        // Get line number in virtual file
+        const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+        const virtualLine = position.line + 1;
+        // Map back to original call
+        const originalCall = callMap.get(virtualLine);
+        if (!originalCall) {
+            continue;
+        }
+        // Get diagnostic message
+        const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+        // Determine severity based on diagnostic category
+        let severity = 'error';
+        if (diagnostic.category === ts.DiagnosticCategory.Warning) {
+            severity = 'warning';
+        }
+        else if (diagnostic.category === ts.DiagnosticCategory.Suggestion) {
+            severity = 'suggestion';
+        }
+        const issue = {
+            file: originalCall.file,
+            line: originalCall.line,
+            column: originalCall.column,
+            severity,
+            method: originalCall.method,
+            code: originalCall.code,
+            message,
+        };
+        if (severity === 'error') {
+            errors.push(issue);
+        }
+        else if (severity === 'warning') {
+            warnings.push(issue);
+        }
+        else {
+            suggestions.push(issue);
+        }
     }
-    // Handle any type
-    if (expected === 'any' || expected === 'unknown')
-        return true;
-    // Handle object types
-    if (expected === 'object' && actual === 'object')
-        return true;
-    // Handle function types
-    if (expected === 'function' && actual === 'function')
-        return true;
-    return false;
+    return { errors, warnings, suggestions };
+}
+/**
+ * Validates method-specific business rules that TypeScript can't catch
+ */
+function validateMethodSpecificRules(methodCalls) {
+    const issues = [];
+    for (const call of methodCalls) {
+        switch (call.method) {
+            case 'track':
+                issues.push(...validateTrackCall(call));
+                break;
+            case 'identify':
+                issues.push(...validateIdentifyCall(call));
+                break;
+            case 'page':
+                issues.push(...validatePageCall(call));
+                break;
+            case 'load':
+                issues.push(...validateLoadCall(call));
+                break;
+        }
+    }
+    return issues;
+}
+/**
+ * Validates track() method specific rules
+ */
+function validateTrackCall(call) {
+    const issues = [];
+    if (call.arguments.length === 0) {
+        // Missing event name - TypeScript will catch this
+        return issues;
+    }
+    const eventArg = call.arguments[0];
+    // Check for empty event name
+    if (eventArg.isStatic && eventArg.type === 'string' && eventArg.value === '') {
+        issues.push({
+            file: call.file,
+            line: call.line,
+            column: call.column,
+            severity: 'error',
+            method: call.method,
+            code: call.code,
+            message: 'Event name cannot be empty',
+            fix: `rudderanalytics.track('event_name', properties)`,
+        });
+    }
+    // Check naming convention (snake_case recommended)
+    if (eventArg.isStatic && eventArg.type === 'string' && typeof eventArg.value === 'string') {
+        const eventName = eventArg.value;
+        if (eventName && !/^[a-z0-9_]+$/.test(eventName)) {
+            issues.push({
+                file: call.file,
+                line: call.line,
+                column: call.column,
+                severity: 'warning',
+                method: call.method,
+                code: call.code,
+                message: `Event name '${eventName}' should use snake_case naming convention (e.g., 'user_signed_up')`,
+                fix: eventName.replace(/[A-Z]/g, (match, offset) => (offset > 0 ? '_' : '') + match.toLowerCase()),
+            });
+        }
+    }
+    // Check if properties are provided (suggestion)
+    if (call.arguments.length === 1) {
+        issues.push({
+            file: call.file,
+            line: call.line,
+            column: call.column,
+            severity: 'suggestion',
+            method: call.method,
+            code: call.code,
+            message: 'Consider adding properties to provide more context for this event',
+            fix: `rudderanalytics.track('${eventArg.value}', { /* properties */ })`,
+        });
+    }
+    return issues;
+}
+/**
+ * Validates identify() method specific rules
+ */
+function validateIdentifyCall(call) {
+    const issues = [];
+    // Check if both userId and traits are missing (warning)
+    if (call.arguments.length === 0) {
+        issues.push({
+            file: call.file,
+            line: call.line,
+            column: call.column,
+            severity: 'warning',
+            method: call.method,
+            code: call.code,
+            message: 'identify() called without userId or traits. Consider providing user information.',
+            fix: `rudderanalytics.identify('userId', { email: 'user@example.com' })`,
+        });
+    }
+    return issues;
+}
+/**
+ * Validates page() method specific rules
+ */
+function validatePageCall(_call) {
+    const issues = [];
+    // Page call is flexible, no specific validations for now
+    return issues;
+}
+/**
+ * Validates load() method specific rules
+ */
+function validateLoadCall(call) {
+    const issues = [];
+    if (call.arguments.length < 2) {
+        issues.push({
+            file: call.file,
+            line: call.line,
+            column: call.column,
+            severity: 'error',
+            method: call.method,
+            code: call.code,
+            message: 'load() requires writeKey and dataPlaneUrl parameters',
+            fix: `rudderanalytics.load('YOUR_WRITE_KEY', 'https://your-dataplane-url.com')`,
+        });
+    }
+    return issues;
 }
 
 
@@ -233175,7 +232883,7 @@ _🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-re
 /**
  * Format full analysis report with validation issues and changes
  */
-function formatAnalysisReport(sdkDetection, validation, changes, options) {
+function formatAnalysisReport(sdkDetection, validation, changes, _options) {
     let report = `## <img src="https://github.com/rudderlabs/pr-reviewer/blob/test.sdk-changes-detection/icon.png?raw=true" alt="RudderStack" width="24" height="24" align="center"> RudderStack Instrumentation Review
 
 `;
@@ -233188,57 +232896,15 @@ function formatAnalysisReport(sdkDetection, validation, changes, options) {
     else if (changes.hasChanges) {
         report += '🔄 Changes detected in the RudderStack instrumentation\n\n';
     }
-    report += `JavaScript SDK is installed via ${sdkDetection.installationType} (v${sdkDetection.installationType === 'npm' ? sdkDetection.npmVersion : sdkDetection.cdnVersion})\n\n`;
-    const totalIssues = validation.errors.length + validation.warnings.length;
+    report += `JavaScript SDK is installed via ${sdkDetection.installationType === 'cdn' ? 'CDN snippet' : 'NPM package'} (v${sdkDetection.installationType === 'npm' ? sdkDetection.npmVersion : sdkDetection.cdnVersion})\n\n`;
+    const totalIssues = validation.errors.length + validation.warnings.length + validation.suggestions.length;
     const statusEmoji = validation.errors.length > 0 ? '❌' : validation.warnings.length > 0 ? '⚠️' : '✅';
     report += `${statusEmoji} **${totalIssues}** issue(s) found\n\n`;
-    report += `- **Errors:** ${validation.errors.length}\n`;
-    report += `- **Warnings:** ${validation.warnings.length}\n`;
-    report += `- **Suggestions:** ${validation.suggestions.length}\n\n`;
-    // Errors section (always expanded if present)
-    if (validation.errors.length > 0) {
-        report += '### ❌ Errors\n\n';
-        report += '_These issues must be fixed_\n\n';
-        validation.errors.forEach((issue, idx) => {
-            const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
-            const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
-            report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-            report += `   **Issue:** ${issue.message}\n\n`;
-            if (issue.fix) {
-                report += `   **Fix:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
-            }
-            report += `   **Current code:**\n   \`\`\`javascript\n   ${issue.code}\n   \`\`\`\n\n`;
-        });
-    }
-    // Warnings section (collapsible)
-    if (validation.warnings.length > 0) {
-        report += '<details>\n<summary><strong>⚠️ Warnings</strong></summary>\n\n';
-        report += '_These issues should be addressed_\n\n';
-        validation.warnings.forEach((issue, idx) => {
-            const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
-            const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
-            report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-            report += `   **Issue:** ${issue.message}\n\n`;
-            if (issue.fix) {
-                report += `   **Recommendation:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
-            }
-        });
-        report += '</details>\n\n';
-    }
-    // Suggestions section (collapsible)
-    if (validation.suggestions.length > 0) {
-        report += '<details>\n<summary><strong>💡 Suggestions</strong></summary>\n\n';
-        report += '_Optional improvements to consider_\n\n';
-        validation.suggestions.forEach((issue, idx) => {
-            const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
-            const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
-            report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-            report += `   **Issue:** ${issue.message}\n\n`;
-            if (issue.fix) {
-                report += `   **Suggestion:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
-            }
-        });
-        report += '</details>\n\n';
+    report += `- ❌ **Errors:** ${validation.errors.length}\n`;
+    report += `- ⚠️ **Warnings:** ${validation.warnings.length}\n`;
+    report += `- 💡 **Suggestions:** ${validation.suggestions.length}\n\n`;
+    if (totalIssues > 0) {
+        report += '_See inline comments on the changed files for details._\n\n';
     }
     report += '---\n';
     report += '_🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer)_\n';
@@ -233433,7 +233099,7 @@ const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
 const sdk_detector_1 = __nccwpck_require__(1458);
 const file_scanner_1 = __nccwpck_require__(5638);
-const api_validator_1 = __nccwpck_require__(7896);
+const ts_validator_1 = __nccwpck_require__(9477);
 const change_detector_1 = __nccwpck_require__(1382);
 const pr_client_1 = __nccwpck_require__(3433);
 const diff_parser_1 = __nccwpck_require__(6342);
@@ -233520,11 +233186,11 @@ async function run() {
         else {
             core.info('🔍 Validating all SDK calls (annotate_existing_code=true)');
         }
-        // Step 5: Validate SDK method calls
-        core.info('✅ Step 5: Validating SDK method calls...');
+        // Step 5: Validate SDK method calls using TypeScript Language Service
+        core.info('✅ Step 5: Validating SDK method calls with TypeScript...');
         // Use NPM version if available, otherwise CDN version, otherwise latest
         const sdkVersionForValidation = sdkDetection.npmVersion || sdkDetection.cdnVersion;
-        const validation = await (0, api_validator_1.validateSDKMethodCalls)(callsToValidate, sdkVersionForValidation);
+        const validation = await (0, ts_validator_1.validateWithTypeScript)(callsToValidate, sdkVersionForValidation);
         core.info(`Validation complete: ${validation.errors.length} errors, ${validation.warnings.length} warnings, ${validation.suggestions.length} suggestions`);
         // Step 6: Detect changes from base branch
         core.info('🔄 Step 6: Detecting changes from base branch...');
