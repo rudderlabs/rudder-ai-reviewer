@@ -11,7 +11,7 @@ import { detectSDKInstallation } from './core/sdk-detector';
 import { scanFilesForSDKUsage, SDKMethodCall } from './core/file-scanner';
 import { validateSDKMethodCalls } from './core/api-validator';
 import { detectSDKChanges } from './core/change-detector';
-import { postAnalysisReport, postInlineAnnotations, InlineAnnotation } from './integrations/github/pr-client';
+import { postAnalysisReport, postInlineAnnotations, postNoSDKComment, InlineAnnotation } from './integrations/github/pr-client';
 import { getPRDiff, isLineChanged } from './integrations/github/diff-parser';
 import * as path from 'path';
 
@@ -74,6 +74,26 @@ async function run(): Promise<void> {
     }
     if (sdkDetection.cdnVersion) {
       core.info(`- CDN version: ${sdkDetection.cdnVersion}`);
+    }
+
+    // Early exit if SDK not detected
+    if (sdkDetection.installationType === 'none') {
+      core.info('⏭️  No RudderStack SDK detected. Skipping analysis.');
+
+      await postNoSDKComment({
+        owner,
+        repo,
+        pullNumber: prNumber,
+        token: config.githubToken,
+      });
+
+      core.setOutput('analysis_status', 'success');
+      core.setOutput('error_count', 0);
+      core.setOutput('warning_count', 0);
+      core.setOutput('suggestion_count', 0);
+
+      core.info('✅ Analysis complete (no SDK detected)');
+      return;
     }
 
     // Step 2: Get PR diff information
