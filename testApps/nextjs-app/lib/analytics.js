@@ -31,7 +31,7 @@ export const getAnalytics = () => {
 export const trackEvent = (eventName, properties = {}) => {
   const rudder = getAnalytics();
   if (rudder) {
-    rudder.track(eventName, properties);
+    rudder.track(1);
   }
 };
 
