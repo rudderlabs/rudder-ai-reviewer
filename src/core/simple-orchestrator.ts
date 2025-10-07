@@ -30,7 +30,9 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
 
     // Step 3: Initialize analyzer
     const analyzer = new JavaScriptAnalyzer();
-    const repoPath = config.rootDirectory || process.cwd();
+    // Use GITHUB_WORKSPACE env var for repo root (not affected by working-directory)
+    const repoPath = process.env.GITHUB_WORKSPACE || config.rootDirectory || process.cwd();
+    core.info(`Using repo path: ${repoPath}`);
 
     // Step 4: Detect SDK
     const sdkUsage = await analyzer.detectSDK(changedFiles, repoPath);

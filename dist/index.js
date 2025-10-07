@@ -89680,7 +89680,9 @@ async function runSimplifiedAnalysis(config) {
         core.info(`Found ${changedFiles.length} changed files`);
         // Step 3: Initialize analyzer
         const analyzer = new javascript_analyzer_1.JavaScriptAnalyzer();
-        const repoPath = config.rootDirectory || process.cwd();
+        // Use GITHUB_WORKSPACE env var for repo root (not affected by working-directory)
+        const repoPath = process.env.GITHUB_WORKSPACE || config.rootDirectory || process.cwd();
+        core.info(`Using repo path: ${repoPath}`);
         // Step 4: Detect SDK
         const sdkUsage = await analyzer.detectSDK(changedFiles, repoPath);
         if (!sdkUsage.detected) {
