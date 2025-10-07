@@ -89711,15 +89711,18 @@ async function runSimplifiedAnalysis(config) {
         // Step 6: Get files with SDK usage
         const filesWithSDK = await analyzer.getFilesWithSDK(repoPath);
         core.info(`Found ${issues.length} issues`);
-        core.info(`Files with SDK usage: ${JSON.stringify(filesWithSDK)}`);
-        core.info(`Changed files: ${JSON.stringify(changedFiles)}`);
+        core.info(`Files with SDK usage (${filesWithSDK.length}): ${JSON.stringify(filesWithSDK)}`);
+        core.info(`Changed files (${changedFiles.length}): ${JSON.stringify(changedFiles.slice(0, 5))}...`);
         const filesWithSDKSet = new Set(filesWithSDK);
-        // Debug: Check matching
-        const debugMatches = changedFiles.map(f => ({
-            file: f,
-            hasSDK: filesWithSDKSet.has(f),
-        }));
-        core.info(`File matching debug: ${JSON.stringify(debugMatches, null, 2)}`);
+        core.info(`=== PATH MATCHING DEBUG ===`);
+        core.info(`SDK files Set contains: ${[...filesWithSDKSet].join(', ')}`);
+        // Check a few files explicitly
+        if (changedFiles.length > 0) {
+            const firstFile = changedFiles[0];
+            core.info(`Testing first changed file: "${firstFile}"`);
+            core.info(`Set has it: ${filesWithSDKSet.has(firstFile)}`);
+            core.info(`Set size: ${filesWithSDKSet.size}`);
+        }
         const result = {
             status: issues.some((i) => i.severity === 'error') ? 'partial' : 'success',
             issues,
@@ -89735,6 +89738,9 @@ async function runSimplifiedAnalysis(config) {
                 sdkDetected: filesWithSDKSet.has(f),
             })),
         };
+        // Final debug: show what we're sending to comment generator
+        const sdkCount = result.filesAnalyzed.filter(f => f.sdkDetected).length;
+        core.info(`Result has ${result.filesAnalyzed.length} files analyzed, ${sdkCount} with SDK`);
         // Step 7: Generate and post report
         core.info('Generating report...');
         const comment = (0, comment_generator_1.generatePRComment)(result, {
