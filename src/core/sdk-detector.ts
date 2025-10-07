@@ -42,23 +42,33 @@ export async function detectSDKInstallation(repoPath: string, searchPaths?: stri
   // If searchPaths provided, also check subdirectories from those paths
   if (searchPaths && searchPaths.length > 0) {
     const subdirs = new Set<string>();
+    console.log(`[SDK Detector] Received ${searchPaths.length} search paths`);
+    searchPaths.slice(0, 3).forEach(fp => console.log(`  - ${fp}`));
+
     searchPaths.forEach(filePath => {
       const dir = path.dirname(filePath);
-      const parts = dir.split(path.sep);
+      const parts = dir.split(path.sep).filter(p => p && p !== '.');
+
       // Check each level of directory (e.g., if file is "a/b/c/file.js", check "a", "a/b", "a/b/c")
       for (let i = 1; i <= parts.length; i++) {
         const subdir = parts.slice(0, i).join(path.sep);
         if (subdir) {
-          subdirs.add(path.join(repoPath, subdir));
+          const fullPath = path.join(repoPath, subdir);
+          subdirs.add(fullPath);
         }
       }
     });
     pathsToCheck.push(...subdirs);
+    console.log(`[SDK Detector] Generated ${subdirs.size} subdirectories to check`);
+    [...subdirs].slice(0, 5).forEach(dir => console.log(`  - ${dir}`));
   }
+
+  console.log(`[SDK Detector] Total paths to check: ${pathsToCheck.length}`);
 
   // Check for NPM installation in all paths
   for (const checkPath of pathsToCheck) {
     const packageJsonPath = path.join(checkPath, 'package.json');
+    console.log(`[SDK Detector] Checking: ${packageJsonPath} (exists: ${fs.existsSync(packageJsonPath)})`);
     if (fs.existsSync(packageJsonPath)) {
       try {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
