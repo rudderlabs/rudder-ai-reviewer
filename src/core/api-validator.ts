@@ -702,25 +702,6 @@ function validateTrackCall(call: SDKMethodCall): ValidationIssue[] {
     });
   }
 
-  // Check naming convention (snake_case recommended)
-  if (eventArg.isStatic && eventArg.type === 'string' && typeof eventArg.value === 'string') {
-    const eventName = eventArg.value;
-    if (eventName && !/^[a-z0-9_]+$/.test(eventName)) {
-      issues.push({
-        file: call.file,
-        line: call.line,
-        column: call.column,
-        severity: 'warning',
-        method: call.method,
-        code: call.code,
-        message: `Event name '${eventName}' should use snake_case naming convention (e.g., 'user_signed_up')`,
-        fix: eventName.replace(/[A-Z]/g, (match, offset) =>
-          (offset > 0 ? '_' : '') + match.toLowerCase()
-        ),
-      });
-    }
-  }
-
   // Check if properties are provided (suggestion)
   if (call.arguments.length === 1 && eventArg.isStatic) {
     issues.push({
