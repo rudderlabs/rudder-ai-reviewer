@@ -232463,27 +232463,11 @@ function generateVirtualTypeScriptFile(methodCalls) {
 /**
  * Gets TypeScript diagnostics for the virtual file
  */
-async function getTypeScriptDiagnostics(virtualCode, _sdkPath) {
+async function getTypeScriptDiagnostics(virtualCode, sdkPath) {
     // Use the same temp directory where we downloaded the SDK
     const tempDir = path.join(process.cwd(), '.rudderstack-temp-validation');
     const virtualFilePath = path.join(tempDir, 'validation.ts');
     await fs.writeFile(virtualFilePath, virtualCode);
-    // Create tsconfig.json in temp directory
-    const tsConfig = {
-        compilerOptions: {
-            target: 'ES2020',
-            module: 'commonjs',
-            moduleResolution: 'node',
-            esModuleInterop: true,
-            skipLibCheck: true,
-            strict: false, // Less strict to avoid unrelated errors
-            noEmit: true,
-            typeRoots: [path.join(tempDir, 'node_modules/@types')],
-            baseUrl: tempDir,
-        },
-        include: ['validation.ts'],
-    };
-    await fs.writeFile(path.join(tempDir, 'tsconfig.json'), JSON.stringify(tsConfig, null, 2));
     // Create compiler options
     const compilerOptions = {
         target: ts.ScriptTarget.ES2020,
@@ -232493,20 +232477,72 @@ async function getTypeScriptDiagnostics(virtualCode, _sdkPath) {
         skipLibCheck: true,
         strict: false, // Disable strict mode to reduce unrelated errors
         noEmit: true,
-        rootDir: tempDir,
+        baseUrl: tempDir,
+        paths: {
+            '@rudderstack/analytics-js': [path.join(tempDir, 'node_modules/@rudderstack/analytics-js')],
+        },
     };
-    // Create compiler host that can resolve modules from node_modules
+    // Create compiler host with custom module resolution
     const host = ts.createCompilerHost(compilerOptions);
-    // Create program with proper module resolution
+    const originalResolveModuleNames = host.resolveModuleNames;
+    // Override resolveModuleNames to manually handle SDK imports
+    host.resolveModuleNames = (moduleNames, containingFile) => {
+        return moduleNames.map(moduleName => {
+            if (moduleName === '@rudderstack/analytics-js') {
+                // Manually resolve to the SDK package we downloaded
+                const typesPath = path.join(sdkPath, 'dist', 'npm', 'index.d.ts');
+                core.debug(`Resolving ${moduleName} to ${typesPath}`);
+                return {
+                    resolvedFileName: typesPath,
+                    isExternalLibraryImport: true,
+                };
+            }
+            // Use default resolution for other modules
+            if (originalResolveModuleNames) {
+                const result = originalResolveModuleNames.call(host, [moduleName], containingFile, undefined, undefined, compilerOptions);
+                return result?.[0];
+            }
+            return undefined;
+        });
+    };
+    // Create program with custom host
     const program = ts.createProgram([virtualFilePath], compilerOptions, host);
-    // Get diagnostics (only semantic, not syntactic or global)
+    // Get diagnostics
     const sourceFile = program.getSourceFile(virtualFilePath);
     if (!sourceFile) {
+        core.debug('Could not get source file');
         return [];
     }
-    // Only get semantic diagnostics for our file (not module resolution errors)
-    const diagnostics = program.getSemanticDiagnostics(sourceFile);
-    return diagnostics;
+    // First check for global/module resolution errors
+    const globalDiagnostics = program.getGlobalDiagnostics();
+    const optionsDiagnostics = program.getOptionsDiagnostics();
+    core.debug(`Global diagnostics: ${globalDiagnostics.length}`);
+    globalDiagnostics.forEach(d => {
+        core.debug(`  Global: ${ts.flattenDiagnosticMessageText(d.messageText, '\n')}`);
+    });
+    core.debug(`Options diagnostics: ${optionsDiagnostics.length}`);
+    optionsDiagnostics.forEach(d => {
+        core.debug(`  Option: ${ts.flattenDiagnosticMessageText(d.messageText, '\n')}`);
+    });
+    // Get semantic diagnostics - these are the actual type errors
+    const semanticDiagnostics = program.getSemanticDiagnostics(sourceFile);
+    core.debug(`Semantic diagnostics (before filtering): ${semanticDiagnostics.length}`);
+    // Filter out module resolution errors since we handle those manually
+    const filteredDiagnostics = semanticDiagnostics.filter(d => {
+        // Skip "Cannot find module" errors
+        if (d.code === 2307) {
+            core.debug(`  Skipping module resolution error: ${ts.flattenDiagnosticMessageText(d.messageText, '\n')}`);
+            return false;
+        }
+        // Skip errors about the module not being found
+        if (d.code === 2305 || d.code === 2503) {
+            core.debug(`  Skipping module-related error: ${ts.flattenDiagnosticMessageText(d.messageText, '\n')}`);
+            return false;
+        }
+        return true;
+    });
+    core.debug(`Semantic diagnostics (after filtering): ${filteredDiagnostics.length}`);
+    return filteredDiagnostics;
 }
 /**
  * Converts TypeScript diagnostics to validation issues
