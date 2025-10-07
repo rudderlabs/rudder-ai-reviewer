@@ -36,7 +36,7 @@ export interface FileScanResult {
   methodCalls: SDKMethodCall[];
 }
 
-const SUPPORTED_EXTENSIONS = ['.js', '.jsx', '.ts', '.tsx'];
+const SUPPORTED_EXTENSIONS = ['.js', '.jsx', '.ts', '.tsx', '.html', '.htm'];
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const RUDDERSTACK_METHODS = [
   'track',
@@ -131,11 +131,47 @@ async function findJavaScriptFiles(dir: string): Promise<string[]> {
 }
 
 /**
+ * Extracts JavaScript from HTML <script> tags
+ */
+function extractScriptFromHTML(html: string): { script: string; lineOffset: number } {
+  const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+  const scripts: string[] = [];
+  let lineOffset = 0;
+  let match;
+
+  while ((match = scriptRegex.exec(html)) !== null) {
+    const scriptContent = match[1];
+    if (scriptContent.trim()) {
+      // Calculate line offset for first script tag
+      if (scripts.length === 0) {
+        const beforeScript = html.substring(0, match.index);
+        lineOffset = (beforeScript.match(/\n/g) || []).length;
+      }
+      scripts.push(scriptContent);
+    }
+  }
+
+  return {
+    script: scripts.join('\n'),
+    lineOffset,
+  };
+}
+
+/**
  * Scans a single file for RudderStack SDK method calls
  */
 async function scanFileForSDKCalls(filePath: string): Promise<SDKMethodCall[]> {
-  const content = await fs.readFile(filePath, 'utf-8');
+  let content = await fs.readFile(filePath, 'utf-8');
   const methodCalls: SDKMethodCall[] = [];
+
+  // Extract JavaScript from HTML <script> tags if this is an HTML file
+  const ext = path.extname(filePath);
+  let lineOffset = 0;
+  if (ext === '.html' || ext === '.htm') {
+    const extracted = extractScriptFromHTML(content);
+    content = extracted.script;
+    lineOffset = extracted.lineOffset;
+  }
 
   try {
     const ast = parser.parse(content, {
@@ -164,7 +200,7 @@ async function scanFileForSDKCalls(filePath: string): Promise<SDKMethodCall[]> {
 
           if (isRudderObject && t.isIdentifier(property) && RUDDERSTACK_METHODS.includes(property.name)) {
             const method = property.name as SDKMethodCall['method'];
-            const line = node.loc?.start.line || 0;
+            const line = (node.loc?.start.line || 0) + lineOffset;
             const column = node.loc?.start.column || 0;
 
             // Extract code snippet (the full call expression)
