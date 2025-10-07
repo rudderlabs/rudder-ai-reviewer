@@ -35305,13 +35305,25 @@ function formatAnalysisReport(sdkDetection, validation, changes, _options) {
     }
     report += `JavaScript SDK is installed via ${sdkDetection.installationType === 'cdn' ? 'CDN snippet' : 'NPM package'} (v${sdkDetection.installationType === 'npm' ? sdkDetection.npmVersion : sdkDetection.cdnVersion})\n\n`;
     const totalIssues = validation.errors.length + validation.warnings.length + validation.suggestions.length;
-    const statusEmoji = validation.errors.length > 0 ? '❌' : validation.warnings.length > 0 ? '⚠️' : '✅';
-    report += `${statusEmoji} **${totalIssues}** issue(s) found\n\n`;
-    report += `- ❌ **Errors:** ${validation.errors.length}\n`;
-    report += `- ⚠️ **Warnings:** ${validation.warnings.length}\n`;
-    report += `- 💡 **Suggestions:** ${validation.suggestions.length}\n\n`;
-    if (validation.errors.length > 0 || validation.warnings.length > 0) {
-        report += '_See inline comments on the changed files for error and warning details._\n\n';
+    if (totalIssues === 0) {
+        report += '✅ No issues found - all SDK calls are valid!\n\n';
+    }
+    else {
+        const statusEmoji = validation.errors.length > 0 ? '❌' : validation.warnings.length > 0 ? '⚠️' : '💡';
+        report += `${statusEmoji} **${totalIssues}** issue(s) found\n\n`;
+        if (validation.errors.length > 0) {
+            report += `- ❌ **Errors:** ${validation.errors.length}\n`;
+        }
+        if (validation.warnings.length > 0) {
+            report += `- ⚠️ **Warnings:** ${validation.warnings.length}\n`;
+        }
+        if (validation.suggestions.length > 0) {
+            report += `- 💡 **Suggestions:** ${validation.suggestions.length}\n`;
+        }
+        report += '\n';
+        if (validation.errors.length > 0 || validation.warnings.length > 0) {
+            report += '_See inline comments on the changed files for error and warning details._\n\n';
+        }
     }
     // Add suggestions section if there are any
     if (validation.suggestions.length > 0) {
@@ -35398,41 +35410,61 @@ async function postAnalysisReport(sdkDetection, validation, changes, options) {
     }
 }
 /**
- * Post inline review comments to PR files (only for changed files)
+ * Clears all previous inline comments from the PR
  */
-async function postInlineAnnotations(annotations, options) {
-    if (annotations.length === 0) {
-        core.info('No inline annotations to post');
-        return;
-    }
-    const { owner, repo, pullNumber, token, clearPrevious = false } = options;
+async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
     const octokit = github.getOctokit(token);
+    const commentIdentifier = '<!-- rudderstack-sdk-location -->';
     try {
-        const commentIdentifier = '<!-- rudderstack-sdk-location -->';
-        // Get existing review comments created by us
+        // Get all existing review comments created by us
         const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
             owner,
             repo,
             pull_number: pullNumber,
         });
         const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
-        // If clearPrevious is true, delete all previous comments
-        if (clearPrevious && ourExistingComments.length > 0) {
-            core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
-            for (const comment of ourExistingComments) {
-                try {
-                    await octokit.rest.pulls.deleteReviewComment({
-                        owner,
-                        repo,
-                        comment_id: comment.id,
-                    });
-                }
-                catch (error) {
-                    core.debug(`Failed to delete comment ${comment.id}: ${error}`);
-                }
-            }
-            core.info('✅ Previous comments cleared');
+        if (ourExistingComments.length === 0) {
+            core.info('No previous inline comments to clear');
+            return;
         }
+        core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
+        let deletedCount = 0;
+        for (const comment of ourExistingComments) {
+            try {
+                await octokit.rest.pulls.deleteReviewComment({
+                    owner,
+                    repo,
+                    comment_id: comment.id,
+                });
+                deletedCount++;
+            }
+            catch (error) {
+                core.debug(`Failed to delete comment ${comment.id}: ${error}`);
+            }
+        }
+        core.info(`✅ Cleared ${deletedCount} previous inline comment(s)`);
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to clear previous comments: ${errorMessage}`);
+    }
+}
+/**
+ * Post inline review comments to PR files (only for changed files)
+ */
+async function postInlineAnnotations(annotations, options) {
+    const { owner, repo, pullNumber, token, clearPrevious = false } = options;
+    // Clear all previous comments first if requested (regardless of new annotations)
+    if (clearPrevious) {
+        await clearPreviousInlineComments(owner, repo, pullNumber, token);
+    }
+    if (annotations.length === 0) {
+        core.info('No inline annotations to post');
+        return;
+    }
+    const octokit = github.getOctokit(token);
+    try {
+        const commentIdentifier = '<!-- rudderstack-sdk-location -->';
         // Get PR files to see what's actually in the diff
         const { data: prFiles } = await octokit.rest.pulls.listFiles({
             owner,
@@ -35464,7 +35496,13 @@ async function postInlineAnnotations(annotations, options) {
             core.info(`Creating ${newAnnotations.length} new comment(s)`);
         }
         else {
-            // Check which comments exist and which need updates
+            // Get existing review comments to check what needs updating
+            const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
+                owner,
+                repo,
+                pull_number: pullNumber,
+            });
+            const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
             core.info(`Found ${ourExistingComments.length} existing SDK location comment(s)`);
             // Map existing comments by location for easy lookup
             const existingCommentsByLocation = new Map(ourExistingComments.map((c) => [`${c.path}:${c.line}`, c]));
