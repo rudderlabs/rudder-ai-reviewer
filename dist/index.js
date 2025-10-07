@@ -233133,7 +233133,7 @@ async function postInlineAnnotations(annotations, options) {
             return;
         }
         core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
-        // Update existing comments
+        // Update existing comments individually (they're already posted, so we have to update them one by one)
         let updateCount = 0;
         for (const { ann, existingComment } of updatedAnnotations) {
             try {
@@ -233150,25 +233150,49 @@ async function postInlineAnnotations(annotations, options) {
                 core.debug(`Could not update inline comment on ${ann.path}:${ann.line}: ${errorMessage}`);
             }
         }
-        // Create review comments for each new location
+        // Create a review with all new comments at once
         let createCount = 0;
-        for (const ann of newAnnotations) {
+        if (newAnnotations.length > 0) {
             try {
-                await octokit.rest.pulls.createReviewComment({
+                const reviewComments = newAnnotations.map(ann => ({
+                    path: ann.path,
+                    line: ann.line,
+                    body: `${commentIdentifier}\n${ann.message}`,
+                }));
+                await octokit.rest.pulls.createReview({
                     owner,
                     repo,
                     pull_number: pullNumber,
-                    body: `${commentIdentifier}\n${ann.message}`,
                     commit_id: commitSha,
-                    path: ann.path,
-                    line: ann.line,
+                    event: 'COMMENT',
+                    comments: reviewComments,
                 });
-                createCount++;
+                createCount = newAnnotations.length;
+                core.info(`✅ Submitted review with ${createCount} comment(s)`);
             }
             catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                core.debug(`Could not post inline comment on ${ann.path}:${ann.line}: ${errorMessage}`);
-                // Continue with other annotations
+                core.warning(`Failed to create review with comments: ${errorMessage}`);
+                core.info('Falling back to individual comments...');
+                // Fallback: Create comments individually if review fails
+                for (const ann of newAnnotations) {
+                    try {
+                        await octokit.rest.pulls.createReviewComment({
+                            owner,
+                            repo,
+                            pull_number: pullNumber,
+                            body: `${commentIdentifier}\n${ann.message}`,
+                            commit_id: commitSha,
+                            path: ann.path,
+                            line: ann.line,
+                        });
+                        createCount++;
+                    }
+                    catch (individualError) {
+                        const individualErrorMessage = individualError instanceof Error ? individualError.message : String(individualError);
+                        core.debug(`Could not post inline comment on ${ann.path}:${ann.line}: ${individualErrorMessage}`);
+                    }
+                }
             }
         }
         const totalSuccess = createCount + updateCount;
