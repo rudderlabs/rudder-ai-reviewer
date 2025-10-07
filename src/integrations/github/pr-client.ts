@@ -256,22 +256,56 @@ export async function postInlineAnnotations(
 
     core.info(`Found ${ourExistingComments.length} existing SDK location comment(s)`);
 
-    // Filter out annotations that already have comments (avoid duplicates)
-    const existingCommentLocations = new Set(
-      ourExistingComments.map((c) => `${c.path}:${c.line}`)
+    // Map existing comments by location for easy lookup
+    const existingCommentsByLocation = new Map(
+      ourExistingComments.map((c) => [`${c.path}:${c.line}`, c])
     );
 
-    const newAnnotations = annotationsInDiff.filter(
-      (ann) => !existingCommentLocations.has(`${ann.path}:${ann.line}`)
-    );
+    // Separate annotations into new and updates
+    const newAnnotations: typeof annotationsInDiff = [];
+    const updatedAnnotations: Array<{ ann: typeof annotationsInDiff[0]; existingComment: typeof ourExistingComments[0] }> = [];
 
-    if (newAnnotations.length === 0) {
-      core.info('All locations already have comments');
+    for (const ann of annotationsInDiff) {
+      const location = `${ann.path}:${ann.line}`;
+      const existingComment = existingCommentsByLocation.get(location);
+
+      if (existingComment) {
+        // Check if the message has changed
+        const existingBody = existingComment.body?.replace(commentIdentifier + '\n', '') || '';
+        if (existingBody !== ann.message) {
+          updatedAnnotations.push({ ann, existingComment });
+        }
+      } else {
+        newAnnotations.push(ann);
+      }
+    }
+
+    if (newAnnotations.length === 0 && updatedAnnotations.length === 0) {
+      core.info('All locations already have up-to-date comments');
       return;
     }
 
+    core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
+
+    // Update existing comments
+    let updateCount = 0;
+    for (const { ann, existingComment } of updatedAnnotations) {
+      try {
+        await octokit.rest.pulls.updateReviewComment({
+          owner,
+          repo,
+          comment_id: existingComment.id,
+          body: `${commentIdentifier}\n${ann.message}`,
+        });
+        updateCount++;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.debug(`Could not update inline comment on ${ann.path}:${ann.line}: ${errorMessage}`);
+      }
+    }
+
     // Create review comments for each new location
-    let successCount = 0;
+    let createCount = 0;
     for (const ann of newAnnotations) {
       try {
         await octokit.rest.pulls.createReviewComment({
@@ -283,7 +317,7 @@ export async function postInlineAnnotations(
           path: ann.path,
           line: ann.line,
         });
-        successCount++;
+        createCount++;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         core.debug(`Could not post inline comment on ${ann.path}:${ann.line}: ${errorMessage}`);
@@ -291,8 +325,9 @@ export async function postInlineAnnotations(
       }
     }
 
-    if (successCount > 0) {
-      core.info(`✅ Posted ${successCount} new inline comment(s) on changed files`);
+    const totalSuccess = createCount + updateCount;
+    if (totalSuccess > 0) {
+      core.info(`✅ Posted ${createCount} new and updated ${updateCount} inline comment(s)`);
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
