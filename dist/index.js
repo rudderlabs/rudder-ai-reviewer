@@ -89695,6 +89695,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.runSimplifiedAnalysis = runSimplifiedAnalysis;
 const core = __importStar(__nccwpck_require__(37484));
+const path = __importStar(__nccwpck_require__(16928));
 const javascript_analyzer_1 = __nccwpck_require__(36031);
 const github_1 = __nccwpck_require__(22707);
 const comment_generator_1 = __nccwpck_require__(42403);
@@ -89715,8 +89716,18 @@ async function runSimplifiedAnalysis(config) {
         core.info(`Found ${changedFiles.length} changed files`);
         // Step 3: Initialize analyzer
         const analyzer = new javascript_analyzer_1.JavaScriptAnalyzer();
-        // Use GITHUB_WORKSPACE env var for repo root (not affected by working-directory)
-        const repoPath = process.env.GITHUB_WORKSPACE || config.rootDirectory || process.cwd();
+        // Use config.rootDirectory if provided, otherwise use GITHUB_WORKSPACE (repo root)
+        // If rootDirectory is relative, resolve it from GITHUB_WORKSPACE
+        let repoPath;
+        if (config.rootDirectory) {
+            const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+            repoPath = path.isAbsolute(config.rootDirectory)
+                ? config.rootDirectory
+                : path.join(workspace, config.rootDirectory);
+        }
+        else {
+            repoPath = process.env.GITHUB_WORKSPACE || process.cwd();
+        }
         core.info(`Using repo path: ${repoPath}`);
         // Step 4: Detect SDK
         const sdkUsage = await analyzer.detectSDK(changedFiles, repoPath);

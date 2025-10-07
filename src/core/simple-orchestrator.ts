@@ -4,6 +4,7 @@
  */
 
 import * as core from '@actions/core';
+import * as path from 'path';
 import { ActionConfig, AnalysisResult } from '../types/common';
 import { JavaScriptAnalyzer } from '../analyzers/javascript/javascript-analyzer';
 import { getPRContext, getChangedFiles, postOrUpdateComment, setOutputs } from '../integrations/github';
@@ -30,8 +31,17 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
 
     // Step 3: Initialize analyzer
     const analyzer = new JavaScriptAnalyzer();
-    // Use GITHUB_WORKSPACE env var for repo root (not affected by working-directory)
-    const repoPath = process.env.GITHUB_WORKSPACE || config.rootDirectory || process.cwd();
+    // Use config.rootDirectory if provided, otherwise use GITHUB_WORKSPACE (repo root)
+    // If rootDirectory is relative, resolve it from GITHUB_WORKSPACE
+    let repoPath: string;
+    if (config.rootDirectory) {
+      const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+      repoPath = path.isAbsolute(config.rootDirectory)
+        ? config.rootDirectory
+        : path.join(workspace, config.rootDirectory);
+    } else {
+      repoPath = process.env.GITHUB_WORKSPACE || process.cwd();
+    }
     core.info(`Using repo path: ${repoPath}`);
 
     // Step 4: Detect SDK
