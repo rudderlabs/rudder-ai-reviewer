@@ -87,20 +87,13 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
     core.info(`Found ${issues.length} issues`);
     core.info(`Files with SDK usage (${filesWithSDK.length}): ${JSON.stringify(filesWithSDK)}`);
-    core.info(`Changed files (${changedFiles.length}): ${JSON.stringify(changedFiles.slice(0, 5))}...`);
+
+    // When root_directory is set, analyze ALL files in that directory, not just changed files
+    // This is useful for testing/development with sample apps
+    const filesToReport = config.rootDirectory ? filesWithSDK : changedFiles;
+    core.info(`Files to report (${filesToReport.length}): Using ${config.rootDirectory ? 'all files with SDK' : 'changed files'}`);
 
     const filesWithSDKSet = new Set(filesWithSDK);
-
-    core.info(`=== PATH MATCHING DEBUG ===`);
-    core.info(`SDK files Set contains: ${[...filesWithSDKSet].join(', ')}`);
-
-    // Check a few files explicitly
-    if (changedFiles.length > 0) {
-      const firstFile = changedFiles[0];
-      core.info(`Testing first changed file: "${firstFile}"`);
-      core.info(`Set has it: ${filesWithSDKSet.has(firstFile)}`);
-      core.info(`Set size: ${filesWithSDKSet.size}`);
-    }
 
     const result: AnalysisResult = {
       status: issues.some((i) => i.severity === 'error') ? 'partial' : 'success',
@@ -111,14 +104,13 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
         eventsRemoved: [],
         propertyChanges: [],
       },
-      filesAnalyzed: changedFiles.map((f) => ({
+      filesAnalyzed: filesToReport.map((f) => ({
         path: f,
         analyzed: true,
         sdkDetected: filesWithSDKSet.has(f),
       })),
     };
 
-    // Final debug: show what we're sending to comment generator
     const sdkCount = result.filesAnalyzed.filter(f => f.sdkDetected).length;
     core.info(`Result has ${result.filesAnalyzed.length} files analyzed, ${sdkCount} with SDK`);
 

@@ -18,7 +18,7 @@ inputs:
     required: true
     default: ${{ github.token }}
   root_directory:
-    description: 'Root directory to analyze (defaults to repository root, useful for testing with sample apps)'
+    description: 'Root directory to analyze (defaults to repository root). When set, analyzes ALL files in this directory, not just changed files. Useful for testing with sample apps.'
     required: false
   config_path:
     description: 'Path to config file'
