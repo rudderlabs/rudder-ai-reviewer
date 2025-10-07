@@ -98,75 +98,22 @@ export function formatAnalysisReport(
   // Summary statistics
   report += '### 📊 Summary\n\n';
 
-  const totalIssues = validation.errors.length + validation.warnings.length + validation.suggestions.length;
+  // Changes section
+  if (changes.isFirstTimeInstrumentation) {
+    report += `✅ This PR adds RudderStack instrumentation for the first time. Found **${changes.addedCalls.length}** SDK method call(s).\n\n`;
+  } else if (changes.hasChanges) {
+    report += '🔄 Changes detected in the RudderStack instrumentation\n\n';
+  }
+
+  report += `JavaScript SDK is installed via ${sdkDetection.installationType} (v${sdkDetection.installationType === 'npm' ? sdkDetection.npmVersion : sdkDetection.cdnVersion})\n\n`;
+
+  const totalIssues = validation.errors.length + validation.warnings.length;
   const statusEmoji = validation.errors.length > 0 ? '❌' : validation.warnings.length > 0 ? '⚠️' : '✅';
 
   report += `${statusEmoji} **${totalIssues}** issue(s) found\n\n`;
   report += `- **Errors:** ${validation.errors.length}\n`;
   report += `- **Warnings:** ${validation.warnings.length}\n`;
   report += `- **Suggestions:** ${validation.suggestions.length}\n\n`;
-
-  // SDK Installation Info
-  report += '### 📦 SDK Installation\n\n';
-  const badge = {
-    npm: '📦 NPM',
-    cdn: '🌐 CDN',
-    both: '📦🌐 NPM + CDN',
-    none: '❌ Not Found',
-  }[sdkDetection.installationType];
-
-  report += `**Type:** ${badge}\n`;
-  if (sdkDetection.npmVersion) {
-    report += `**NPM Version:** \`${sdkDetection.npmVersion}\`\n`;
-  }
-  if (sdkDetection.cdnVersion) {
-    report += `**CDN Version:** \`${sdkDetection.cdnVersion}\`\n`;
-  }
-  report += '\n';
-
-  // Changes section
-  if (changes.isFirstTimeInstrumentation) {
-    report += '### 🎉 First-Time Instrumentation\n\n';
-    report += `This PR adds RudderStack instrumentation for the first time. Found **${changes.addedCalls.length}** SDK method call(s).\n\n`;
-  } else if (changes.hasChanges) {
-    report += '### 🔄 Changes Detected\n\n';
-    report += `- **Added:** ${changes.addedCalls.length} call(s)\n`;
-    report += `- **Removed:** ${changes.removedCalls.length} call(s)\n`;
-    report += `- **Modified:** ${changes.modifiedCalls.length} call(s)\n`;
-    report += `- **Unchanged:** ${changes.unchangedCalls.length} call(s)\n\n`;
-
-    if (changes.addedCalls.length > 0) {
-      report += '<details>\n<summary><strong>➕ Added Calls</strong></summary>\n\n';
-      changes.addedCalls.forEach((call) => {
-        const fullPath = options.pathPrefix ? `${options.pathPrefix}/${call.file}` : call.file;
-        const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${call.line}`;
-        report += `- [\`${call.method}()\`](${fileLink}) at [${fullPath}:${call.line}](${fileLink})\n`;
-      });
-      report += '\n</details>\n\n';
-    }
-
-    if (changes.removedCalls.length > 0) {
-      report += '<details>\n<summary><strong>➖ Removed Calls</strong></summary>\n\n';
-      changes.removedCalls.forEach((call) => {
-        report += `- \`${call.method}()\` at ${call.file}:${call.line}\n`;
-      });
-      report += '\n</details>\n\n';
-    }
-
-    if (changes.modifiedCalls.length > 0) {
-      report += '<details>\n<summary><strong>✏️ Modified Calls</strong></summary>\n\n';
-      changes.modifiedCalls.forEach((change) => {
-        const fullPath = options.pathPrefix ? `${options.pathPrefix}/${change.file}` : change.file;
-        const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${change.line}`;
-        report += `- [\`${change.method}()\`](${fileLink}) at [${fullPath}:${change.line}](${fileLink})\n`;
-        report += `  - ${change.description}\n`;
-      });
-      report += '\n</details>\n\n';
-    }
-  } else {
-    report += '### ✅ No SDK Changes Detected\n\n';
-    report += 'No changes to RudderStack SDK usage in this PR.\n\n';
-  }
 
   // Errors section (always expanded if present)
   if (validation.errors.length > 0) {
@@ -179,24 +126,24 @@ export function formatAnalysisReport(
       report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
       report += `   **Issue:** ${issue.message}\n\n`;
       if (issue.fix) {
-        report += `   **Fix:** \`${issue.fix}\`\n\n`;
+        report += `   **Fix:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
       }
-      report += `   \`\`\`\n   ${issue.code}\n   \`\`\`\n\n`;
+      report += `   **Current code:**\n   \`\`\`javascript\n   ${issue.code}\n   \`\`\`\n\n`;
     });
   }
 
   // Warnings section (collapsible)
   if (validation.warnings.length > 0) {
-    report += '<details>\n<summary><strong>⚠️ Warnings</strong> (click to expand)</summary>\n\n';
+    report += '<details>\n<summary><strong>⚠️ Warnings</strong></summary>\n\n';
     report += '_These issues should be addressed_\n\n';
     validation.warnings.forEach((issue, idx) => {
       const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
       const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
 
       report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-      report += `   ${issue.message}\n\n`;
+      report += `   **Issue:** ${issue.message}\n\n`;
       if (issue.fix) {
-        report += `   **Recommendation:** \`${issue.fix}\`\n\n`;
+        report += `   **Recommendation:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
       }
     });
     report += '</details>\n\n';
@@ -204,16 +151,16 @@ export function formatAnalysisReport(
 
   // Suggestions section (collapsible)
   if (validation.suggestions.length > 0) {
-    report += '<details>\n<summary><strong>💡 Suggestions</strong> (click to expand)</summary>\n\n';
+    report += '<details>\n<summary><strong>💡 Suggestions</strong></summary>\n\n';
     report += '_Optional improvements to consider_\n\n';
     validation.suggestions.forEach((issue, idx) => {
       const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
       const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
 
       report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-      report += `   ${issue.message}\n\n`;
+      report += `   **Issue:** ${issue.message}\n\n`;
       if (issue.fix) {
-        report += `   **Suggestion:** \`${issue.fix}\`\n\n`;
+        report += `   **Suggestion:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
       }
     });
     report += '</details>\n\n';

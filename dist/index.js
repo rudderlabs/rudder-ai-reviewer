@@ -231961,7 +231961,7 @@ async function scanFilesForSDKUsage(repoPath) {
     const allMethodCalls = [];
     for (const file of files) {
         try {
-            const methodCalls = await scanFileForSDKCalls(file);
+            const methodCalls = await scanFileForSDKCalls(file, repoPath);
             totalScanned++;
             if (methodCalls.length > 0) {
                 filesWithSDK++;
@@ -232046,9 +232046,11 @@ function extractScriptFromHTML(html) {
 /**
  * Scans a single file for RudderStack SDK method calls
  */
-async function scanFileForSDKCalls(filePath) {
+async function scanFileForSDKCalls(filePath, repoPath) {
     let content = await fs.readFile(filePath, 'utf-8');
     const methodCalls = [];
+    // Convert absolute path to relative path from repo root
+    const relativePath = path.relative(repoPath, filePath);
     // Extract JavaScript from HTML <script> tags if this is an HTML file
     const ext = path.extname(filePath);
     let lineOffset = 0;
@@ -232079,15 +232081,16 @@ async function scanFileForSDKCalls(filePath) {
                             object.property.name === 'rudderanalytics');
                     if (isRudderObject && t.isIdentifier(property) && RUDDERSTACK_METHODS.includes(property.name)) {
                         const method = property.name;
-                        const line = (node.loc?.start.line || 0) + lineOffset;
+                        const astLine = node.loc?.start.line || 0;
+                        const line = astLine + lineOffset;
                         const column = node.loc?.start.column || 0;
-                        // Extract code snippet (the full call expression)
+                        // Extract code snippet (from the parsed content, not including line offset)
                         const codeLines = content.split('\n');
-                        const snippet = codeLines[line - 1]?.trim() || '';
+                        const snippet = codeLines[astLine - 1]?.trim() || '';
                         // Parse arguments
                         const args = node.arguments.map((arg) => parseArgument(arg, content));
                         methodCalls.push({
-                            file: filePath,
+                            file: relativePath,
                             line,
                             column,
                             method,
@@ -233178,70 +233181,20 @@ function formatAnalysisReport(sdkDetection, validation, changes, options) {
 `;
     // Summary statistics
     report += '### 📊 Summary\n\n';
-    const totalIssues = validation.errors.length + validation.warnings.length + validation.suggestions.length;
+    // Changes section
+    if (changes.isFirstTimeInstrumentation) {
+        report += `✅ This PR adds RudderStack instrumentation for the first time. Found **${changes.addedCalls.length}** SDK method call(s).\n\n`;
+    }
+    else if (changes.hasChanges) {
+        report += '🔄 Changes detected in the RudderStack instrumentation\n\n';
+    }
+    report += `JavaScript SDK is installed via ${sdkDetection.installationType} (v${sdkDetection.installationType === 'npm' ? sdkDetection.npmVersion : sdkDetection.cdnVersion})\n\n`;
+    const totalIssues = validation.errors.length + validation.warnings.length;
     const statusEmoji = validation.errors.length > 0 ? '❌' : validation.warnings.length > 0 ? '⚠️' : '✅';
     report += `${statusEmoji} **${totalIssues}** issue(s) found\n\n`;
     report += `- **Errors:** ${validation.errors.length}\n`;
     report += `- **Warnings:** ${validation.warnings.length}\n`;
     report += `- **Suggestions:** ${validation.suggestions.length}\n\n`;
-    // SDK Installation Info
-    report += '### 📦 SDK Installation\n\n';
-    const badge = {
-        npm: '📦 NPM',
-        cdn: '🌐 CDN',
-        both: '📦🌐 NPM + CDN',
-        none: '❌ Not Found',
-    }[sdkDetection.installationType];
-    report += `**Type:** ${badge}\n`;
-    if (sdkDetection.npmVersion) {
-        report += `**NPM Version:** \`${sdkDetection.npmVersion}\`\n`;
-    }
-    if (sdkDetection.cdnVersion) {
-        report += `**CDN Version:** \`${sdkDetection.cdnVersion}\`\n`;
-    }
-    report += '\n';
-    // Changes section
-    if (changes.isFirstTimeInstrumentation) {
-        report += '### 🎉 First-Time Instrumentation\n\n';
-        report += `This PR adds RudderStack instrumentation for the first time. Found **${changes.addedCalls.length}** SDK method call(s).\n\n`;
-    }
-    else if (changes.hasChanges) {
-        report += '### 🔄 Changes Detected\n\n';
-        report += `- **Added:** ${changes.addedCalls.length} call(s)\n`;
-        report += `- **Removed:** ${changes.removedCalls.length} call(s)\n`;
-        report += `- **Modified:** ${changes.modifiedCalls.length} call(s)\n`;
-        report += `- **Unchanged:** ${changes.unchangedCalls.length} call(s)\n\n`;
-        if (changes.addedCalls.length > 0) {
-            report += '<details>\n<summary><strong>➕ Added Calls</strong></summary>\n\n';
-            changes.addedCalls.forEach((call) => {
-                const fullPath = options.pathPrefix ? `${options.pathPrefix}/${call.file}` : call.file;
-                const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${call.line}`;
-                report += `- [\`${call.method}()\`](${fileLink}) at [${fullPath}:${call.line}](${fileLink})\n`;
-            });
-            report += '\n</details>\n\n';
-        }
-        if (changes.removedCalls.length > 0) {
-            report += '<details>\n<summary><strong>➖ Removed Calls</strong></summary>\n\n';
-            changes.removedCalls.forEach((call) => {
-                report += `- \`${call.method}()\` at ${call.file}:${call.line}\n`;
-            });
-            report += '\n</details>\n\n';
-        }
-        if (changes.modifiedCalls.length > 0) {
-            report += '<details>\n<summary><strong>✏️ Modified Calls</strong></summary>\n\n';
-            changes.modifiedCalls.forEach((change) => {
-                const fullPath = options.pathPrefix ? `${options.pathPrefix}/${change.file}` : change.file;
-                const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${change.line}`;
-                report += `- [\`${change.method}()\`](${fileLink}) at [${fullPath}:${change.line}](${fileLink})\n`;
-                report += `  - ${change.description}\n`;
-            });
-            report += '\n</details>\n\n';
-        }
-    }
-    else {
-        report += '### ✅ No SDK Changes Detected\n\n';
-        report += 'No changes to RudderStack SDK usage in this PR.\n\n';
-    }
     // Errors section (always expanded if present)
     if (validation.errors.length > 0) {
         report += '### ❌ Errors\n\n';
@@ -233252,37 +233205,37 @@ function formatAnalysisReport(sdkDetection, validation, changes, options) {
             report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
             report += `   **Issue:** ${issue.message}\n\n`;
             if (issue.fix) {
-                report += `   **Fix:** \`${issue.fix}\`\n\n`;
+                report += `   **Fix:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
             }
-            report += `   \`\`\`\n   ${issue.code}\n   \`\`\`\n\n`;
+            report += `   **Current code:**\n   \`\`\`javascript\n   ${issue.code}\n   \`\`\`\n\n`;
         });
     }
     // Warnings section (collapsible)
     if (validation.warnings.length > 0) {
-        report += '<details>\n<summary><strong>⚠️ Warnings</strong> (click to expand)</summary>\n\n';
+        report += '<details>\n<summary><strong>⚠️ Warnings</strong></summary>\n\n';
         report += '_These issues should be addressed_\n\n';
         validation.warnings.forEach((issue, idx) => {
             const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
             const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
             report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-            report += `   ${issue.message}\n\n`;
+            report += `   **Issue:** ${issue.message}\n\n`;
             if (issue.fix) {
-                report += `   **Recommendation:** \`${issue.fix}\`\n\n`;
+                report += `   **Recommendation:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
             }
         });
         report += '</details>\n\n';
     }
     // Suggestions section (collapsible)
     if (validation.suggestions.length > 0) {
-        report += '<details>\n<summary><strong>💡 Suggestions</strong> (click to expand)</summary>\n\n';
+        report += '<details>\n<summary><strong>💡 Suggestions</strong></summary>\n\n';
         report += '_Optional improvements to consider_\n\n';
         validation.suggestions.forEach((issue, idx) => {
             const fullPath = options.pathPrefix ? `${options.pathPrefix}/${issue.file}` : issue.file;
             const fileLink = `https://github.com/${options.owner}/${options.repo}/blob/${options.commitSha}/${fullPath}#L${issue.line}`;
             report += `${idx + 1}. **[${fullPath}:${issue.line}](${fileLink})** - \`${issue.method}()\`\n\n`;
-            report += `   ${issue.message}\n\n`;
+            report += `   **Issue:** ${issue.message}\n\n`;
             if (issue.fix) {
-                report += `   **Suggestion:** \`${issue.fix}\`\n\n`;
+                report += `   **Suggestion:**\n   \`\`\`javascript\n   ${issue.fix}\n   \`\`\`\n\n`;
             }
         });
         report += '</details>\n\n';
@@ -233597,32 +233550,35 @@ async function run() {
             // Add error annotations
             for (const error of validation.errors) {
                 const githubPath = pathPrefix ? `${pathPrefix}/${error.file}` : error.file;
+                const fixBlock = error.fix ? `\n\n**Fix:**\n\`\`\`javascript\n${error.fix}\n\`\`\`` : '';
                 annotations.push({
                     path: githubPath,
                     line: error.line,
                     annotation_level: 'failure',
-                    message: `❌ **Error in \`${error.method}()\`**\n\n${error.message}\n\n${error.fix ? `**Fix:** \`${error.fix}\`\n\n` : ''}\`\`\`\n${error.code}\n\`\`\``,
+                    message: `❌ **Error in \`${error.method}()\`**\n\n**Issue:** ${error.message}${fixBlock}\n\n**Current code:**\n\`\`\`javascript\n${error.code}\n\`\`\``,
                 });
             }
             // Add warning annotations
             for (const warning of validation.warnings) {
                 const githubPath = pathPrefix ? `${pathPrefix}/${warning.file}` : warning.file;
+                const fixBlock = warning.fix ? `\n\n**Recommendation:**\n\`\`\`javascript\n${warning.fix}\n\`\`\`` : '';
                 annotations.push({
                     path: githubPath,
                     line: warning.line,
                     annotation_level: 'warning',
-                    message: `⚠️ **Warning in \`${warning.method}()\`**\n\n${warning.message}\n\n${warning.fix ? `**Recommendation:** \`${warning.fix}\`\n\n` : ''}`,
+                    message: `⚠️ **Warning in \`${warning.method}()\`**\n\n**Issue:** ${warning.message}${fixBlock}`,
                 });
             }
             // Add suggestion annotations (only if verbosity is high)
             if (config.outputVerbosity === 'detailed') {
                 for (const suggestion of validation.suggestions) {
                     const githubPath = pathPrefix ? `${pathPrefix}/${suggestion.file}` : suggestion.file;
+                    const fixBlock = suggestion.fix ? `\n\n**Suggestion:**\n\`\`\`javascript\n${suggestion.fix}\n\`\`\`` : '';
                     annotations.push({
                         path: githubPath,
                         line: suggestion.line,
                         annotation_level: 'notice',
-                        message: `💡 **Suggestion for \`${suggestion.method}()\`**\n\n${suggestion.message}\n\n${suggestion.fix ? `**Suggestion:** \`${suggestion.fix}\`\n\n` : ''}`,
+                        message: `💡 **Suggestion for \`${suggestion.method}()\`**\n\n**Issue:** ${suggestion.message}${fixBlock}`,
                     });
                 }
             }

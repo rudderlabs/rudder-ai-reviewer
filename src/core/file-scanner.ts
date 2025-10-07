@@ -65,7 +65,7 @@ export async function scanFilesForSDKUsage(repoPath: string): Promise<FileScanRe
 
   for (const file of files) {
     try {
-      const methodCalls = await scanFileForSDKCalls(file);
+      const methodCalls = await scanFileForSDKCalls(file, repoPath);
       totalScanned++;
 
       if (methodCalls.length > 0) {
@@ -160,9 +160,12 @@ function extractScriptFromHTML(html: string): { script: string; lineOffset: numb
 /**
  * Scans a single file for RudderStack SDK method calls
  */
-async function scanFileForSDKCalls(filePath: string): Promise<SDKMethodCall[]> {
+async function scanFileForSDKCalls(filePath: string, repoPath: string): Promise<SDKMethodCall[]> {
   let content = await fs.readFile(filePath, 'utf-8');
   const methodCalls: SDKMethodCall[] = [];
+
+  // Convert absolute path to relative path from repo root
+  const relativePath = path.relative(repoPath, filePath);
 
   // Extract JavaScript from HTML <script> tags if this is an HTML file
   const ext = path.extname(filePath);
@@ -200,18 +203,19 @@ async function scanFileForSDKCalls(filePath: string): Promise<SDKMethodCall[]> {
 
           if (isRudderObject && t.isIdentifier(property) && RUDDERSTACK_METHODS.includes(property.name)) {
             const method = property.name as SDKMethodCall['method'];
-            const line = (node.loc?.start.line || 0) + lineOffset;
+            const astLine = node.loc?.start.line || 0;
+            const line = astLine + lineOffset;
             const column = node.loc?.start.column || 0;
 
-            // Extract code snippet (the full call expression)
+            // Extract code snippet (from the parsed content, not including line offset)
             const codeLines = content.split('\n');
-            const snippet = codeLines[line - 1]?.trim() || '';
+            const snippet = codeLines[astLine - 1]?.trim() || '';
 
             // Parse arguments
             const args = node.arguments.map((arg) => parseArgument(arg, content));
 
             methodCalls.push({
-              file: filePath,
+              file: relativePath,
               line,
               column,
               method,

@@ -152,22 +152,24 @@ async function run(): Promise<void> {
       // Add error annotations
       for (const error of validation.errors) {
         const githubPath = pathPrefix ? `${pathPrefix}/${error.file}` : error.file;
+        const fixBlock = error.fix ? `\n\n**Fix:**\n\`\`\`javascript\n${error.fix}\n\`\`\`` : '';
         annotations.push({
           path: githubPath,
           line: error.line,
           annotation_level: 'failure',
-          message: `❌ **Error in \`${error.method}()\`**\n\n${error.message}\n\n${error.fix ? `**Fix:** \`${error.fix}\`\n\n` : ''}\`\`\`\n${error.code}\n\`\`\``,
+          message: `❌ **Error in \`${error.method}()\`**\n\n**Issue:** ${error.message}${fixBlock}\n\n**Current code:**\n\`\`\`javascript\n${error.code}\n\`\`\``,
         });
       }
 
       // Add warning annotations
       for (const warning of validation.warnings) {
         const githubPath = pathPrefix ? `${pathPrefix}/${warning.file}` : warning.file;
+        const fixBlock = warning.fix ? `\n\n**Recommendation:**\n\`\`\`javascript\n${warning.fix}\n\`\`\`` : '';
         annotations.push({
           path: githubPath,
           line: warning.line,
           annotation_level: 'warning',
-          message: `⚠️ **Warning in \`${warning.method}()\`**\n\n${warning.message}\n\n${warning.fix ? `**Recommendation:** \`${warning.fix}\`\n\n` : ''}`,
+          message: `⚠️ **Warning in \`${warning.method}()\`**\n\n**Issue:** ${warning.message}${fixBlock}`,
         });
       }
 
@@ -175,11 +177,12 @@ async function run(): Promise<void> {
       if (config.outputVerbosity === 'detailed') {
         for (const suggestion of validation.suggestions) {
           const githubPath = pathPrefix ? `${pathPrefix}/${suggestion.file}` : suggestion.file;
+          const fixBlock = suggestion.fix ? `\n\n**Suggestion:**\n\`\`\`javascript\n${suggestion.fix}\n\`\`\`` : '';
           annotations.push({
             path: githubPath,
             line: suggestion.line,
             annotation_level: 'notice',
-            message: `💡 **Suggestion for \`${suggestion.method}()\`**\n\n${suggestion.message}\n\n${suggestion.fix ? `**Suggestion:** \`${suggestion.fix}\`\n\n` : ''}`,
+            message: `💡 **Suggestion for \`${suggestion.method}()\`**\n\n**Issue:** ${suggestion.message}${fixBlock}`,
           });
         }
       }
