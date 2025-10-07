@@ -201,7 +201,7 @@ async function scanFileForSDKCalls(filePath: string, repoPath: string): Promise<
     const variableAssignments: VariableAssignment[] = [];
     const functionDefs: FunctionDef[] = [];
 
-    // First pass: Collect all variable assignments and function definitions
+    // First pass: Collect all variable assignments (declarations and assignments) and function definitions
     traverse(ast, {
       VariableDeclarator(path) {
         const { node } = path;
@@ -209,6 +209,16 @@ async function scanFileForSDKCalls(filePath: string, repoPath: string): Promise<
           variableAssignments.push({
             varName: node.id.name,
             init: node.init,
+          });
+        }
+      },
+      AssignmentExpression(path) {
+        const { node } = path;
+        // Track assignments like: analytics = new RudderAnalytics()
+        if (t.isIdentifier(node.left)) {
+          variableAssignments.push({
+            varName: node.left.name,
+            init: node.right,
           });
         }
       },
