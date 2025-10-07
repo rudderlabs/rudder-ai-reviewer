@@ -34384,21 +34384,172 @@ async function scanFileForSDKCalls(filePath, repoPath) {
         });
         // Track variable names that hold RudderAnalytics instances
         const rudderAnalyticsVars = new Set();
-        // First pass: Find all variables that are assigned to new RudderAnalytics()
+        // Track function names that return RudderAnalytics instances
+        const rudderAnalyticsFunctions = new Set();
+        const variableAssignments = [];
+        const functionDefs = [];
+        // First pass: Collect all variable assignments and function definitions
         (0, traverse_1.default)(ast, {
             VariableDeclarator(path) {
                 const { node } = path;
-                if (t.isIdentifier(node.id) &&
-                    node.init &&
-                    t.isNewExpression(node.init) &&
-                    t.isIdentifier(node.init.callee) &&
-                    node.init.callee.name === 'RudderAnalytics') {
-                    rudderAnalyticsVars.add(node.id.name);
-                    core.debug(`Detected RudderAnalytics instance variable: ${node.id.name}`);
+                if (t.isIdentifier(node.id) && node.init) {
+                    variableAssignments.push({
+                        varName: node.id.name,
+                        init: node.init,
+                    });
+                }
+            },
+            FunctionDeclaration(path) {
+                const { node } = path;
+                if (t.isIdentifier(node.id)) {
+                    functionDefs.push({
+                        funcName: node.id.name,
+                        path,
+                    });
+                }
+            },
+            ArrowFunctionExpression(path) {
+                const parent = path.parent;
+                if (t.isVariableDeclarator(parent) && t.isIdentifier(parent.id)) {
+                    functionDefs.push({
+                        funcName: parent.id.name,
+                        path,
+                    });
                 }
             },
         });
-        // Second pass: Find method calls on rudderanalytics or any tracked variables
+        // Iteratively analyze until no new variables/functions are discovered
+        let changed = true;
+        let iterations = 0;
+        const MAX_ITERATIONS = 10; // Safety limit
+        while (changed && iterations < MAX_ITERATIONS) {
+            changed = false;
+            iterations++;
+            // Check variable assignments
+            for (const { varName, init } of variableAssignments) {
+                if (rudderAnalyticsVars.has(varName)) {
+                    continue; // Already tracked
+                }
+                // Direct instantiation: const analytics = new RudderAnalytics()
+                if (t.isNewExpression(init) &&
+                    t.isIdentifier(init.callee) &&
+                    init.callee.name === 'RudderAnalytics') {
+                    rudderAnalyticsVars.add(varName);
+                    core.debug(`[Iteration ${iterations}] Detected RudderAnalytics instance variable: ${varName}`);
+                    changed = true;
+                    continue;
+                }
+                // Assignment from tracked variable: const x = analytics
+                if (t.isIdentifier(init) && rudderAnalyticsVars.has(init.name)) {
+                    rudderAnalyticsVars.add(varName);
+                    core.debug(`[Iteration ${iterations}] Detected variable assigned from tracked variable: ${varName} = ${init.name}`);
+                    changed = true;
+                    continue;
+                }
+                // Assignment from function call: const rudder = getAnalytics()
+                if (t.isCallExpression(init) &&
+                    t.isIdentifier(init.callee) &&
+                    rudderAnalyticsFunctions.has(init.callee.name)) {
+                    rudderAnalyticsVars.add(varName);
+                    core.debug(`[Iteration ${iterations}] Detected variable assigned from RudderAnalytics function: ${varName} = ${init.callee.name}()`);
+                    changed = true;
+                    continue;
+                }
+                // Conditional expression: const x = condition ? analytics : null
+                if (t.isConditionalExpression(init)) {
+                    const consequent = init.consequent;
+                    const alternate = init.alternate;
+                    if ((t.isIdentifier(consequent) && rudderAnalyticsVars.has(consequent.name)) ||
+                        (t.isIdentifier(alternate) && rudderAnalyticsVars.has(alternate.name))) {
+                        rudderAnalyticsVars.add(varName);
+                        core.debug(`[Iteration ${iterations}] Detected variable from conditional with RudderAnalytics: ${varName}`);
+                        changed = true;
+                        continue;
+                    }
+                }
+                // Logical expression: const x = analytics || fallback
+                if (t.isLogicalExpression(init)) {
+                    const left = init.left;
+                    const right = init.right;
+                    if ((t.isIdentifier(left) && rudderAnalyticsVars.has(left.name)) ||
+                        (t.isIdentifier(right) && rudderAnalyticsVars.has(right.name))) {
+                        rudderAnalyticsVars.add(varName);
+                        core.debug(`[Iteration ${iterations}] Detected variable from logical expression with RudderAnalytics: ${varName}`);
+                        changed = true;
+                        continue;
+                    }
+                }
+            }
+            // Check function definitions
+            for (const { funcName, path } of functionDefs) {
+                if (rudderAnalyticsFunctions.has(funcName)) {
+                    continue; // Already tracked
+                }
+                let returnsRudderAnalytics = false;
+                path.traverse({
+                    ReturnStatement(returnPath) {
+                        const returnNode = returnPath.node;
+                        if (!returnNode.argument)
+                            return;
+                        // Returns new RudderAnalytics()
+                        if (t.isNewExpression(returnNode.argument) &&
+                            t.isIdentifier(returnNode.argument.callee) &&
+                            returnNode.argument.callee.name === 'RudderAnalytics') {
+                            returnsRudderAnalytics = true;
+                            return;
+                        }
+                        // Returns tracked variable
+                        if (t.isIdentifier(returnNode.argument) && rudderAnalyticsVars.has(returnNode.argument.name)) {
+                            returnsRudderAnalytics = true;
+                            return;
+                        }
+                        // Returns call to tracked function
+                        if (t.isCallExpression(returnNode.argument) &&
+                            t.isIdentifier(returnNode.argument.callee) &&
+                            rudderAnalyticsFunctions.has(returnNode.argument.callee.name)) {
+                            returnsRudderAnalytics = true;
+                            return;
+                        }
+                        // Returns conditional with RudderAnalytics
+                        if (t.isConditionalExpression(returnNode.argument)) {
+                            const consequent = returnNode.argument.consequent;
+                            const alternate = returnNode.argument.alternate;
+                            if ((t.isIdentifier(consequent) && rudderAnalyticsVars.has(consequent.name)) ||
+                                (t.isIdentifier(alternate) && rudderAnalyticsVars.has(alternate.name)) ||
+                                (t.isCallExpression(consequent) && t.isIdentifier(consequent.callee) && rudderAnalyticsFunctions.has(consequent.callee.name)) ||
+                                (t.isCallExpression(alternate) && t.isIdentifier(alternate.callee) && rudderAnalyticsFunctions.has(alternate.callee.name))) {
+                                returnsRudderAnalytics = true;
+                                return;
+                            }
+                        }
+                        // Returns logical expression with RudderAnalytics
+                        if (t.isLogicalExpression(returnNode.argument)) {
+                            const left = returnNode.argument.left;
+                            const right = returnNode.argument.right;
+                            if ((t.isIdentifier(left) && rudderAnalyticsVars.has(left.name)) ||
+                                (t.isIdentifier(right) && rudderAnalyticsVars.has(right.name)) ||
+                                (t.isCallExpression(left) && t.isIdentifier(left.callee) && rudderAnalyticsFunctions.has(left.callee.name)) ||
+                                (t.isCallExpression(right) && t.isIdentifier(right.callee) && rudderAnalyticsFunctions.has(right.callee.name))) {
+                                returnsRudderAnalytics = true;
+                                return;
+                            }
+                        }
+                    },
+                });
+                if (returnsRudderAnalytics) {
+                    rudderAnalyticsFunctions.add(funcName);
+                    core.debug(`[Iteration ${iterations}] Detected function returning RudderAnalytics: ${funcName}`);
+                    changed = true;
+                }
+            }
+        }
+        if (iterations >= MAX_ITERATIONS) {
+            core.warning(`Reached maximum iterations (${MAX_ITERATIONS}) while analyzing RudderAnalytics variable propagation`);
+        }
+        core.debug(`Completed variable propagation analysis in ${iterations} iteration(s)`);
+        core.debug(`Tracked variables: ${Array.from(rudderAnalyticsVars).join(', ')}`);
+        core.debug(`Tracked functions: ${Array.from(rudderAnalyticsFunctions).join(', ')}`);
+        // Final pass: Find method calls on rudderanalytics or any tracked variables
         (0, traverse_1.default)(ast, {
             CallExpression(path) {
                 const { node } = path;
@@ -34410,6 +34561,7 @@ async function scanFileForSDKCalls(filePath, repoPath) {
                     // 1. rudderanalytics.track()
                     // 2. window.rudderanalytics.page()
                     // 3. analytics.track() where analytics = new RudderAnalytics()
+                    // 4. rudder.track() where rudder = getAnalytics() and getAnalytics() returns RudderAnalytics
                     const isRudderObject = (t.isIdentifier(object) && object.name === 'rudderanalytics') ||
                         (t.isIdentifier(object) && rudderAnalyticsVars.has(object.name)) ||
                         (t.isMemberExpression(object) &&
