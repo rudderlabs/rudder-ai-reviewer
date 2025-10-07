@@ -191,6 +191,7 @@ async function run(): Promise<void> {
         repo,
         pullNumber: prNumber,
         token: config.githubToken,
+        clearPrevious: config.clearPreviousComments,
       });
     }
 
@@ -224,6 +225,7 @@ function getActionConfig(): ActionConfig {
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
     annotateExistingCode: core.getBooleanInput('annotate_existing_code'),
     outputVerbosity: (core.getInput('output_verbosity') || 'standard') as 'minimal' | 'standard' | 'detailed',
+    clearPreviousComments: core.getBooleanInput('clear_previous_comments'),
   };
 }
 

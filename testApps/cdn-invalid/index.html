@@ -20,6 +20,10 @@
     // ERROR: Missing event name
     rudderanalytics.track();
 
+    // ERROR: Event name is not a string
+    const eventName = 1;
+    rudderanalytics.track(eventName);
+
     // ERROR: Empty event name
     rudderanalytics.track('', { prop: 'value' });
 

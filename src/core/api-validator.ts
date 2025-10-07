@@ -61,7 +61,7 @@ const SDK_METHOD_OVERLOADS: Record<string, MethodOverload[]> = {
       params: [
         { name: 'event', type: 'string', optional: false },
         { name: 'properties', type: 'object', optional: false },
-        { name: 'options', type: 'object', optional: false },
+        { name: 'options', type: 'object', optional: true },
       ],
       description: 'Track an event with properties and options',
     },
@@ -70,7 +70,7 @@ const SDK_METHOD_OVERLOADS: Record<string, MethodOverload[]> = {
       params: [
         { name: 'event', type: 'string', optional: false },
         { name: 'properties', type: 'object', optional: false },
-        { name: 'callback', type: 'function', optional: false },
+        { name: 'callback', type: 'function', optional: true },
       ],
       description: 'Track an event with properties and callback',
     },
@@ -78,7 +78,7 @@ const SDK_METHOD_OVERLOADS: Record<string, MethodOverload[]> = {
     {
       params: [
         { name: 'event', type: 'string', optional: false },
-        { name: 'callback', type: 'function', optional: false },
+        { name: 'callback', type: 'function', optional: true },
       ],
       description: 'Track an event with callback',
     },
@@ -88,17 +88,12 @@ const SDK_METHOD_OVERLOADS: Record<string, MethodOverload[]> = {
         { name: 'event', type: 'string', optional: false },
         { name: 'properties', type: 'object', optional: false },
         { name: 'options', type: 'object', optional: false },
-        { name: 'callback', type: 'function', optional: false },
+        { name: 'callback', type: 'function', optional: true },
       ],
       description: 'Track an event with properties, options, and callback',
     },
   ],
   identify: [
-    // identify()
-    {
-      params: [],
-      description: 'Identify without userId or traits',
-    },
     // identify(userId: string)
     {
       params: [{ name: 'userId', type: 'string', optional: false }],
@@ -333,6 +328,11 @@ const SDK_METHOD_OVERLOADS: Record<string, MethodOverload[]> = {
     {
       params: [{ name: 'resetAnonymousId', type: 'boolean', optional: false }],
       description: 'Reset user identity with anonymous ID control',
+    },
+    // reset(options: object)
+    {
+      params: [{ name: 'options', type: 'object', optional: true }],
+      description: 'Reset user identity with options',
     },
   ],
   load: [

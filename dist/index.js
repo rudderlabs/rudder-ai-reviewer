@@ -35252,9 +35252,34 @@ async function postInlineAnnotations(annotations, options) {
         core.info('No inline annotations to post');
         return;
     }
-    const { owner, repo, pullNumber, token } = options;
+    const { owner, repo, pullNumber, token, clearPrevious = false } = options;
     const octokit = github.getOctokit(token);
     try {
+        const commentIdentifier = '<!-- rudderstack-sdk-location -->';
+        // Get existing review comments created by us
+        const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
+        // If clearPrevious is true, delete all previous comments
+        if (clearPrevious && ourExistingComments.length > 0) {
+            core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
+            for (const comment of ourExistingComments) {
+                try {
+                    await octokit.rest.pulls.deleteReviewComment({
+                        owner,
+                        repo,
+                        comment_id: comment.id,
+                    });
+                }
+                catch (error) {
+                    core.debug(`Failed to delete comment ${comment.id}: ${error}`);
+                }
+            }
+            core.info('✅ Previous comments cleared');
+        }
         // Get PR files to see what's actually in the diff
         const { data: prFiles } = await octokit.rest.pulls.listFiles({
             owner,
@@ -35277,39 +35302,41 @@ async function postInlineAnnotations(annotations, options) {
             pull_number: pullNumber,
         });
         const commitSha = pr.head.sha;
-        const commentIdentifier = '<!-- rudderstack-sdk-location -->';
-        // Get existing review comments created by us to avoid duplicates
-        const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
-            owner,
-            repo,
-            pull_number: pullNumber,
-        });
-        const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
-        core.info(`Found ${ourExistingComments.length} existing SDK location comment(s)`);
-        // Map existing comments by location for easy lookup
-        const existingCommentsByLocation = new Map(ourExistingComments.map((c) => [`${c.path}:${c.line}`, c]));
-        // Separate annotations into new and updates
-        const newAnnotations = [];
-        const updatedAnnotations = [];
-        for (const ann of annotationsInDiff) {
-            const location = `${ann.path}:${ann.line}`;
-            const existingComment = existingCommentsByLocation.get(location);
-            if (existingComment) {
-                // Check if the message has changed
-                const existingBody = existingComment.body?.replace(commentIdentifier + '\n', '') || '';
-                if (existingBody !== ann.message) {
-                    updatedAnnotations.push({ ann, existingComment });
+        // If we cleared previous comments, all annotations are new
+        let newAnnotations;
+        let updatedAnnotations = [];
+        if (clearPrevious) {
+            // All annotations are new since we cleared previous comments
+            newAnnotations = annotationsInDiff;
+            core.info(`Creating ${newAnnotations.length} new comment(s)`);
+        }
+        else {
+            // Check which comments exist and which need updates
+            core.info(`Found ${ourExistingComments.length} existing SDK location comment(s)`);
+            // Map existing comments by location for easy lookup
+            const existingCommentsByLocation = new Map(ourExistingComments.map((c) => [`${c.path}:${c.line}`, c]));
+            // Separate annotations into new and updates
+            newAnnotations = [];
+            for (const ann of annotationsInDiff) {
+                const location = `${ann.path}:${ann.line}`;
+                const existingComment = existingCommentsByLocation.get(location);
+                if (existingComment) {
+                    // Check if the message has changed
+                    const existingBody = existingComment.body?.replace(commentIdentifier + '\n', '') || '';
+                    if (existingBody !== ann.message) {
+                        updatedAnnotations.push({ ann, existingComment });
+                    }
+                }
+                else {
+                    newAnnotations.push(ann);
                 }
             }
-            else {
-                newAnnotations.push(ann);
+            if (newAnnotations.length === 0 && updatedAnnotations.length === 0) {
+                core.info('All locations already have up-to-date comments');
+                return;
             }
+            core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
         }
-        if (newAnnotations.length === 0 && updatedAnnotations.length === 0) {
-            core.info('All locations already have up-to-date comments');
-            return;
-        }
-        core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
         // Update existing comments individually (they're already posted, so we have to update them one by one)
         let updateCount = 0;
         for (const { ann, existingComment } of updatedAnnotations) {
@@ -35588,6 +35615,7 @@ async function run() {
                 repo,
                 pullNumber: prNumber,
                 token: config.githubToken,
+                clearPrevious: config.clearPreviousComments,
             });
         }
         // Set outputs
@@ -35618,6 +35646,7 @@ function getActionConfig() {
         excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
         annotateExistingCode: core.getBooleanInput('annotate_existing_code'),
         outputVerbosity: (core.getInput('output_verbosity') || 'standard'),
+        clearPreviousComments: core.getBooleanInput('clear_previous_comments'),
     };
 }
 /**

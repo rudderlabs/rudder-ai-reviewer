@@ -38,6 +38,10 @@ inputs:
     description: 'Output verbosity level: minimal, standard, detailed'
     required: false
     default: 'standard'
+  clear_previous_comments:
+    description: 'Clear all previous inline review comments before posting new ones (true/false) - useful for development'
+    required: false
+    default: 'false'
 
 outputs:
   analysis_status:
