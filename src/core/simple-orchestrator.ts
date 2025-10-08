@@ -155,13 +155,6 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
       framework: undefined as string | undefined, // Can be enhanced later with framework detection
     };
 
-    const comment = generatePRComment(result, {
-      verbosity: config.outputVerbosity,
-      includePropertyDetails: false,
-    }, sdkInfo);
-
-    await postOrUpdateComment(prContext, config.githubToken, comment);
-
     // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
     core.info('Posting inline review comments...');
 
@@ -169,12 +162,13 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     const changedFilesSet = new Set(changedFiles);
     const inlineAnnotations: InlineAnnotation[] = [];
     const outsideIssues = { errors: [] as typeof result.issues, warnings: [] as typeof result.issues };
+    let outsideSuggestionCount = 0;
 
     result.issues.forEach((issue) => {
-      if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
-        const isInPR = changedFilesSet.has(issue.file);
-        const shouldIncludeOutside = config.annotateFilesOutsidePR;
+      const isInPR = changedFilesSet.has(issue.file);
+      const shouldIncludeOutside = config.annotateFilesOutsidePR;
 
+      if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
         if (isInPR || shouldIncludeOutside) {
           // Add to inline annotations (will be filtered later in pr-client)
           inlineAnnotations.push({
@@ -194,10 +188,30 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
           }
         }
       }
+
+      // Track outside suggestions
+      if (issue.severity === 'suggestion' && !isInPR && shouldIncludeOutside) {
+        outsideSuggestionCount++;
+      }
     });
 
     // Generate review comment body (suggestions + outside issues)
     const reviewBody = generateReviewComment(result, outsideIssues);
+
+    // Prepare outside issues info for summary comment
+    const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
+      errorCount: outsideIssues.errors.length,
+      warningCount: outsideIssues.warnings.length,
+      suggestionCount: outsideSuggestionCount,
+    } : undefined;
+
+    // Generate and post summary comment with outside issues breakdown
+    const comment = generatePRComment(result, {
+      verbosity: config.outputVerbosity,
+      includePropertyDetails: false,
+    }, sdkInfo, outsideIssuesInfo);
+
+    await postOrUpdateComment(prContext, config.githubToken, comment);
 
     // Post review with inline comments and suggestions
     if (inlineAnnotations.length > 0 || reviewBody) {

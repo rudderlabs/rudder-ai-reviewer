@@ -89828,21 +89828,17 @@ async function runSimplifiedAnalysis(config) {
             methodCallsCount: methodCallCount,
             framework: undefined, // Can be enhanced later with framework detection
         };
-        const comment = (0, comment_generator_1.generatePRComment)(result, {
-            verbosity: config.outputVerbosity,
-            includePropertyDetails: false,
-        }, sdkInfo);
-        await (0, github_1.postOrUpdateComment)(prContext, config.githubToken, comment);
         // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
         core.info('Posting inline review comments...');
         // Separate issues into those in PR files and those outside
         const changedFilesSet = new Set(changedFiles);
         const inlineAnnotations = [];
         const outsideIssues = { errors: [], warnings: [] };
+        let outsideSuggestionCount = 0;
         result.issues.forEach((issue) => {
+            const isInPR = changedFilesSet.has(issue.file);
+            const shouldIncludeOutside = config.annotateFilesOutsidePR;
             if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
-                const isInPR = changedFilesSet.has(issue.file);
-                const shouldIncludeOutside = config.annotateFilesOutsidePR;
                 if (isInPR || shouldIncludeOutside) {
                     // Add to inline annotations (will be filtered later in pr-client)
                     inlineAnnotations.push({
@@ -89862,9 +89858,25 @@ async function runSimplifiedAnalysis(config) {
                     }
                 }
             }
+            // Track outside suggestions
+            if (issue.severity === 'suggestion' && !isInPR && shouldIncludeOutside) {
+                outsideSuggestionCount++;
+            }
         });
         // Generate review comment body (suggestions + outside issues)
         const reviewBody = (0, comment_generator_1.generateReviewComment)(result, outsideIssues);
+        // Prepare outside issues info for summary comment
+        const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
+            errorCount: outsideIssues.errors.length,
+            warningCount: outsideIssues.warnings.length,
+            suggestionCount: outsideSuggestionCount,
+        } : undefined;
+        // Generate and post summary comment with outside issues breakdown
+        const comment = (0, comment_generator_1.generatePRComment)(result, {
+            verbosity: config.outputVerbosity,
+            includePropertyDetails: false,
+        }, sdkInfo, outsideIssuesInfo);
+        await (0, github_1.postOrUpdateComment)(prContext, config.githubToken, comment);
         // Post review with inline comments and suggestions
         if (inlineAnnotations.length > 0 || reviewBody) {
             await (0, pr_client_1.postInlineAnnotations)(inlineAnnotations, {
@@ -90704,7 +90716,7 @@ async function postAnalysisReport(sdkDetection, validation, changes, options) {
     }
 }
 /**
- * Clears all previous inline comments from the PR
+ * Clears all previous inline comments and reviews from the PR
  */
 async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
     const octokit = github.getOctokit(token);
@@ -90717,12 +90729,25 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
             pull_number: pullNumber,
         });
         const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
-        if (ourExistingComments.length === 0) {
-            core.info('No previous inline comments to clear');
+        // Get all reviews on the PR
+        const { data: reviews } = await octokit.rest.pulls.listReviews({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        // Get current bot user info to identify our reviews
+        const { data: botUser } = await octokit.rest.users.getAuthenticated();
+        const ourReviews = reviews.filter((review) => review.user?.login === botUser.login &&
+            review.state === 'COMMENTED');
+        const totalToClear = ourExistingComments.length + ourReviews.length;
+        if (totalToClear === 0) {
+            core.info('No previous inline comments or reviews to clear');
             return;
         }
-        core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
+        core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s) and ${ourReviews.length} review(s)...`);
         let deletedCount = 0;
+        let dismissedCount = 0;
+        // Delete individual review comments
         for (const comment of ourExistingComments) {
             try {
                 await octokit.rest.pulls.deleteReviewComment({
@@ -90736,7 +90761,23 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
                 core.debug(`Failed to delete comment ${comment.id}: ${error}`);
             }
         }
-        core.info(`✅ Cleared ${deletedCount} previous inline comment(s)`);
+        // Dismiss reviews (can't delete them, but can dismiss)
+        for (const review of ourReviews) {
+            try {
+                await octokit.rest.pulls.dismissReview({
+                    owner,
+                    repo,
+                    pull_number: pullNumber,
+                    review_id: review.id,
+                    message: 'Clearing previous review for fresh analysis',
+                });
+                dismissedCount++;
+            }
+            catch (error) {
+                core.debug(`Failed to dismiss review ${review.id}: ${error}`);
+            }
+        }
+        core.info(`✅ Cleared ${deletedCount} inline comment(s) and dismissed ${dismissedCount} review(s)`);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -91025,12 +91066,12 @@ exports.generateReviewComment = generateReviewComment;
 /**
  * Generate complete PR comment
  */
-function generatePRComment(result, options = { verbosity: 'standard', includePropertyDetails: false }, sdkInfo) {
+function generatePRComment(result, options = { verbosity: 'standard', includePropertyDetails: false }, sdkInfo, outsideIssuesInfo) {
     const sections = [];
     // Header with icon
     sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review\n');
     // Summary
-    sections.push(generateSummary(result, sdkInfo));
+    sections.push(generateSummary(result, sdkInfo, outsideIssuesInfo));
     // Files Analyzed
     sections.push(generateFilesSection(result.filesAnalyzed));
     // Note about where to find detailed issues
@@ -91039,11 +91080,36 @@ function generatePRComment(result, options = { verbosity: 'standard', includePro
     const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
     if (errors.length > 0 || warnings.length > 0 || suggestions.length > 0) {
         const messages = [];
+        // Calculate in-PR vs outside-PR counts
+        const inPRErrors = errors.length - (outsideIssuesInfo?.errorCount || 0);
+        const inPRWarnings = warnings.length - (outsideIssuesInfo?.warningCount || 0);
+        const inPRSuggestions = suggestions.length - (outsideIssuesInfo?.suggestionCount || 0);
         if (errors.length > 0 || warnings.length > 0) {
-            messages.push('**Errors and warnings** are shown as inline review comments on specific lines');
+            if (outsideIssuesInfo && (outsideIssuesInfo.errorCount > 0 || outsideIssuesInfo.warningCount > 0)) {
+                // Mixed: some in PR, some outside
+                const parts = [];
+                if (inPRErrors > 0 || inPRWarnings > 0) {
+                    parts.push('**Errors and warnings in PR changes** are shown as inline review comments on specific lines');
+                }
+                if (outsideIssuesInfo.errorCount > 0 || outsideIssuesInfo.warningCount > 0) {
+                    parts.push('**Errors and warnings in files outside this PR** are included in the review comment below');
+                }
+                messages.push(parts.join('\n\n'));
+            }
+            else {
+                messages.push('**Errors and warnings** are shown as inline review comments on specific lines');
+            }
         }
         if (suggestions.length > 0) {
-            messages.push('**Suggestions** are included in the review comment below');
+            if (outsideIssuesInfo && outsideIssuesInfo.suggestionCount > 0 && inPRSuggestions > 0) {
+                messages.push('**Suggestions** (both in PR and outside) are included in the review comment below');
+            }
+            else if (outsideIssuesInfo && outsideIssuesInfo.suggestionCount > 0) {
+                messages.push('**Suggestions from files outside this PR** are included in the review comment below');
+            }
+            else {
+                messages.push('**Suggestions** are included in the review comment below');
+            }
         }
         sections.push(messages.join('\n\n') + '\n');
     }
@@ -91071,7 +91137,7 @@ function generatePRComment(result, options = { verbosity: 'standard', includePro
 /**
  * Generate summary section
  */
-function generateSummary(result, sdkInfo) {
+function generateSummary(result, sdkInfo, outsideIssuesInfo) {
     const errors = result.issues.filter((i) => i.severity === 'error').length;
     const warnings = result.issues.filter((i) => i.severity === 'warning').length;
     const suggestions = result.issues.filter((i) => i.severity === 'suggestion').length;
@@ -91106,15 +91172,50 @@ function generateSummary(result, sdkInfo) {
     }
     lines.push(`${statusIcon} **${statusText}**\n`);
     // Issue breakdown
-    const breakdown = [];
-    if (errors > 0)
-        breakdown.push(`❌ ${errors} Error${errors !== 1 ? 's' : ''}`);
-    if (warnings > 0)
-        breakdown.push(`⚠️ ${warnings} Warning${warnings !== 1 ? 's' : ''}`);
-    if (suggestions > 0)
-        breakdown.push(`💡 ${suggestions} Suggestion${suggestions !== 1 ? 's' : ''}`);
-    if (breakdown.length > 0) {
-        lines.push(`**Issues:** ${breakdown.join(' • ')}`);
+    const hasOutsideIssues = outsideIssuesInfo && (outsideIssuesInfo.errorCount > 0 ||
+        outsideIssuesInfo.warningCount > 0 ||
+        outsideIssuesInfo.suggestionCount > 0);
+    if (hasOutsideIssues) {
+        // Show breakdown with in-PR vs outside-PR distinction
+        const inPRErrors = errors - (outsideIssuesInfo?.errorCount || 0);
+        const inPRWarnings = warnings - (outsideIssuesInfo?.warningCount || 0);
+        const inPRSuggestions = suggestions - (outsideIssuesInfo?.suggestionCount || 0);
+        lines.push('**Issues in PR changes:**');
+        const inPRBreakdown = [];
+        if (inPRErrors > 0)
+            inPRBreakdown.push(`❌ ${inPRErrors} Error${inPRErrors !== 1 ? 's' : ''}`);
+        if (inPRWarnings > 0)
+            inPRBreakdown.push(`⚠️ ${inPRWarnings} Warning${inPRWarnings !== 1 ? 's' : ''}`);
+        if (inPRSuggestions > 0)
+            inPRBreakdown.push(`💡 ${inPRSuggestions} Suggestion${inPRSuggestions !== 1 ? 's' : ''}`);
+        if (inPRBreakdown.length > 0) {
+            lines.push(inPRBreakdown.join(' • '));
+        }
+        else {
+            lines.push('None');
+        }
+        lines.push('\n**Issues in files outside PR:**');
+        const outsideBreakdown = [];
+        if (outsideIssuesInfo.errorCount > 0)
+            outsideBreakdown.push(`❌ ${outsideIssuesInfo.errorCount} Error${outsideIssuesInfo.errorCount !== 1 ? 's' : ''}`);
+        if (outsideIssuesInfo.warningCount > 0)
+            outsideBreakdown.push(`⚠️ ${outsideIssuesInfo.warningCount} Warning${outsideIssuesInfo.warningCount !== 1 ? 's' : ''}`);
+        if (outsideIssuesInfo.suggestionCount > 0)
+            outsideBreakdown.push(`💡 ${outsideIssuesInfo.suggestionCount} Suggestion${outsideIssuesInfo.suggestionCount !== 1 ? 's' : ''}`);
+        lines.push(outsideBreakdown.join(' • '));
+    }
+    else {
+        // Standard breakdown when all issues are in PR
+        const breakdown = [];
+        if (errors > 0)
+            breakdown.push(`❌ ${errors} Error${errors !== 1 ? 's' : ''}`);
+        if (warnings > 0)
+            breakdown.push(`⚠️ ${warnings} Warning${warnings !== 1 ? 's' : ''}`);
+        if (suggestions > 0)
+            breakdown.push(`💡 ${suggestions} Suggestion${suggestions !== 1 ? 's' : ''}`);
+        if (breakdown.length > 0) {
+            lines.push(`**Issues:** ${breakdown.join(' • ')}`);
+        }
     }
     return lines.join('\n');
 }

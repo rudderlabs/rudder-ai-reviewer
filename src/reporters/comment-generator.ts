@@ -18,13 +18,20 @@ export interface CommentOptions {
   includePropertyDetails: boolean;
 }
 
+export interface OutsideIssuesInfo {
+  errorCount: number;
+  warningCount: number;
+  suggestionCount: number;
+}
+
 /**
  * Generate complete PR comment
  */
 export function generatePRComment(
   result: AnalysisResult,
   options: CommentOptions = { verbosity: 'standard', includePropertyDetails: false },
-  sdkInfo?: { type: string; version?: string; methodCallsCount?: number; framework?: string }
+  sdkInfo?: { type: string; version?: string; methodCallsCount?: number; framework?: string },
+  outsideIssuesInfo?: OutsideIssuesInfo
 ): string {
   const sections: string[] = [];
 
@@ -32,7 +39,7 @@ export function generatePRComment(
   sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review\n');
 
   // Summary
-  sections.push(generateSummary(result, sdkInfo));
+  sections.push(generateSummary(result, sdkInfo, outsideIssuesInfo));
 
   // Files Analyzed
   sections.push(generateFilesSection(result.filesAnalyzed));
@@ -44,12 +51,38 @@ export function generatePRComment(
 
   if (errors.length > 0 || warnings.length > 0 || suggestions.length > 0) {
     const messages: string[] = [];
+
+    // Calculate in-PR vs outside-PR counts
+    const inPRErrors = errors.length - (outsideIssuesInfo?.errorCount || 0);
+    const inPRWarnings = warnings.length - (outsideIssuesInfo?.warningCount || 0);
+    const inPRSuggestions = suggestions.length - (outsideIssuesInfo?.suggestionCount || 0);
+
     if (errors.length > 0 || warnings.length > 0) {
-      messages.push('**Errors and warnings** are shown as inline review comments on specific lines');
+      if (outsideIssuesInfo && (outsideIssuesInfo.errorCount > 0 || outsideIssuesInfo.warningCount > 0)) {
+        // Mixed: some in PR, some outside
+        const parts: string[] = [];
+        if (inPRErrors > 0 || inPRWarnings > 0) {
+          parts.push('**Errors and warnings in PR changes** are shown as inline review comments on specific lines');
+        }
+        if (outsideIssuesInfo.errorCount > 0 || outsideIssuesInfo.warningCount > 0) {
+          parts.push('**Errors and warnings in files outside this PR** are included in the review comment below');
+        }
+        messages.push(parts.join('\n\n'));
+      } else {
+        messages.push('**Errors and warnings** are shown as inline review comments on specific lines');
+      }
     }
+
     if (suggestions.length > 0) {
-      messages.push('**Suggestions** are included in the review comment below');
+      if (outsideIssuesInfo && outsideIssuesInfo.suggestionCount > 0 && inPRSuggestions > 0) {
+        messages.push('**Suggestions** (both in PR and outside) are included in the review comment below');
+      } else if (outsideIssuesInfo && outsideIssuesInfo.suggestionCount > 0) {
+        messages.push('**Suggestions from files outside this PR** are included in the review comment below');
+      } else {
+        messages.push('**Suggestions** are included in the review comment below');
+      }
     }
+
     sections.push(messages.join('\n\n') + '\n');
   }
 
@@ -83,7 +116,11 @@ export function generatePRComment(
 /**
  * Generate summary section
  */
-function generateSummary(result: AnalysisResult, sdkInfo?: { type: string; version?: string; methodCallsCount?: number; framework?: string }): string {
+function generateSummary(
+  result: AnalysisResult,
+  sdkInfo?: { type: string; version?: string; methodCallsCount?: number; framework?: string },
+  outsideIssuesInfo?: OutsideIssuesInfo
+): string {
   const errors = result.issues.filter((i) => i.severity === 'error').length;
   const warnings = result.issues.filter((i) => i.severity === 'warning').length;
   const suggestions = result.issues.filter((i) => i.severity === 'suggestion').length;
@@ -125,13 +162,47 @@ function generateSummary(result: AnalysisResult, sdkInfo?: { type: string; versi
   lines.push(`${statusIcon} **${statusText}**\n`);
 
   // Issue breakdown
-  const breakdown: string[] = [];
-  if (errors > 0) breakdown.push(`❌ ${errors} Error${errors !== 1 ? 's' : ''}`);
-  if (warnings > 0) breakdown.push(`⚠️ ${warnings} Warning${warnings !== 1 ? 's' : ''}`);
-  if (suggestions > 0) breakdown.push(`💡 ${suggestions} Suggestion${suggestions !== 1 ? 's' : ''}`);
+  const hasOutsideIssues = outsideIssuesInfo && (
+    outsideIssuesInfo.errorCount > 0 ||
+    outsideIssuesInfo.warningCount > 0 ||
+    outsideIssuesInfo.suggestionCount > 0
+  );
 
-  if (breakdown.length > 0) {
-    lines.push(`**Issues:** ${breakdown.join(' • ')}`);
+  if (hasOutsideIssues) {
+    // Show breakdown with in-PR vs outside-PR distinction
+    const inPRErrors = errors - (outsideIssuesInfo?.errorCount || 0);
+    const inPRWarnings = warnings - (outsideIssuesInfo?.warningCount || 0);
+    const inPRSuggestions = suggestions - (outsideIssuesInfo?.suggestionCount || 0);
+
+    lines.push('**Issues in PR changes:**');
+    const inPRBreakdown: string[] = [];
+    if (inPRErrors > 0) inPRBreakdown.push(`❌ ${inPRErrors} Error${inPRErrors !== 1 ? 's' : ''}`);
+    if (inPRWarnings > 0) inPRBreakdown.push(`⚠️ ${inPRWarnings} Warning${inPRWarnings !== 1 ? 's' : ''}`);
+    if (inPRSuggestions > 0) inPRBreakdown.push(`💡 ${inPRSuggestions} Suggestion${inPRSuggestions !== 1 ? 's' : ''}`);
+
+    if (inPRBreakdown.length > 0) {
+      lines.push(inPRBreakdown.join(' • '));
+    } else {
+      lines.push('None');
+    }
+
+    lines.push('\n**Issues in files outside PR:**');
+    const outsideBreakdown: string[] = [];
+    if (outsideIssuesInfo.errorCount > 0) outsideBreakdown.push(`❌ ${outsideIssuesInfo.errorCount} Error${outsideIssuesInfo.errorCount !== 1 ? 's' : ''}`);
+    if (outsideIssuesInfo.warningCount > 0) outsideBreakdown.push(`⚠️ ${outsideIssuesInfo.warningCount} Warning${outsideIssuesInfo.warningCount !== 1 ? 's' : ''}`);
+    if (outsideIssuesInfo.suggestionCount > 0) outsideBreakdown.push(`💡 ${outsideIssuesInfo.suggestionCount} Suggestion${outsideIssuesInfo.suggestionCount !== 1 ? 's' : ''}`);
+
+    lines.push(outsideBreakdown.join(' • '));
+  } else {
+    // Standard breakdown when all issues are in PR
+    const breakdown: string[] = [];
+    if (errors > 0) breakdown.push(`❌ ${errors} Error${errors !== 1 ? 's' : ''}`);
+    if (warnings > 0) breakdown.push(`⚠️ ${warnings} Warning${warnings !== 1 ? 's' : ''}`);
+    if (suggestions > 0) breakdown.push(`💡 ${suggestions} Suggestion${suggestions !== 1 ? 's' : ''}`);
+
+    if (breakdown.length > 0) {
+      lines.push(`**Issues:** ${breakdown.join(' • ')}`);
+    }
   }
 
   return lines.join('\n');

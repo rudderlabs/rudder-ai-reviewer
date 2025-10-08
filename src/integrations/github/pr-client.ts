@@ -235,7 +235,7 @@ export async function postAnalysisReport(
 }
 
 /**
- * Clears all previous inline comments from the PR
+ * Clears all previous inline comments and reviews from the PR
  */
 async function clearPreviousInlineComments(
   owner: string,
@@ -258,14 +258,31 @@ async function clearPreviousInlineComments(
       comment.body?.includes(commentIdentifier)
     );
 
-    if (ourExistingComments.length === 0) {
-      core.info('No previous inline comments to clear');
+    // Get all reviews on the PR
+    const { data: reviews } = await octokit.rest.pulls.listReviews({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
+
+    // Get current bot user info to identify our reviews
+    const { data: botUser } = await octokit.rest.users.getAuthenticated();
+    const ourReviews = reviews.filter((review) =>
+      review.user?.login === botUser.login &&
+      review.state === 'COMMENTED'
+    );
+
+    const totalToClear = ourExistingComments.length + ourReviews.length;
+    if (totalToClear === 0) {
+      core.info('No previous inline comments or reviews to clear');
       return;
     }
 
-    core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
+    core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s) and ${ourReviews.length} review(s)...`);
     let deletedCount = 0;
+    let dismissedCount = 0;
 
+    // Delete individual review comments
     for (const comment of ourExistingComments) {
       try {
         await octokit.rest.pulls.deleteReviewComment({
@@ -279,7 +296,23 @@ async function clearPreviousInlineComments(
       }
     }
 
-    core.info(`✅ Cleared ${deletedCount} previous inline comment(s)`);
+    // Dismiss reviews (can't delete them, but can dismiss)
+    for (const review of ourReviews) {
+      try {
+        await octokit.rest.pulls.dismissReview({
+          owner,
+          repo,
+          pull_number: pullNumber,
+          review_id: review.id,
+          message: 'Clearing previous review for fresh analysis',
+        });
+        dismissedCount++;
+      } catch (error) {
+        core.debug(`Failed to dismiss review ${review.id}: ${error}`);
+      }
+    }
+
+    core.info(`✅ Cleared ${deletedCount} inline comment(s) and dismissed ${dismissedCount} review(s)`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     core.warning(`Failed to clear previous comments: ${errorMessage}`);
