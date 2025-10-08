@@ -79,19 +79,27 @@ export async function orchestrateAnalysis(config: ActionConfig): Promise<void> {
     for (const file of changedFiles) {
       if (isJavaScriptFile(file)) {
         try {
+          core.debug(`Analyzing file: ${file}`);
           const fileAnalysis = await analyzeFile(file);
+          core.debug(`File analysis complete: ${fileAnalysis.calls.length} SDK calls found`);
+
           // Store calls for tracking plan validation
           if (fileAnalysis.calls.length > 0) {
             allAnalyzedCalls.push({
               file: file,
               calls: fileAnalysis.calls,
             });
+            core.debug(`Added ${fileAnalysis.calls.length} calls from ${file} for tracking plan validation`);
           }
         } catch (error) {
           core.warning(`Failed to analyze ${file}: ${error}`);
         }
       }
     }
+
+    core.info(`Total files with SDK calls: ${allAnalyzedCalls.length}`);
+    const totalCalls = allAnalyzedCalls.reduce((sum, f) => sum + f.calls.length, 0);
+    core.info(`Total SDK calls to validate: ${totalCalls}`);
 
     // Step 7: Validate API usage
     core.info('Validating SDK API usage...');
@@ -119,6 +127,10 @@ export async function orchestrateAnalysis(config: ActionConfig): Promise<void> {
     let trackingPlanIssues: Issue[] = [];
     let destinationImpacts: DestinationImpact[] = [];
 
+    core.info('=== Starting RudderStack API Integration ===');
+    core.debug(`Service access token provided: ${!!config.serviceAccessToken}`);
+    core.debug(`Source ID: ${config.sourceId || 'not provided'}`);
+
     try {
       await postOrUpdateComment(prContext, config.githubToken, generateProgressComment('Fetching tracking plan'));
 
@@ -128,24 +140,56 @@ export async function orchestrateAnalysis(config: ActionConfig): Promise<void> {
       });
 
       // Test connection
+      core.info('Testing connection to RudderStack API...');
       const connected = await rudderStackClient.testConnection();
+      core.info(`Connection status: ${connected ? 'SUCCESS' : 'FAILED'}`);
 
       if (connected) {
         // Fetch tracking plan
+        core.info('Fetching tracking plan...');
         const trackingPlan = await rudderStackClient.getTrackingPlan();
 
         if (trackingPlan) {
+          core.info(`✓ Tracking plan retrieved with ${trackingPlan.events.length} events`);
+          core.debug(`Tracking plan events: ${trackingPlan.events.map(e => e.name).join(', ')}`);
           core.info('Validating against tracking plan...');
+
+          if (allAnalyzedCalls.length === 0) {
+            core.warning('No SDK calls found to validate against tracking plan');
+          } else {
+            core.info(`Validating ${allAnalyzedCalls.length} files with SDK calls...`);
+          }
 
           // Validate each file's calls against the tracking plan
           for (const { file, calls } of allAnalyzedCalls) {
+            core.debug(`Validating ${calls.length} calls in ${file}...`);
+
+            // Log event names found in this file
+            const eventNames = calls
+              .filter(c => c.eventName && !c.hasDynamicEventName)
+              .map(c => c.eventName);
+            if (eventNames.length > 0) {
+              core.debug(`  Event names in ${file}: ${eventNames.join(', ')}`);
+            }
+
             const validationResult = validateAgainstTrackingPlan(calls, trackingPlan, file);
             trackingPlanIssues.push(...validationResult.issues);
 
             core.info(
-              `File ${file}: ${validationResult.validEvents.length} valid events, ${validationResult.unknownEvents.length} unknown events, ${validationResult.issues.length} issues`
+              `✓ ${file}: ${validationResult.validEvents.length} valid, ${validationResult.unknownEvents.length} unknown, ${validationResult.issues.length} issues`
             );
+
+            if (validationResult.unknownEvents.length > 0) {
+              core.debug(`  Unknown events: ${validationResult.unknownEvents.join(', ')}`);
+            }
+            if (validationResult.issues.length > 0) {
+              core.debug(`  Issues: ${validationResult.issues.map(i => `${i.severity}: ${i.message}`).join('; ')}`);
+            }
           }
+
+          core.info(`Total tracking plan issues found: ${trackingPlanIssues.length}`);
+        } else {
+          core.warning('⚠ No tracking plan found for this workspace/source');
         }
 
         // Fetch destinations
@@ -164,9 +208,15 @@ export async function orchestrateAnalysis(config: ActionConfig): Promise<void> {
         }
       }
     } catch (error) {
-      core.warning(`RudderStack API integration failed: ${error}`);
+      core.error(`❌ RudderStack API integration failed: ${error}`);
+      if (error instanceof Error) {
+        core.debug(`Error stack: ${error.stack}`);
+      }
+      core.warning('Continuing with static analysis only (tracking plan validation skipped)');
       // Continue with static analysis only
     }
+
+    core.info('=== RudderStack API Integration Complete ===');
 
     // Step 10: AI-enhanced analysis (optional)
     await postOrUpdateComment(prContext, config.githubToken, generateProgressComment('Running AI analysis'));
@@ -196,7 +246,22 @@ export async function orchestrateAnalysis(config: ActionConfig): Promise<void> {
     }
 
     // Step 11: Compile final analysis result
+    core.info('=== Compiling Final Results ===');
+    core.info(`API issues: ${apiIssues.length}`);
+    core.info(`Tracking plan issues: ${trackingPlanIssues.length}`);
+
     const allIssues = [...apiIssues, ...trackingPlanIssues];
+
+    // Log issue breakdown by source
+    const issuesBySource = allIssues.reduce((acc, issue) => {
+      acc[issue.source] = (acc[issue.source] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    core.info('Issues by source:');
+    Object.entries(issuesBySource).forEach(([source, count]) => {
+      core.info(`  - ${source}: ${count}`);
+    });
 
     const finalResult: AnalysisResult = {
       status: allIssues.some((i) => i.severity === 'error') ? 'partial' : 'success',
