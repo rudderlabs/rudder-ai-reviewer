@@ -90735,10 +90735,16 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
             repo,
             pull_number: pullNumber,
         });
+        core.info(`Found ${reviews.length} total review(s) on PR`);
         // Get current bot user info to identify our reviews
         const { data: botUser } = await octokit.rest.users.getAuthenticated();
+        core.info(`Bot user: ${botUser.login}`);
         const ourReviews = reviews.filter((review) => review.user?.login === botUser.login &&
             review.state === 'COMMENTED');
+        // Log all reviews for debugging
+        reviews.forEach((review) => {
+            core.info(`Review #${review.id}: user=${review.user?.login}, state=${review.state}`);
+        });
         const totalToClear = ourExistingComments.length + ourReviews.length;
         if (totalToClear === 0) {
             core.info('No previous inline comments or reviews to clear');
@@ -90750,6 +90756,7 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
         // Delete individual review comments
         for (const comment of ourExistingComments) {
             try {
+                core.info(`Deleting comment ${comment.id}...`);
                 await octokit.rest.pulls.deleteReviewComment({
                     owner,
                     repo,
@@ -90758,12 +90765,14 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
                 deletedCount++;
             }
             catch (error) {
-                core.debug(`Failed to delete comment ${comment.id}: ${error}`);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                core.warning(`Failed to delete comment ${comment.id}: ${errorMessage}`);
             }
         }
         // Dismiss reviews (can't delete them, but can dismiss)
         for (const review of ourReviews) {
             try {
+                core.info(`Dismissing review ${review.id}...`);
                 await octokit.rest.pulls.dismissReview({
                     owner,
                     repo,
@@ -90774,7 +90783,8 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
                 dismissedCount++;
             }
             catch (error) {
-                core.debug(`Failed to dismiss review ${review.id}: ${error}`);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                core.warning(`Failed to dismiss review ${review.id}: ${errorMessage}`);
             }
         }
         core.info(`✅ Cleared ${deletedCount} inline comment(s) and dismissed ${dismissedCount} review(s)`);
