@@ -1,0 +1,8 @@
+{
+  "name": "npm-valid-test-app",
+  "version": "1.0.1",
+  "description": "Test app with valid NPM SDK usage",
+  "dependencies": {
+    "@rudderstack/analytics-js": "3.24.2"
+  }
+}
