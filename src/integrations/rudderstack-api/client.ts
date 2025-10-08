@@ -38,7 +38,7 @@ export class RudderStackAPIClient {
     this.sourceId = config.sourceId;
 
     this.headers = {
-      Authorization: `Basic ${config.serviceAccessToken}`,
+      Authorization: `Bearer ${config.serviceAccessToken}`,
       'Content-Type': 'application/json',
     };
   }
@@ -94,23 +94,21 @@ export class RudderStackAPIClient {
   }
 
   /**
-   * Fetch tracking plan for the workspace
+   * Fetch tracking plans for the source and get the tracking plan details with events
+   * First lists all tracking plans, then finds the one connected to the source
    */
   async getTrackingPlan(): Promise<TrackingPlan | null> {
-    core.info('Fetching tracking plan from RudderStack API...');
+    core.info('Fetching tracking plans from RudderStack API...');
 
     try {
-      const url = new URL('/tracking-plans', this.baseURL);
-      if (this.sourceId) {
-        url.searchParams.set('source_id', this.sourceId);
-      }
-
-      const data: any = await this.retryRequest(async () => {
+      // Step 1: List all tracking plans
+      const listUrl = new URL('/v2/catalog/tracking-plans', this.baseURL);
+      const trackingPlansData: any = await this.retryRequest(async () => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
         try {
-          const res = await fetch(url.toString(), {
+          const res = await fetch(listUrl.toString(), {
             method: 'GET',
             headers: this.headers,
             signal: controller.signal,
@@ -129,25 +127,66 @@ export class RudderStackAPIClient {
         }
       });
 
-      // If no tracking plan defined, return null
-      if (!data || !data.events || data.events.length === 0) {
-        core.info('No tracking plan defined for this workspace');
+      // Check if there are any tracking plans
+      if (!trackingPlansData || !trackingPlansData.trackingPlans || trackingPlansData.trackingPlans.length === 0) {
+        core.info('No tracking plans found in this workspace');
         return null;
       }
 
+      // If sourceId is provided, find tracking plan connected to this source
+      // Otherwise, use the first available tracking plan
+      let selectedTrackingPlan: any;
+      if (this.sourceId) {
+        // We'll need to check each tracking plan's connections to find the one for this source
+        // For now, we'll use the first one (TODO: implement source filtering)
+        core.warning('Source-specific tracking plan filtering not yet implemented, using first available');
+        selectedTrackingPlan = trackingPlansData.trackingPlans[0];
+      } else {
+        selectedTrackingPlan = trackingPlansData.trackingPlans[0];
+      }
+
+      // Step 2: Get the full tracking plan details with events
+      const trackingPlanId = selectedTrackingPlan.id;
+      core.info(`Fetching tracking plan details for ID: ${trackingPlanId}`);
+
+      const detailUrl = new URL(`/v2/catalog/tracking-plans/${trackingPlanId}`, this.baseURL);
+      const detailsData: any = await this.retryRequest(async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+        try {
+          const res = await fetch(detailUrl.toString(), {
+            method: 'GET',
+            headers: this.headers,
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!res.ok) {
+            throw new FetchError(`HTTP ${res.status}: ${res.statusText}`, res.status, await res.text());
+          }
+
+          return res.json();
+        } catch (error) {
+          clearTimeout(timeoutId);
+          throw error;
+        }
+      });
+
       // Transform API response to our internal format
       const trackingPlan: TrackingPlan = {
-        version: data.version,
-        events: data.events.map((event: any) => ({
+        version: detailsData.version?.toString() || '1',
+        events: (detailsData.events || []).map((event: any) => ({
           name: event.name,
           description: event.description,
-          namingConvention: event.naming_convention || event.namingConvention,
+          namingConvention: event.namingConvention,
           properties: (event.properties || []).map((prop: any) => ({
             name: prop.name,
             type: prop.type,
             required: prop.required || false,
             description: prop.description,
-            allowedValues: prop.allowed_values || prop.allowedValues,
+            allowedValues: prop.allowedValues,
             pattern: prop.pattern,
           })),
         })),

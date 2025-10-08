@@ -72,15 +72,21 @@ export async function orchestrateAnalysis(config: ActionConfig): Promise<void> {
     // Step 5: Update progress
     await postOrUpdateComment(prContext, config.githubToken, generateProgressComment('Running static analysis'));
 
-    // Step 6: Perform static analysis on changed files
+    // Step 6: Perform static analysis on changed files and collect SDK calls
     const analysisResults: AnalysisResult[] = [];
+    const allAnalyzedCalls: Array<{ file: string; calls: any[] }> = [];
 
     for (const file of changedFiles) {
       if (isJavaScriptFile(file)) {
         try {
           const fileAnalysis = await analyzeFile(file);
-          // Convert to AnalysisResult format if needed
-          // For now, we'll collect issues from the analysis
+          // Store calls for tracking plan validation
+          if (fileAnalysis.calls.length > 0) {
+            allAnalyzedCalls.push({
+              file: file,
+              calls: fileAnalysis.calls,
+            });
+          }
         } catch (error) {
           core.warning(`Failed to analyze ${file}: ${error}`);
         }
@@ -130,9 +136,16 @@ export async function orchestrateAnalysis(config: ActionConfig): Promise<void> {
 
         if (trackingPlan) {
           core.info('Validating against tracking plan...');
-          // Note: You'd need to extract call info from your analysis
-          // const validationResult = validateAgainstTrackingPlan(calls, trackingPlan, file);
-          // trackingPlanIssues = validationResult.issues;
+
+          // Validate each file's calls against the tracking plan
+          for (const { file, calls } of allAnalyzedCalls) {
+            const validationResult = validateAgainstTrackingPlan(calls, trackingPlan, file);
+            trackingPlanIssues.push(...validationResult.issues);
+
+            core.info(
+              `File ${file}: ${validationResult.validEvents.length} valid events, ${validationResult.unknownEvents.length} unknown events, ${validationResult.issues.length} issues`
+            );
+          }
         }
 
         // Fetch destinations
