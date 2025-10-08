@@ -165,21 +165,39 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
     core.info('Posting inline review comments...');
 
-    // Convert issues to inline annotations (only errors and warnings)
+    // Separate issues into those in PR files and those outside
+    const changedFilesSet = new Set(changedFiles);
     const inlineAnnotations: InlineAnnotation[] = [];
+    const outsideIssues = { errors: [] as typeof result.issues, warnings: [] as typeof result.issues };
+
     result.issues.forEach((issue) => {
       if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
-        inlineAnnotations.push({
-          path: issue.file,
-          line: issue.line,
-          message: formatInlineMessage(issue),
-          annotation_level: issue.severity === 'error' ? 'failure' : 'warning',
-        });
+        const isInPR = changedFilesSet.has(issue.file);
+        const shouldIncludeOutside = config.annotateFilesOutsidePR;
+
+        if (isInPR || shouldIncludeOutside) {
+          // Add to inline annotations (will be filtered later in pr-client)
+          inlineAnnotations.push({
+            path: issue.file,
+            line: issue.line,
+            message: formatInlineMessage(issue),
+            annotation_level: issue.severity === 'error' ? 'failure' : 'warning',
+          });
+        }
+
+        // Track outside issues for review comment
+        if (!isInPR && shouldIncludeOutside) {
+          if (issue.severity === 'error') {
+            outsideIssues.errors.push(issue);
+          } else {
+            outsideIssues.warnings.push(issue);
+          }
+        }
       }
     });
 
-    // Generate review comment body (suggestions)
-    const reviewBody = generateReviewComment(result);
+    // Generate review comment body (suggestions + outside issues)
+    const reviewBody = generateReviewComment(result, outsideIssues);
 
     // Post review with inline comments and suggestions
     if (inlineAnnotations.length > 0 || reviewBody) {

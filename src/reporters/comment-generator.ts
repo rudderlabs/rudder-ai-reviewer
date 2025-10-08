@@ -403,42 +403,104 @@ Currently: ${stage}...
  * Generate PR review comment body (for GitHub review submission)
  * This is the message that accompanies the review and inline comments
  */
-export function generateReviewComment(result: AnalysisResult): string {
+export function generateReviewComment(
+  result: AnalysisResult,
+  outsideIssues?: { errors: Issue[]; warnings: Issue[] }
+): string {
   const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
+  const hasOutsideIssues = outsideIssues && (outsideIssues.errors.length > 0 || outsideIssues.warnings.length > 0);
 
-  if (suggestions.length === 0) {
-    return ''; // No review comment needed if no suggestions
+  if (suggestions.length === 0 && !hasOutsideIssues) {
+    return ''; // No review comment needed if no suggestions and no outside issues
   }
 
-  const lines: string[] = [];
+  const sections: string[] = [];
 
-  lines.push('## 💡 Suggestions\n');
-  lines.push('_Consider these improvements to enhance your tracking implementation:_\n');
+  // Suggestions section (collapsible)
+  if (suggestions.length > 0) {
+    const lines: string[] = [];
+    lines.push('<details>');
+    lines.push(`<summary><strong>💡 Suggestions (${suggestions.length})</strong></summary>\n`);
+    lines.push('_Consider these improvements to enhance your tracking implementation:_\n');
 
-  // Group suggestions by file
-  const suggestionsByFile = new Map<string, typeof suggestions>();
-  suggestions.forEach(s => {
-    if (!suggestionsByFile.has(s.file)) {
-      suggestionsByFile.set(s.file, []);
-    }
-    suggestionsByFile.get(s.file)!.push(s);
-  });
-
-  suggestionsByFile.forEach((fileSuggestions, file) => {
-    lines.push(`### 📄 ${file}\n`);
-    fileSuggestions.forEach(s => {
-      lines.push(`**Line ${s.line}:** ${s.message}\n`);
-      if (s.impact) {
-        lines.push(`_Impact:_ ${s.impact}\n`);
+    // Group suggestions by file
+    const suggestionsByFile = new Map<string, typeof suggestions>();
+    suggestions.forEach(s => {
+      if (!suggestionsByFile.has(s.file)) {
+        suggestionsByFile.set(s.file, []);
       }
-      if (s.fix) {
-        lines.push('_Suggested fix:_');
-        lines.push('```javascript');
-        lines.push(s.fix);
-        lines.push('```\n');
-      }
+      suggestionsByFile.get(s.file)!.push(s);
     });
-  });
 
-  return lines.join('\n');
+    suggestionsByFile.forEach((fileSuggestions, file) => {
+      lines.push(`#### 📄 ${file}\n`);
+      fileSuggestions.forEach(s => {
+        lines.push(`**Line ${s.line}:** ${s.message}\n`);
+        if (s.impact) {
+          lines.push(`_Impact:_ ${s.impact}\n`);
+        }
+        if (s.fix) {
+          lines.push('_Suggested fix:_');
+          lines.push('```javascript');
+          lines.push(s.fix);
+          lines.push('```\n');
+        }
+      });
+    });
+
+    lines.push('</details>');
+    sections.push(lines.join('\n'));
+  }
+
+  // Issues in files outside PR (collapsible)
+  if (hasOutsideIssues) {
+    const lines: string[] = [];
+    const totalOutside = outsideIssues.errors.length + outsideIssues.warnings.length;
+    lines.push('<details>');
+    lines.push(`<summary><strong>📍 Issues in Files Outside PR (${totalOutside})</strong></summary>\n`);
+    lines.push('_These files contain RudderStack SDK issues but are not part of this PR._\n');
+
+    // Errors outside PR
+    if (outsideIssues.errors.length > 0) {
+      lines.push(`#### ❌ Errors (${outsideIssues.errors.length})\n`);
+      outsideIssues.errors.forEach(issue => {
+        lines.push(`**${issue.file}:${issue.line}**\n`);
+        lines.push(`${issue.message}\n`);
+        if (issue.impact) {
+          lines.push(`_Impact:_ ${issue.impact}\n`);
+        }
+        if (issue.fix) {
+          lines.push('_Suggested fix:_');
+          lines.push('```javascript');
+          lines.push(issue.fix);
+          lines.push('```');
+        }
+        lines.push('');
+      });
+    }
+
+    // Warnings outside PR
+    if (outsideIssues.warnings.length > 0) {
+      lines.push(`#### ⚠️ Warnings (${outsideIssues.warnings.length})\n`);
+      outsideIssues.warnings.forEach(issue => {
+        lines.push(`**${issue.file}:${issue.line}**\n`);
+        lines.push(`${issue.message}\n`);
+        if (issue.impact) {
+          lines.push(`_Impact:_ ${issue.impact}\n`);
+        }
+        if (issue.fix) {
+          lines.push('_Suggested fix:_');
+          lines.push('```javascript');
+          lines.push(issue.fix);
+          lines.push('```');
+        }
+        lines.push('');
+      });
+    }
+
+    lines.push('</details>');
+    sections.push(lines.join('\n'));
+  }
+
+  return sections.join('\n\n');
 }

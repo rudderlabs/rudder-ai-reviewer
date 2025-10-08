@@ -478,32 +478,9 @@ export async function postInlineAnnotations(
       core.info(`✅ Posted ${createCount} new and updated ${updateCount} inline review comment(s)`);
     }
 
-    // Post annotations outside diff as regular PR comments (for testing mode)
+    // Note about outside-diff annotations
     if (annotationsAsComments.length > 0) {
-      core.info(`Posting ${annotationsAsComments.length} annotation(s) outside PR diff as regular comments...`);
-
-      let commentBody = '## 📍 SDK Issues in Files Outside PR\n\n';
-      commentBody += '_These files contain RudderStack SDK issues but are not part of this PR._\n\n';
-
-      annotationsAsComments.forEach((ann) => {
-        const icon = ann.annotation_level === 'failure' ? '❌' : '⚠️';
-        commentBody += `### ${icon} ${ann.path}:${ann.line}\n\n`;
-        commentBody += `${ann.message}\n\n`;
-        commentBody += '---\n\n';
-      });
-
-      try {
-        await octokit.rest.issues.createComment({
-          owner,
-          repo,
-          issue_number: pullNumber,
-          body: commentBody,
-        });
-        core.info(`✅ Posted summary comment for ${annotationsAsComments.length} annotation(s) outside PR diff`);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        core.warning(`Failed to post comment for outside-diff annotations: ${errorMessage}`);
-      }
+      core.info(`ℹ️ ${annotationsAsComments.length} annotation(s) outside PR diff will be included in review comment body`);
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
