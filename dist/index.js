@@ -90716,7 +90716,7 @@ async function postAnalysisReport(sdkDetection, validation, changes, options) {
     }
 }
 /**
- * Clears all previous inline comments and reviews from the PR
+ * Hides previous reviews by dismissing them as outdated
  */
 async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
     const octokit = github.getOctokit(token);
@@ -90736,33 +90736,16 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
             pull_number: pullNumber,
         });
         core.info(`Found ${reviews.length} total review(s) on PR`);
-        // Identify our reviews by checking if they contain our comment identifier in the body
-        // We can't use getAuthenticated() as it requires additional permissions
-        const reviewIdentifier = '💡 Suggestions';
-        const ourReviews = reviews.filter((review) => {
-            // Check if review body contains our identifier (suggestions or outside issues sections)
-            const hasIdentifier = review.body?.includes(reviewIdentifier) ||
-                review.body?.includes('📍 Issues in Files Outside PR');
-            // Only dismiss COMMENTED reviews (not APPROVED or CHANGES_REQUESTED)
-            return hasIdentifier && review.state === 'COMMENTED';
-        });
-        // Log all reviews for debugging
-        reviews.forEach((review) => {
-            const isOurs = review.body?.includes(reviewIdentifier) || review.body?.includes('📍 Issues in Files Outside PR');
-            core.info(`Review #${review.id}: user=${review.user?.login}, state=${review.state}, isOurs=${isOurs}`);
-        });
-        const totalToClear = ourExistingComments.length + ourReviews.length;
-        if (totalToClear === 0) {
-            core.info('No previous inline comments or reviews to clear');
-            return;
-        }
-        core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s) and ${ourReviews.length} review(s)...`);
+        // Identify our reviews that have the comment identifier in their associated comments
+        // We'll match reviews that have our inline comments
+        const reviewIdsWithOurComments = new Set(ourExistingComments.map(c => c.pull_request_review_id).filter(id => id != null));
+        const ourReviews = reviews.filter((review) => reviewIdsWithOurComments.has(review.id) && review.state === 'COMMENTED');
+        core.info(`Found ${ourExistingComments.length} inline comment(s) and ${ourReviews.length} review(s) to hide`);
         let deletedCount = 0;
         let dismissedCount = 0;
         // Delete individual review comments
         for (const comment of ourExistingComments) {
             try {
-                core.info(`Deleting comment ${comment.id}...`);
                 await octokit.rest.pulls.deleteReviewComment({
                     owner,
                     repo,
@@ -90775,25 +90758,25 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
                 core.warning(`Failed to delete comment ${comment.id}: ${errorMessage}`);
             }
         }
-        // Dismiss reviews (can't delete them, but can dismiss)
+        // Dismiss our reviews as outdated (this "hides" them)
         for (const review of ourReviews) {
             try {
-                core.info(`Dismissing review ${review.id}...`);
                 await octokit.rest.pulls.dismissReview({
                     owner,
                     repo,
                     pull_number: pullNumber,
                     review_id: review.id,
-                    message: 'Clearing previous review for fresh analysis',
+                    message: '⚠️ Outdated - New analysis available below',
                 });
                 dismissedCount++;
+                core.info(`✅ Dismissed review ${review.id} as outdated`);
             }
             catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 core.warning(`Failed to dismiss review ${review.id}: ${errorMessage}`);
             }
         }
-        core.info(`✅ Cleared ${deletedCount} inline comment(s) and dismissed ${dismissedCount} review(s)`);
+        core.info(`✅ Deleted ${deletedCount} comment(s) and dismissed ${dismissedCount} review(s)`);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -90802,6 +90785,7 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
 }
 /**
  * Post inline review comments to PR files (only for changed files by default)
+ * Note: Previous reviews are dismissed as "outdated" when clear_previous_comments is true
  */
 async function postInlineAnnotations(annotations, options) {
     const { owner, repo, pullNumber, token, clearPrevious = false, annotateFilesOutsidePR = false, reviewBody } = options;
@@ -90910,7 +90894,7 @@ async function postInlineAnnotations(annotations, options) {
                 core.debug(`Could not update inline comment on ${ann.path}:${ann.line}: ${errorMessage}`);
             }
         }
-        // Create a review with all new comments at once
+        // Create a review with inline comments and review body
         let createCount = 0;
         if (newAnnotations.length > 0 || reviewBody) {
             try {
@@ -90919,23 +90903,23 @@ async function postInlineAnnotations(annotations, options) {
                     line: ann.line,
                     body: `${commentIdentifier}\n${ann.message}`,
                 }));
-                // Create review with inline comments and optional review body
+                // Create review with inline comments and review body
                 await octokit.rest.pulls.createReview({
                     owner,
                     repo,
                     pull_number: pullNumber,
                     commit_id: commitSha,
                     event: 'COMMENT',
-                    body: reviewBody, // This is the review message (suggestions)
+                    body: reviewBody || undefined,
                     comments: reviewComments.length > 0 ? reviewComments : undefined,
                 });
                 createCount = newAnnotations.length;
-                const reviewMsg = reviewBody ? ' with review message' : '';
+                const reviewMsg = reviewBody ? ' with review body' : '';
                 core.info(`✅ Submitted review with ${createCount} inline comment(s)${reviewMsg}`);
             }
             catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                core.warning(`Failed to create review with comments: ${errorMessage}`);
+                core.warning(`Failed to create review: ${errorMessage}`);
                 core.info('Falling back to individual comments...');
                 // Fallback: Create comments individually if review fails
                 for (const ann of newAnnotations) {
@@ -90964,7 +90948,7 @@ async function postInlineAnnotations(annotations, options) {
         }
         // Note about outside-diff annotations
         if (annotationsAsComments.length > 0) {
-            core.info(`ℹ️ ${annotationsAsComments.length} annotation(s) outside PR diff will be included in review comment body`);
+            core.info(`ℹ️ ${annotationsAsComments.length} annotation(s) outside PR diff are included in review body`);
         }
     }
     catch (error) {
