@@ -1,5 +1,6 @@
 import { RudderAnalytics } from '@rudderstack/analytics-js';
 
+// Test app for PR reviewer action
 const rudderanalytics = new RudderAnalytics();
 
 // ERROR: Missing required parameters for load()

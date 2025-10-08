@@ -1,6 +1,6 @@
 {
   "name": "mixed-valid-invalid-test-app",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Test app with both valid and invalid SDK usage mixed together",
   "private": true,
   "dependencies": {

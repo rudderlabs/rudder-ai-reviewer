@@ -1,5 +1,6 @@
 /**
  * RudderStack Analytics Service
+ * Test app for PR reviewer action
  */
 import { RudderAnalytics } from '@rudderstack/analytics-js';
 

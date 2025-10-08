@@ -1,6 +1,6 @@
 import { RudderAnalytics } from '@rudderstack/analytics-js';
 
-// Initialize SDK
+// Initialize SDK - Test app for PR reviewer action
 const rudderanalytics = new RudderAnalytics();
 rudderanalytics.load('WRITE_KEY', 'https://dataplane.rudderstack.com', {
   integrations: { All: true },

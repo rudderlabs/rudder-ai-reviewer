@@ -1,5 +1,6 @@
 /**
  * Test app with mixed valid and invalid SDK usage
+ * Test app for PR reviewer action
  */
 import { RudderAnalytics } from '@rudderstack/analytics-js';
 

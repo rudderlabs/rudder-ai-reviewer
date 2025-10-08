@@ -90716,7 +90716,8 @@ async function postAnalysisReport(sdkDetection, validation, changes, options) {
     }
 }
 /**
- * Hides previous reviews by dismissing them as outdated
+ * Clears previous inline review comments
+ * Note: Reviews themselves cannot be deleted or dismissed (GitHub API limitation)
  */
 async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
     const octokit = github.getOctokit(token);
@@ -90729,37 +90730,12 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
             pull_number: pullNumber,
         });
         const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
-        // Get all reviews on the PR
-        const { data: reviews } = await octokit.rest.pulls.listReviews({
-            owner,
-            repo,
-            pull_number: pullNumber,
-        });
-        core.info(`Found ${reviews.length} total review(s) on PR`);
-        // Identify our reviews by:
-        // 1. Reviews that have our inline comments attached
-        // 2. Reviews with our identifiers in the body (for reviews with no inline comments)
-        const reviewIdsWithOurComments = new Set(ourExistingComments.map(c => c.pull_request_review_id).filter(id => id != null));
-        const ourReviews = reviews.filter((review) => {
-            // Match by inline comments
-            if (reviewIdsWithOurComments.has(review.id) && review.state === 'COMMENTED') {
-                return true;
-            }
-            // Match by review body content (for reviews with no inline comments)
-            const hasOurContent = review.body && (review.body.includes('💡 Suggestions') ||
-                review.body.includes('📍 Issues in Files Outside PR'));
-            return hasOurContent && review.state === 'COMMENTED';
-        });
-        core.info(`Found ${ourExistingComments.length} inline comment(s) and ${ourReviews.length} review(s) to hide`);
-        // Log each review for debugging
-        reviews.forEach((review) => {
-            const matchByComments = reviewIdsWithOurComments.has(review.id);
-            const matchByBody = review.body && (review.body.includes('💡 Suggestions') ||
-                review.body.includes('📍 Issues in Files Outside PR'));
-            core.info(`Review #${review.id}: state=${review.state}, matchByComments=${matchByComments}, matchByBody=${matchByBody}`);
-        });
+        if (ourExistingComments.length === 0) {
+            core.info('No previous inline comments to clear');
+            return;
+        }
+        core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
         let deletedCount = 0;
-        let dismissedCount = 0;
         // Delete individual review comments
         for (const comment of ourExistingComments) {
             try {
@@ -90775,25 +90751,10 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
                 core.warning(`Failed to delete comment ${comment.id}: ${errorMessage}`);
             }
         }
-        // Dismiss our reviews (this minimizes them to reduce clutter)
-        for (const review of ourReviews) {
-            try {
-                await octokit.rest.pulls.dismissReview({
-                    owner,
-                    repo,
-                    pull_number: pullNumber,
-                    review_id: review.id,
-                    message: 'Superseded by new analysis',
-                });
-                dismissedCount++;
-                core.info(`✅ Dismissed review ${review.id}`);
-            }
-            catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                core.warning(`Failed to dismiss review ${review.id}: ${errorMessage}`);
-            }
+        core.info(`✅ Cleared ${deletedCount} inline comment(s)`);
+        if (deletedCount > 0) {
+            core.info('ℹ️ Note: Reviews remain visible (cannot be deleted via GitHub API)');
         }
-        core.info(`✅ Deleted ${deletedCount} comment(s) and dismissed ${dismissedCount} review(s)`);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

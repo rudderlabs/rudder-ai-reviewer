@@ -1,4 +1,5 @@
 // Simple app with no RudderStack SDK
+// Test app for PR reviewer action
 
 function initialize() {
   console.log('App initialized');
