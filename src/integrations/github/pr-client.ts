@@ -267,18 +267,21 @@ async function clearPreviousInlineComments(
 
     core.info(`Found ${reviews.length} total review(s) on PR`);
 
-    // Get current bot user info to identify our reviews
-    const { data: botUser } = await octokit.rest.users.getAuthenticated();
-    core.info(`Bot user: ${botUser.login}`);
-
-    const ourReviews = reviews.filter((review) =>
-      review.user?.login === botUser.login &&
-      review.state === 'COMMENTED'
-    );
+    // Identify our reviews by checking if they contain our comment identifier in the body
+    // We can't use getAuthenticated() as it requires additional permissions
+    const reviewIdentifier = '💡 Suggestions';
+    const ourReviews = reviews.filter((review) => {
+      // Check if review body contains our identifier (suggestions or outside issues sections)
+      const hasIdentifier = review.body?.includes(reviewIdentifier) ||
+                           review.body?.includes('📍 Issues in Files Outside PR');
+      // Only dismiss COMMENTED reviews (not APPROVED or CHANGES_REQUESTED)
+      return hasIdentifier && review.state === 'COMMENTED';
+    });
 
     // Log all reviews for debugging
     reviews.forEach((review) => {
-      core.info(`Review #${review.id}: user=${review.user?.login}, state=${review.state}`);
+      const isOurs = review.body?.includes(reviewIdentifier) || review.body?.includes('📍 Issues in Files Outside PR');
+      core.info(`Review #${review.id}: user=${review.user?.login}, state=${review.state}, isOurs=${isOurs}`);
     });
 
     const totalToClear = ourExistingComments.length + ourReviews.length;
