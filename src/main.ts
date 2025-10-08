@@ -27,7 +27,6 @@ async function run(): Promise<void> {
     core.info('Configuration:');
     core.info(`- Source ID: ${config.sourceId || 'not specified'}`);
     core.info(`- Output verbosity: ${config.outputVerbosity}`);
-    core.info(`- Annotate existing code: ${config.annotateExistingCode}`);
 
     // Run simplified analysis (core functionality that works)
     await runSimplifiedAnalysis(config);

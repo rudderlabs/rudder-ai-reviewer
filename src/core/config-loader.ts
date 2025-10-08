@@ -54,9 +54,8 @@ function loadWorkflowInputs(): ActionConfig {
     configPath: core.getInput('config_path') || '.rudderstack-pr-reviewer.yml',
     filePatterns: parseCommaSeparated(core.getInput('file_patterns')),
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
-    annotateExistingCode: core.getBooleanInput('annotate_existing_code') || false,
     outputVerbosity: (core.getInput('output_verbosity') as any) || 'standard',
-    annotateFilesOutsidePR: core.getBooleanInput('annotate_files_outside_pr') || false,
+    reviewUnchangedFiles: core.getBooleanInput('review_unchanged_files') || false,
   };
 }
 
@@ -118,16 +117,11 @@ function mergeConfigurations(
       ? workflowConfig.outputVerbosity
       : fileConfig.output_format?.verbosity || 'standard';
 
-  // Annotate existing code
-  const annotateExistingCode =
-    workflowConfig.annotateExistingCode || fileConfig.annotate_existing_code || false;
-
   return {
     ...workflowConfig,
     filePatterns,
     excludePatterns,
     outputVerbosity,
-    annotateExistingCode,
   };
 }
 

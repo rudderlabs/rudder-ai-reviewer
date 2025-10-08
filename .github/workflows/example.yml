@@ -24,4 +24,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           output_verbosity: standard # minimal | standard | detailed
           root_directory: testApps/cdn-valid
-          annotate_files_outside_pr: true # Post inline comments even for files not in PR diff (testing only)
+          review_unchanged_files: true # Post inline comments even for files not in PR diff (testing only)

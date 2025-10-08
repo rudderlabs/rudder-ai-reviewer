@@ -30,15 +30,11 @@ inputs:
   exclude_patterns:
     description: 'File patterns to exclude (comma-separated)'
     required: false
-  annotate_existing_code:
-    description: 'Annotate existing code or only changed lines (true/false)'
-    required: false
-    default: 'false'
   output_verbosity:
     description: 'Output verbosity level: minimal, standard, detailed'
     required: false
     default: 'standard'
-  annotate_files_outside_pr:
+  review_unchanged_files:
     description: 'Post inline review comments even for files not changed in the PR (true/false) - for testing purposes only'
     required: false
     default: 'false'

@@ -24,9 +24,8 @@ export interface ActionConfig {
   configPath: string;
   filePatterns?: string[];
   excludePatterns?: string[];
-  annotateExistingCode: boolean;
   outputVerbosity: 'minimal' | 'standard' | 'detailed';
-  annotateFilesOutsidePR: boolean;
+  reviewUnchangedFiles: boolean;
 }
 
 export interface FileConfig {
@@ -34,7 +33,6 @@ export interface FileConfig {
     include?: string[];
     exclude?: string[];
   };
-  annotate_existing_code?: boolean;
   output_format?: {
     verbosity?: 'minimal' | 'standard' | 'detailed';
   };

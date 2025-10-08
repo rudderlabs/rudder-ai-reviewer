@@ -241,9 +241,9 @@ export async function postAnalysisReport(
  */
 export async function postInlineAnnotations(
   annotations: InlineAnnotation[],
-  options: PRCommentOptions & { annotateFilesOutsidePR?: boolean; reviewBody?: string }
+  options: PRCommentOptions & { reviewUnchangedFiles?: boolean; reviewBody?: string }
 ): Promise<void> {
-  const { owner, repo, pullNumber, token, annotateFilesOutsidePR = false, reviewBody } = options;
+  const { owner, repo, pullNumber, token, reviewUnchangedFiles = false, reviewBody } = options;
 
   if (annotations.length === 0) {
     core.info('No inline annotations to post');
@@ -275,7 +275,7 @@ export async function postInlineAnnotations(
     let annotationsToReview = annotationsInDiff;
     let annotationsAsComments: typeof annotations = [];
 
-    if (annotateFilesOutsidePR && annotationsOutsideDiff.length > 0) {
+    if (reviewUnchangedFiles && annotationsOutsideDiff.length > 0) {
       core.info(`⚠️ Testing mode: ${annotationsOutsideDiff.length} annotation(s) are outside PR diff`);
       core.info('Files outside PR diff cannot use review comments - they will be posted as regular PR comments instead');
       annotationsAsComments = annotationsOutsideDiff;

@@ -287732,9 +287732,8 @@ function loadWorkflowInputs() {
         configPath: core.getInput('config_path') || '.rudderstack-pr-reviewer.yml',
         filePatterns: parseCommaSeparated(core.getInput('file_patterns')),
         excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
-        annotateExistingCode: core.getBooleanInput('annotate_existing_code') || false,
         outputVerbosity: core.getInput('output_verbosity') || 'standard',
-        annotateFilesOutsidePR: core.getBooleanInput('annotate_files_outside_pr') || false,
+        reviewUnchangedFiles: core.getBooleanInput('review_unchanged_files') || false,
     };
 }
 /**
@@ -287780,14 +287779,11 @@ function mergeConfigurations(workflowConfig, fileConfig) {
     const outputVerbosity = workflowConfig.outputVerbosity !== 'standard'
         ? workflowConfig.outputVerbosity
         : fileConfig.output_format?.verbosity || 'standard';
-    // Annotate existing code
-    const annotateExistingCode = workflowConfig.annotateExistingCode || fileConfig.annotate_existing_code || false;
     return {
         ...workflowConfig,
         filePatterns,
         excludePatterns,
         outputVerbosity,
-        annotateExistingCode,
     };
 }
 /**
@@ -289187,7 +289183,7 @@ async function runSimplifiedAnalysis(config) {
         result.issues.forEach((issue) => {
             // Check if both file AND specific line are in the PR diff
             const isInPR = changedFilesSet.has(issue.file) && issue.line && (0, github_1.isLineChanged)(diffInfo, issue.file, issue.line);
-            const shouldIncludeOutside = config.annotateFilesOutsidePR;
+            const shouldIncludeOutside = config.reviewUnchangedFiles;
             if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
                 if (isInPR || shouldIncludeOutside) {
                     // Add to inline annotations (will be filtered later in pr-client)
@@ -289221,7 +289217,7 @@ async function runSimplifiedAnalysis(config) {
         // Generate review comment body (in-PR suggestions + outside issues)
         const reviewBody = (0, comment_generator_1.generateReviewComment)(inPRSuggestions, outsideIssues);
         // Prepare outside issues info for summary comment
-        const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
+        const outsideIssuesInfo = config.reviewUnchangedFiles ? {
             errorCount: outsideIssues.errors.length,
             warningCount: outsideIssues.warnings.length,
             suggestionCount: outsideIssues.suggestions.length,
@@ -289239,7 +289235,7 @@ async function runSimplifiedAnalysis(config) {
                 repo: prContext.repo,
                 pullNumber: prContext.prNumber,
                 token: config.githubToken,
-                annotateFilesOutsidePR: config.annotateFilesOutsidePR,
+                reviewUnchangedFiles: config.reviewUnchangedFiles,
                 reviewBody: reviewBody || undefined,
             });
         }
@@ -290074,7 +290070,7 @@ async function postAnalysisReport(sdkDetection, validation, changes, options) {
  * Post inline review comments to PR files (only for changed files by default)
  */
 async function postInlineAnnotations(annotations, options) {
-    const { owner, repo, pullNumber, token, annotateFilesOutsidePR = false, reviewBody } = options;
+    const { owner, repo, pullNumber, token, reviewUnchangedFiles = false, reviewBody } = options;
     if (annotations.length === 0) {
         core.info('No inline annotations to post');
         return;
@@ -290094,7 +290090,7 @@ async function postInlineAnnotations(annotations, options) {
         // Determine which annotations to process
         let annotationsToReview = annotationsInDiff;
         let annotationsAsComments = [];
-        if (annotateFilesOutsidePR && annotationsOutsideDiff.length > 0) {
+        if (reviewUnchangedFiles && annotationsOutsideDiff.length > 0) {
             core.info(`⚠️ Testing mode: ${annotationsOutsideDiff.length} annotation(s) are outside PR diff`);
             core.info('Files outside PR diff cannot use review comments - they will be posted as regular PR comments instead');
             annotationsAsComments = annotationsOutsideDiff;
@@ -291314,7 +291310,6 @@ async function run() {
         core.info('Configuration:');
         core.info(`- Source ID: ${config.sourceId || 'not specified'}`);
         core.info(`- Output verbosity: ${config.outputVerbosity}`);
-        core.info(`- Annotate existing code: ${config.annotateExistingCode}`);
         // Run simplified analysis (core functionality that works)
         await (0, simple_orchestrator_1.runSimplifiedAnalysis)(config);
         core.info('✅ Analysis complete');
