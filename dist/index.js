@@ -89835,8 +89835,12 @@ async function runSimplifiedAnalysis(config) {
         const diffInfo = await (0, github_1.getPRDiff)(prContext.owner, prContext.repo, prContext.prNumber, config.githubToken);
         const changedFilesSet = new Set(changedFiles);
         const inlineAnnotations = [];
-        const outsideIssues = { errors: [], warnings: [] };
-        let outsideSuggestionCount = 0;
+        const outsideIssues = {
+            errors: [],
+            warnings: [],
+            suggestions: [],
+        };
+        const inPRSuggestions = [];
         result.issues.forEach((issue) => {
             // Check if both file AND specific line are in the PR diff
             const isInPR = changedFilesSet.has(issue.file) && issue.line && (0, github_1.isLineChanged)(diffInfo, issue.file, issue.line);
@@ -89861,18 +89865,23 @@ async function runSimplifiedAnalysis(config) {
                     }
                 }
             }
-            // Track outside suggestions
-            if (issue.severity === 'suggestion' && !isInPR && shouldIncludeOutside) {
-                outsideSuggestionCount++;
+            // Track suggestions (separate in-PR from outside)
+            if (issue.severity === 'suggestion') {
+                if (isInPR) {
+                    inPRSuggestions.push(issue);
+                }
+                else if (shouldIncludeOutside) {
+                    outsideIssues.suggestions.push(issue);
+                }
             }
         });
-        // Generate review comment body (suggestions + outside issues)
-        const reviewBody = (0, comment_generator_1.generateReviewComment)(result, outsideIssues);
+        // Generate review comment body (in-PR suggestions + outside issues)
+        const reviewBody = (0, comment_generator_1.generateReviewComment)(inPRSuggestions, outsideIssues);
         // Prepare outside issues info for summary comment
         const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
             errorCount: outsideIssues.errors.length,
             warningCount: outsideIssues.warnings.length,
-            suggestionCount: outsideSuggestionCount,
+            suggestionCount: outsideIssues.suggestions.length,
         } : undefined;
         // Generate and post summary comment with outside issues breakdown
         const comment = (0, comment_generator_1.generatePRComment)(result, {
@@ -91399,22 +91408,23 @@ Currently: ${stage}...
  * Generate PR review comment body (for GitHub review submission)
  * This is the message that accompanies the review and inline comments
  */
-function generateReviewComment(result, outsideIssues) {
-    const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
-    const hasOutsideIssues = outsideIssues && (outsideIssues.errors.length > 0 || outsideIssues.warnings.length > 0);
-    if (suggestions.length === 0 && !hasOutsideIssues) {
+function generateReviewComment(inPRSuggestions, outsideIssues) {
+    const hasOutsideIssues = outsideIssues && (outsideIssues.errors.length > 0 ||
+        outsideIssues.warnings.length > 0 ||
+        outsideIssues.suggestions.length > 0);
+    if (inPRSuggestions.length === 0 && !hasOutsideIssues) {
         return ''; // No review comment needed if no suggestions and no outside issues
     }
     const sections = [];
-    // Suggestions section (collapsible)
-    if (suggestions.length > 0) {
+    // In-PR Suggestions section (collapsible)
+    if (inPRSuggestions.length > 0) {
         const lines = [];
         lines.push('<details>');
-        lines.push(`<summary><strong>💡 Suggestions (${suggestions.length})</strong></summary>\n`);
+        lines.push(`<summary><strong>💡 Suggestions (${inPRSuggestions.length})</strong></summary>\n`);
         lines.push('_Consider these improvements to enhance your tracking implementation:_\n');
         // Group suggestions by file
         const suggestionsByFile = new Map();
-        suggestions.forEach(s => {
+        inPRSuggestions.forEach(s => {
             if (!suggestionsByFile.has(s.file)) {
                 suggestionsByFile.set(s.file, []);
             }
@@ -91441,10 +91451,10 @@ function generateReviewComment(result, outsideIssues) {
     // Issues in files outside PR (collapsible)
     if (hasOutsideIssues) {
         const lines = [];
-        const totalOutside = outsideIssues.errors.length + outsideIssues.warnings.length;
+        const totalOutside = outsideIssues.errors.length + outsideIssues.warnings.length + outsideIssues.suggestions.length;
         lines.push('<details>');
         lines.push(`<summary><strong>📍 Issues in Files Outside PR (${totalOutside})</strong></summary>\n`);
-        lines.push('_These files contain RudderStack SDK issues but are not part of this PR._\n');
+        lines.push('_These issues are in files/lines not changed in this PR._\n');
         // Errors outside PR
         if (outsideIssues.errors.length > 0) {
             lines.push(`#### ❌ Errors (${outsideIssues.errors.length})\n`);
@@ -91467,6 +91477,24 @@ function generateReviewComment(result, outsideIssues) {
         if (outsideIssues.warnings.length > 0) {
             lines.push(`#### ⚠️ Warnings (${outsideIssues.warnings.length})\n`);
             outsideIssues.warnings.forEach(issue => {
+                lines.push(`**${issue.file}:${issue.line}**\n`);
+                lines.push(`${issue.message}\n`);
+                if (issue.impact) {
+                    lines.push(`_Impact:_ ${issue.impact}\n`);
+                }
+                if (issue.fix) {
+                    lines.push('_Suggested fix:_');
+                    lines.push('```javascript');
+                    lines.push(issue.fix);
+                    lines.push('```');
+                }
+                lines.push('');
+            });
+        }
+        // Suggestions outside PR
+        if (outsideIssues.suggestions.length > 0) {
+            lines.push(`#### 💡 Suggestions (${outsideIssues.suggestions.length})\n`);
+            outsideIssues.suggestions.forEach(issue => {
                 lines.push(`**${issue.file}:${issue.line}**\n`);
                 lines.push(`${issue.message}\n`);
                 if (issue.impact) {

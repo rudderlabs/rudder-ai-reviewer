@@ -162,8 +162,12 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     const diffInfo = await getPRDiff(prContext.owner, prContext.repo, prContext.prNumber, config.githubToken);
     const changedFilesSet = new Set(changedFiles);
     const inlineAnnotations: InlineAnnotation[] = [];
-    const outsideIssues = { errors: [] as typeof result.issues, warnings: [] as typeof result.issues };
-    let outsideSuggestionCount = 0;
+    const outsideIssues = {
+      errors: [] as typeof result.issues,
+      warnings: [] as typeof result.issues,
+      suggestions: [] as typeof result.issues,
+    };
+    const inPRSuggestions: typeof result.issues = [];
 
     result.issues.forEach((issue) => {
       // Check if both file AND specific line are in the PR diff
@@ -191,20 +195,24 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
         }
       }
 
-      // Track outside suggestions
-      if (issue.severity === 'suggestion' && !isInPR && shouldIncludeOutside) {
-        outsideSuggestionCount++;
+      // Track suggestions (separate in-PR from outside)
+      if (issue.severity === 'suggestion') {
+        if (isInPR) {
+          inPRSuggestions.push(issue);
+        } else if (shouldIncludeOutside) {
+          outsideIssues.suggestions.push(issue);
+        }
       }
     });
 
-    // Generate review comment body (suggestions + outside issues)
-    const reviewBody = generateReviewComment(result, outsideIssues);
+    // Generate review comment body (in-PR suggestions + outside issues)
+    const reviewBody = generateReviewComment(inPRSuggestions, outsideIssues);
 
     // Prepare outside issues info for summary comment
     const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
       errorCount: outsideIssues.errors.length,
       warningCount: outsideIssues.warnings.length,
-      suggestionCount: outsideSuggestionCount,
+      suggestionCount: outsideIssues.suggestions.length,
     } : undefined;
 
     // Generate and post summary comment with outside issues breakdown
