@@ -7,6 +7,7 @@ import * as core from '@actions/core';
 import type { SDKDetectionResult } from '../../core/sdk-detector';
 import type { ValidationResult } from '../../core/api-validator';
 import type { ChangeDetectionResult } from '../../core/change-detector';
+import { getPRDiff, isLineChanged } from './diff-parser';
 
 export interface PRCommentOptions {
   owner: string;
@@ -318,21 +319,21 @@ export async function postInlineAnnotations(
   try {
     const commentIdentifier = '<!-- rudderstack-sdk-location -->';
 
-    // Get PR files to see what's actually in the diff
-    const { data: prFiles } = await octokit.rest.pulls.listFiles({
-      owner,
-      repo,
-      pull_number: pullNumber,
-    });
-
-    const changedFiles = new Set(prFiles.map((f) => f.filename));
+    // Get PR diff to check which lines are actually in the diff
+    const diffInfo = await getPRDiff(owner, repo, pullNumber, token);
+    const changedFiles = new Set(Array.from(diffInfo.changedFiles.keys()));
 
     core.info(`Changed files in PR: ${Array.from(changedFiles).join(', ')}`);
     core.info(`SDK locations to annotate: ${annotations.map(a => a.path).join(', ')}`);
 
     // Separate annotations into those in PR diff and those outside
-    const annotationsInDiff = annotations.filter((ann) => changedFiles.has(ann.path));
-    const annotationsOutsideDiff = annotations.filter((ann) => !changedFiles.has(ann.path));
+    // Check both file AND specific line are in the diff
+    const annotationsInDiff = annotations.filter((ann) =>
+      changedFiles.has(ann.path) && isLineChanged(diffInfo, ann.path, ann.line)
+    );
+    const annotationsOutsideDiff = annotations.filter((ann) =>
+      !changedFiles.has(ann.path) || !isLineChanged(diffInfo, ann.path, ann.line)
+    );
 
     // Determine which annotations to process
     let annotationsToReview = annotationsInDiff;

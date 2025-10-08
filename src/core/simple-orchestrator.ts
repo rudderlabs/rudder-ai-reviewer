@@ -7,7 +7,7 @@ import * as core from '@actions/core';
 import * as path from 'path';
 import { ActionConfig, AnalysisResult, Issue } from '../types/common';
 import { JavaScriptAnalyzer } from '../analyzers/javascript/javascript-analyzer';
-import { getPRContext, getChangedFiles, postOrUpdateComment, setOutputs } from '../integrations/github';
+import { getPRContext, getChangedFiles, postOrUpdateComment, setOutputs, getPRDiff, isLineChanged } from '../integrations/github';
 import { generatePRComment, generateReviewComment } from '../reporters/comment-generator';
 import { postInlineAnnotations, InlineAnnotation } from '../integrations/github/pr-client';
 
@@ -158,14 +158,16 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
     core.info('Posting inline review comments...');
 
-    // Separate issues into those in PR files and those outside
+    // Get PR diff to check which lines are actually in the diff
+    const diffInfo = await getPRDiff(prContext.owner, prContext.repo, prContext.prNumber, config.githubToken);
     const changedFilesSet = new Set(changedFiles);
     const inlineAnnotations: InlineAnnotation[] = [];
     const outsideIssues = { errors: [] as typeof result.issues, warnings: [] as typeof result.issues };
     let outsideSuggestionCount = 0;
 
     result.issues.forEach((issue) => {
-      const isInPR = changedFilesSet.has(issue.file);
+      // Check if both file AND specific line are in the PR diff
+      const isInPR = changedFilesSet.has(issue.file) && issue.line && isLineChanged(diffInfo, issue.file, issue.line);
       const shouldIncludeOutside = config.annotateFilesOutsidePR;
 
       if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
