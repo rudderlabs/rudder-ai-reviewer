@@ -7,7 +7,7 @@ import * as core from '@actions/core';
 import * as path from 'path';
 import { ActionConfig, AnalysisResult, Issue } from '../types/common';
 import { JavaScriptAnalyzer } from '../analyzers/javascript/javascript-analyzer';
-import { getPRContext, getChangedFiles, postOrUpdateComment, setOutputs } from '../integrations/github';
+import { getPRContext, getChangedFiles, postOrUpdateComment, setOutputs, getPRDiff, isLineChanged } from '../integrations/github';
 import { generatePRComment, generateReviewComment } from '../reporters/comment-generator';
 import { postInlineAnnotations, InlineAnnotation } from '../integrations/github/pr-client';
 
@@ -109,7 +109,7 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
 
     // Step 5: Validate API usage
     core.info('Validating SDK API usage...');
-    const issues = await analyzer.validateAPI(changedFiles, scanPath);
+    const issues = await analyzer.validateAPI(changedFiles, scanPath, repoRoot);
 
     // Step 6: Get files with SDK usage and method call count (pass repoRoot for correct relative paths)
     const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
@@ -158,14 +158,20 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
     core.info('Posting inline review comments...');
 
-    // Separate issues into those in PR files and those outside
+    // Get PR diff to check which lines are actually in the diff
+    const diffInfo = await getPRDiff(prContext.owner, prContext.repo, prContext.prNumber, config.githubToken);
     const changedFilesSet = new Set(changedFiles);
     const inlineAnnotations: InlineAnnotation[] = [];
-    const outsideIssues = { errors: [] as typeof result.issues, warnings: [] as typeof result.issues };
-    let outsideSuggestionCount = 0;
+    const outsideIssues = {
+      errors: [] as typeof result.issues,
+      warnings: [] as typeof result.issues,
+      suggestions: [] as typeof result.issues,
+    };
+    const inPRSuggestions: typeof result.issues = [];
 
     result.issues.forEach((issue) => {
-      const isInPR = changedFilesSet.has(issue.file);
+      // Check if both file AND specific line are in the PR diff
+      const isInPR = changedFilesSet.has(issue.file) && issue.line && isLineChanged(diffInfo, issue.file, issue.line);
       const shouldIncludeOutside = config.annotateFilesOutsidePR;
 
       if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
@@ -189,20 +195,24 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
         }
       }
 
-      // Track outside suggestions
-      if (issue.severity === 'suggestion' && !isInPR && shouldIncludeOutside) {
-        outsideSuggestionCount++;
+      // Track suggestions (separate in-PR from outside)
+      if (issue.severity === 'suggestion') {
+        if (isInPR) {
+          inPRSuggestions.push(issue);
+        } else if (shouldIncludeOutside) {
+          outsideIssues.suggestions.push(issue);
+        }
       }
     });
 
-    // Generate review comment body (suggestions + outside issues)
-    const reviewBody = generateReviewComment(result, outsideIssues);
+    // Generate review comment body (in-PR suggestions + outside issues)
+    const reviewBody = generateReviewComment(inPRSuggestions, outsideIssues);
 
     // Prepare outside issues info for summary comment
     const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
       errorCount: outsideIssues.errors.length,
       warningCount: outsideIssues.warnings.length,
-      suggestionCount: outsideSuggestionCount,
+      suggestionCount: outsideIssues.suggestions.length,
     } : undefined;
 
     // Generate and post summary comment with outside issues breakdown

@@ -87597,9 +87597,10 @@ class JavaScriptAnalyzer extends base_analyzer_1.BaseAnalyzer {
     /**
      * Validate SDK API calls
      */
-    async validateAPI(files, repoPath) {
-        const rootPath = repoPath || process.cwd();
-        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(rootPath);
+    async validateAPI(files, scanPath, repoRoot) {
+        const rootPath = scanPath || process.cwd();
+        const pathBase = repoRoot || rootPath;
+        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(rootPath, pathBase);
         const validation = await (0, api_validator_1.validateSDKMethodCalls)(scanResult.methodCalls);
         const issues = [];
         [...validation.errors, ...validation.warnings, ...validation.suggestions].forEach((issue) => {
@@ -89790,7 +89791,7 @@ async function runSimplifiedAnalysis(config) {
         core.info(`SDK detected: ${sdkUsage.type} v${sdkUsage.version || 'unknown'}`);
         // Step 5: Validate API usage
         core.info('Validating SDK API usage...');
-        const issues = await analyzer.validateAPI(changedFiles, scanPath);
+        const issues = await analyzer.validateAPI(changedFiles, scanPath, repoRoot);
         // Step 6: Get files with SDK usage and method call count (pass repoRoot for correct relative paths)
         const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
         const methodCallCount = await analyzer.getMethodCallCount(scanPath, repoRoot);
@@ -89830,13 +89831,19 @@ async function runSimplifiedAnalysis(config) {
         };
         // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
         core.info('Posting inline review comments...');
-        // Separate issues into those in PR files and those outside
+        // Get PR diff to check which lines are actually in the diff
+        const diffInfo = await (0, github_1.getPRDiff)(prContext.owner, prContext.repo, prContext.prNumber, config.githubToken);
         const changedFilesSet = new Set(changedFiles);
         const inlineAnnotations = [];
-        const outsideIssues = { errors: [], warnings: [] };
-        let outsideSuggestionCount = 0;
+        const outsideIssues = {
+            errors: [],
+            warnings: [],
+            suggestions: [],
+        };
+        const inPRSuggestions = [];
         result.issues.forEach((issue) => {
-            const isInPR = changedFilesSet.has(issue.file);
+            // Check if both file AND specific line are in the PR diff
+            const isInPR = changedFilesSet.has(issue.file) && issue.line && (0, github_1.isLineChanged)(diffInfo, issue.file, issue.line);
             const shouldIncludeOutside = config.annotateFilesOutsidePR;
             if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
                 if (isInPR || shouldIncludeOutside) {
@@ -89858,18 +89865,23 @@ async function runSimplifiedAnalysis(config) {
                     }
                 }
             }
-            // Track outside suggestions
-            if (issue.severity === 'suggestion' && !isInPR && shouldIncludeOutside) {
-                outsideSuggestionCount++;
+            // Track suggestions (separate in-PR from outside)
+            if (issue.severity === 'suggestion') {
+                if (isInPR) {
+                    inPRSuggestions.push(issue);
+                }
+                else if (shouldIncludeOutside) {
+                    outsideIssues.suggestions.push(issue);
+                }
             }
         });
-        // Generate review comment body (suggestions + outside issues)
-        const reviewBody = (0, comment_generator_1.generateReviewComment)(result, outsideIssues);
+        // Generate review comment body (in-PR suggestions + outside issues)
+        const reviewBody = (0, comment_generator_1.generateReviewComment)(inPRSuggestions, outsideIssues);
         // Prepare outside issues info for summary comment
         const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
             errorCount: outsideIssues.errors.length,
             warningCount: outsideIssues.warnings.length,
-            suggestionCount: outsideSuggestionCount,
+            suggestionCount: outsideIssues.suggestions.length,
         } : undefined;
         // Generate and post summary comment with outside issues breakdown
         const comment = (0, comment_generator_1.generatePRComment)(result, {
@@ -90540,6 +90552,7 @@ exports.postAnalysisReport = postAnalysisReport;
 exports.postInlineAnnotations = postInlineAnnotations;
 const github = __importStar(__nccwpck_require__(93228));
 const core = __importStar(__nccwpck_require__(37484));
+const diff_parser_1 = __nccwpck_require__(36342);
 /**
  * Post simple comment when no SDK is detected
  */
@@ -90716,7 +90729,8 @@ async function postAnalysisReport(sdkDetection, validation, changes, options) {
     }
 }
 /**
- * Hides previous reviews by dismissing them as outdated
+ * Clears previous inline review comments
+ * Note: Reviews themselves cannot be deleted or dismissed (GitHub API limitation)
  */
 async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
     const octokit = github.getOctokit(token);
@@ -90729,37 +90743,12 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
             pull_number: pullNumber,
         });
         const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
-        // Get all reviews on the PR
-        const { data: reviews } = await octokit.rest.pulls.listReviews({
-            owner,
-            repo,
-            pull_number: pullNumber,
-        });
-        core.info(`Found ${reviews.length} total review(s) on PR`);
-        // Identify our reviews by:
-        // 1. Reviews that have our inline comments attached
-        // 2. Reviews with our identifiers in the body (for reviews with no inline comments)
-        const reviewIdsWithOurComments = new Set(ourExistingComments.map(c => c.pull_request_review_id).filter(id => id != null));
-        const ourReviews = reviews.filter((review) => {
-            // Match by inline comments
-            if (reviewIdsWithOurComments.has(review.id) && review.state === 'COMMENTED') {
-                return true;
-            }
-            // Match by review body content (for reviews with no inline comments)
-            const hasOurContent = review.body && (review.body.includes('💡 Suggestions') ||
-                review.body.includes('📍 Issues in Files Outside PR'));
-            return hasOurContent && review.state === 'COMMENTED';
-        });
-        core.info(`Found ${ourExistingComments.length} inline comment(s) and ${ourReviews.length} review(s) to hide`);
-        // Log each review for debugging
-        reviews.forEach((review) => {
-            const matchByComments = reviewIdsWithOurComments.has(review.id);
-            const matchByBody = review.body && (review.body.includes('💡 Suggestions') ||
-                review.body.includes('📍 Issues in Files Outside PR'));
-            core.info(`Review #${review.id}: state=${review.state}, matchByComments=${matchByComments}, matchByBody=${matchByBody}`);
-        });
+        if (ourExistingComments.length === 0) {
+            core.info('No previous inline comments to clear');
+            return;
+        }
+        core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
         let deletedCount = 0;
-        let dismissedCount = 0;
         // Delete individual review comments
         for (const comment of ourExistingComments) {
             try {
@@ -90775,25 +90764,10 @@ async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
                 core.warning(`Failed to delete comment ${comment.id}: ${errorMessage}`);
             }
         }
-        // Dismiss our reviews (this minimizes them to reduce clutter)
-        for (const review of ourReviews) {
-            try {
-                await octokit.rest.pulls.dismissReview({
-                    owner,
-                    repo,
-                    pull_number: pullNumber,
-                    review_id: review.id,
-                    message: 'Superseded by new analysis',
-                });
-                dismissedCount++;
-                core.info(`✅ Dismissed review ${review.id}`);
-            }
-            catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                core.warning(`Failed to dismiss review ${review.id}: ${errorMessage}`);
-            }
+        core.info(`✅ Cleared ${deletedCount} inline comment(s)`);
+        if (deletedCount > 0) {
+            core.info('ℹ️ Note: Reviews remain visible (cannot be deleted via GitHub API)');
         }
-        core.info(`✅ Deleted ${deletedCount} comment(s) and dismissed ${dismissedCount} review(s)`);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -90817,18 +90791,15 @@ async function postInlineAnnotations(annotations, options) {
     const octokit = github.getOctokit(token);
     try {
         const commentIdentifier = '<!-- rudderstack-sdk-location -->';
-        // Get PR files to see what's actually in the diff
-        const { data: prFiles } = await octokit.rest.pulls.listFiles({
-            owner,
-            repo,
-            pull_number: pullNumber,
-        });
-        const changedFiles = new Set(prFiles.map((f) => f.filename));
+        // Get PR diff to check which lines are actually in the diff
+        const diffInfo = await (0, diff_parser_1.getPRDiff)(owner, repo, pullNumber, token);
+        const changedFiles = new Set(Array.from(diffInfo.changedFiles.keys()));
         core.info(`Changed files in PR: ${Array.from(changedFiles).join(', ')}`);
         core.info(`SDK locations to annotate: ${annotations.map(a => a.path).join(', ')}`);
         // Separate annotations into those in PR diff and those outside
-        const annotationsInDiff = annotations.filter((ann) => changedFiles.has(ann.path));
-        const annotationsOutsideDiff = annotations.filter((ann) => !changedFiles.has(ann.path));
+        // Check both file AND specific line are in the diff
+        const annotationsInDiff = annotations.filter((ann) => changedFiles.has(ann.path) && (0, diff_parser_1.isLineChanged)(diffInfo, ann.path, ann.line));
+        const annotationsOutsideDiff = annotations.filter((ann) => !changedFiles.has(ann.path) || !(0, diff_parser_1.isLineChanged)(diffInfo, ann.path, ann.line));
         // Determine which annotations to process
         let annotationsToReview = annotationsInDiff;
         let annotationsAsComments = [];
@@ -91437,22 +91408,23 @@ Currently: ${stage}...
  * Generate PR review comment body (for GitHub review submission)
  * This is the message that accompanies the review and inline comments
  */
-function generateReviewComment(result, outsideIssues) {
-    const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
-    const hasOutsideIssues = outsideIssues && (outsideIssues.errors.length > 0 || outsideIssues.warnings.length > 0);
-    if (suggestions.length === 0 && !hasOutsideIssues) {
+function generateReviewComment(inPRSuggestions, outsideIssues) {
+    const hasOutsideIssues = outsideIssues && (outsideIssues.errors.length > 0 ||
+        outsideIssues.warnings.length > 0 ||
+        outsideIssues.suggestions.length > 0);
+    if (inPRSuggestions.length === 0 && !hasOutsideIssues) {
         return ''; // No review comment needed if no suggestions and no outside issues
     }
     const sections = [];
-    // Suggestions section (collapsible)
-    if (suggestions.length > 0) {
+    // In-PR Suggestions section (collapsible)
+    if (inPRSuggestions.length > 0) {
         const lines = [];
         lines.push('<details>');
-        lines.push(`<summary><strong>💡 Suggestions (${suggestions.length})</strong></summary>\n`);
+        lines.push(`<summary><strong>💡 Suggestions (${inPRSuggestions.length})</strong></summary>\n`);
         lines.push('_Consider these improvements to enhance your tracking implementation:_\n');
         // Group suggestions by file
         const suggestionsByFile = new Map();
-        suggestions.forEach(s => {
+        inPRSuggestions.forEach(s => {
             if (!suggestionsByFile.has(s.file)) {
                 suggestionsByFile.set(s.file, []);
             }
@@ -91479,10 +91451,10 @@ function generateReviewComment(result, outsideIssues) {
     // Issues in files outside PR (collapsible)
     if (hasOutsideIssues) {
         const lines = [];
-        const totalOutside = outsideIssues.errors.length + outsideIssues.warnings.length;
+        const totalOutside = outsideIssues.errors.length + outsideIssues.warnings.length + outsideIssues.suggestions.length;
         lines.push('<details>');
         lines.push(`<summary><strong>📍 Issues in Files Outside PR (${totalOutside})</strong></summary>\n`);
-        lines.push('_These files contain RudderStack SDK issues but are not part of this PR._\n');
+        lines.push('_These issues are in files/lines not changed in this PR._\n');
         // Errors outside PR
         if (outsideIssues.errors.length > 0) {
             lines.push(`#### ❌ Errors (${outsideIssues.errors.length})\n`);
@@ -91505,6 +91477,24 @@ function generateReviewComment(result, outsideIssues) {
         if (outsideIssues.warnings.length > 0) {
             lines.push(`#### ⚠️ Warnings (${outsideIssues.warnings.length})\n`);
             outsideIssues.warnings.forEach(issue => {
+                lines.push(`**${issue.file}:${issue.line}**\n`);
+                lines.push(`${issue.message}\n`);
+                if (issue.impact) {
+                    lines.push(`_Impact:_ ${issue.impact}\n`);
+                }
+                if (issue.fix) {
+                    lines.push('_Suggested fix:_');
+                    lines.push('```javascript');
+                    lines.push(issue.fix);
+                    lines.push('```');
+                }
+                lines.push('');
+            });
+        }
+        // Suggestions outside PR
+        if (outsideIssues.suggestions.length > 0) {
+            lines.push(`#### 💡 Suggestions (${outsideIssues.suggestions.length})\n`);
+            outsideIssues.suggestions.forEach(issue => {
                 lines.push(`**${issue.file}:${issue.line}**\n`);
                 lines.push(`${issue.message}\n`);
                 if (issue.impact) {

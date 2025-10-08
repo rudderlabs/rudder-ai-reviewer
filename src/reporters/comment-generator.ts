@@ -475,28 +475,31 @@ Currently: ${stage}...
  * This is the message that accompanies the review and inline comments
  */
 export function generateReviewComment(
-  result: AnalysisResult,
-  outsideIssues?: { errors: Issue[]; warnings: Issue[] }
+  inPRSuggestions: Issue[],
+  outsideIssues?: { errors: Issue[]; warnings: Issue[]; suggestions: Issue[] }
 ): string {
-  const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
-  const hasOutsideIssues = outsideIssues && (outsideIssues.errors.length > 0 || outsideIssues.warnings.length > 0);
+  const hasOutsideIssues = outsideIssues && (
+    outsideIssues.errors.length > 0 ||
+    outsideIssues.warnings.length > 0 ||
+    outsideIssues.suggestions.length > 0
+  );
 
-  if (suggestions.length === 0 && !hasOutsideIssues) {
+  if (inPRSuggestions.length === 0 && !hasOutsideIssues) {
     return ''; // No review comment needed if no suggestions and no outside issues
   }
 
   const sections: string[] = [];
 
-  // Suggestions section (collapsible)
-  if (suggestions.length > 0) {
+  // In-PR Suggestions section (collapsible)
+  if (inPRSuggestions.length > 0) {
     const lines: string[] = [];
     lines.push('<details>');
-    lines.push(`<summary><strong>💡 Suggestions (${suggestions.length})</strong></summary>\n`);
+    lines.push(`<summary><strong>💡 Suggestions (${inPRSuggestions.length})</strong></summary>\n`);
     lines.push('_Consider these improvements to enhance your tracking implementation:_\n');
 
     // Group suggestions by file
-    const suggestionsByFile = new Map<string, typeof suggestions>();
-    suggestions.forEach(s => {
+    const suggestionsByFile = new Map<string, typeof inPRSuggestions>();
+    inPRSuggestions.forEach(s => {
       if (!suggestionsByFile.has(s.file)) {
         suggestionsByFile.set(s.file, []);
       }
@@ -526,10 +529,10 @@ export function generateReviewComment(
   // Issues in files outside PR (collapsible)
   if (hasOutsideIssues) {
     const lines: string[] = [];
-    const totalOutside = outsideIssues.errors.length + outsideIssues.warnings.length;
+    const totalOutside = outsideIssues.errors.length + outsideIssues.warnings.length + outsideIssues.suggestions.length;
     lines.push('<details>');
     lines.push(`<summary><strong>📍 Issues in Files Outside PR (${totalOutside})</strong></summary>\n`);
-    lines.push('_These files contain RudderStack SDK issues but are not part of this PR._\n');
+    lines.push('_These issues are in files/lines not changed in this PR._\n');
 
     // Errors outside PR
     if (outsideIssues.errors.length > 0) {
@@ -554,6 +557,25 @@ export function generateReviewComment(
     if (outsideIssues.warnings.length > 0) {
       lines.push(`#### ⚠️ Warnings (${outsideIssues.warnings.length})\n`);
       outsideIssues.warnings.forEach(issue => {
+        lines.push(`**${issue.file}:${issue.line}**\n`);
+        lines.push(`${issue.message}\n`);
+        if (issue.impact) {
+          lines.push(`_Impact:_ ${issue.impact}\n`);
+        }
+        if (issue.fix) {
+          lines.push('_Suggested fix:_');
+          lines.push('```javascript');
+          lines.push(issue.fix);
+          lines.push('```');
+        }
+        lines.push('');
+      });
+    }
+
+    // Suggestions outside PR
+    if (outsideIssues.suggestions.length > 0) {
+      lines.push(`#### 💡 Suggestions (${outsideIssues.suggestions.length})\n`);
+      outsideIssues.suggestions.forEach(issue => {
         lines.push(`**${issue.file}:${issue.line}**\n`);
         lines.push(`${issue.message}\n`);
         if (issue.impact) {
