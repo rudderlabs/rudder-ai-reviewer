@@ -26,7 +26,6 @@ export interface ActionConfig {
   excludePatterns?: string[];
   annotateExistingCode: boolean;
   outputVerbosity: 'minimal' | 'standard' | 'detailed';
-  clearPreviousComments: boolean;
   annotateFilesOutsidePR: boolean;
 }
 

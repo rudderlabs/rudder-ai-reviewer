@@ -56,7 +56,6 @@ function loadWorkflowInputs(): ActionConfig {
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
     annotateExistingCode: core.getBooleanInput('annotate_existing_code') || false,
     outputVerbosity: (core.getInput('output_verbosity') as any) || 'standard',
-    clearPreviousComments: core.getBooleanInput('clear_previous_comments') || false,
     annotateFilesOutsidePR: core.getBooleanInput('annotate_files_outside_pr') || false,
   };
 }

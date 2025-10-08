@@ -349,7 +349,6 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
         repo: prContext.repo,
         pullNumber: prContext.prNumber,
         token: config.githubToken,
-        clearPrevious: config.clearPreviousComments,
         annotateFilesOutsidePR: config.annotateFilesOutsidePR,
         reviewBody: reviewBody || undefined,
       });
