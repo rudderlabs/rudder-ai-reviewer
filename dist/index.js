@@ -87597,9 +87597,10 @@ class JavaScriptAnalyzer extends base_analyzer_1.BaseAnalyzer {
     /**
      * Validate SDK API calls
      */
-    async validateAPI(files, repoPath) {
-        const rootPath = repoPath || process.cwd();
-        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(rootPath);
+    async validateAPI(files, scanPath, repoRoot) {
+        const rootPath = scanPath || process.cwd();
+        const pathBase = repoRoot || rootPath;
+        const scanResult = await (0, file_scanner_1.scanFilesForSDKUsage)(rootPath, pathBase);
         const validation = await (0, api_validator_1.validateSDKMethodCalls)(scanResult.methodCalls);
         const issues = [];
         [...validation.errors, ...validation.warnings, ...validation.suggestions].forEach((issue) => {
@@ -89790,7 +89791,7 @@ async function runSimplifiedAnalysis(config) {
         core.info(`SDK detected: ${sdkUsage.type} v${sdkUsage.version || 'unknown'}`);
         // Step 5: Validate API usage
         core.info('Validating SDK API usage...');
-        const issues = await analyzer.validateAPI(changedFiles, scanPath);
+        const issues = await analyzer.validateAPI(changedFiles, scanPath, repoRoot);
         // Step 6: Get files with SDK usage and method call count (pass repoRoot for correct relative paths)
         const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
         const methodCallCount = await analyzer.getMethodCallCount(scanPath, repoRoot);

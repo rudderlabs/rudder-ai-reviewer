@@ -171,10 +171,11 @@ export class JavaScriptAnalyzer extends BaseAnalyzer {
   /**
    * Validate SDK API calls
    */
-  async validateAPI(files: string[], repoPath?: string): Promise<Issue[]> {
-    const rootPath = repoPath || process.cwd();
+  async validateAPI(files: string[], scanPath?: string, repoRoot?: string): Promise<Issue[]> {
+    const rootPath = scanPath || process.cwd();
+    const pathBase = repoRoot || rootPath;
 
-    const scanResult = await scanFilesForSDKUsage(rootPath);
+    const scanResult = await scanFilesForSDKUsage(rootPath, pathBase);
     const validation = await validateSDKMethodCalls(scanResult.methodCalls);
 
     const issues: Issue[] = [];

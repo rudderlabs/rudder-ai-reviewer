@@ -109,7 +109,7 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
 
     // Step 5: Validate API usage
     core.info('Validating SDK API usage...');
-    const issues = await analyzer.validateAPI(changedFiles, scanPath);
+    const issues = await analyzer.validateAPI(changedFiles, scanPath, repoRoot);
 
     // Step 6: Get files with SDK usage and method call count (pass repoRoot for correct relative paths)
     const filesWithSDK = await analyzer.getFilesWithSDK(scanPath, repoRoot);
