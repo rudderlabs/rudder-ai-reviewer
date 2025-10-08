@@ -322,18 +322,23 @@ export async function postInlineAnnotations(
     core.info(`Changed files in PR: ${Array.from(changedFiles).join(', ')}`);
     core.info(`SDK locations to annotate: ${annotations.map(a => a.path).join(', ')}`);
 
-    // Filter annotations based on annotateFilesOutsidePR option
-    const annotationsInDiff = annotateFilesOutsidePR
-      ? annotations
-      : annotations.filter((ann) => changedFiles.has(ann.path));
+    // Separate annotations into those in PR diff and those outside
+    const annotationsInDiff = annotations.filter((ann) => changedFiles.has(ann.path));
+    const annotationsOutsideDiff = annotations.filter((ann) => !changedFiles.has(ann.path));
 
-    if (annotationsInDiff.length === 0) {
-      core.info('No SDK locations in changed files (see main comment for all locations)');
-      return;
+    // Determine which annotations to process
+    let annotationsToReview = annotationsInDiff;
+    let annotationsAsComments: typeof annotations = [];
+
+    if (annotateFilesOutsidePR && annotationsOutsideDiff.length > 0) {
+      core.info(`⚠️ Testing mode: ${annotationsOutsideDiff.length} annotation(s) are outside PR diff`);
+      core.info('Files outside PR diff cannot use review comments - they will be posted as regular PR comments instead');
+      annotationsAsComments = annotationsOutsideDiff;
     }
 
-    if (annotateFilesOutsidePR) {
-      core.info(`⚠️ Testing mode: Annotating ${annotationsInDiff.length} location(s) including files outside PR diff`);
+    if (annotationsToReview.length === 0 && annotationsAsComments.length === 0) {
+      core.info('No SDK locations to annotate');
+      return;
     }
 
     // Get the PR to get commit SHA
@@ -346,13 +351,13 @@ export async function postInlineAnnotations(
     const commitSha = pr.head.sha;
 
     // If we cleared previous comments, all annotations are new
-    let newAnnotations: typeof annotationsInDiff;
-    let updatedAnnotations: Array<{ ann: typeof annotationsInDiff[0]; existingComment: any }> = [];
+    let newAnnotations: typeof annotationsToReview;
+    let updatedAnnotations: Array<{ ann: typeof annotationsToReview[0]; existingComment: any }> = [];
 
     if (clearPrevious) {
       // All annotations are new since we cleared previous comments
-      newAnnotations = annotationsInDiff;
-      core.info(`Creating ${newAnnotations.length} new comment(s)`);
+      newAnnotations = annotationsToReview;
+      core.info(`Creating ${newAnnotations.length} new review comment(s)`);
     } else {
       // Get existing review comments to check what needs updating
       const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
@@ -375,7 +380,7 @@ export async function postInlineAnnotations(
       // Separate annotations into new and updates
       newAnnotations = [];
 
-      for (const ann of annotationsInDiff) {
+      for (const ann of annotationsToReview) {
         const location = `${ann.path}:${ann.line}`;
         const existingComment = existingCommentsByLocation.get(location);
 
@@ -470,7 +475,35 @@ export async function postInlineAnnotations(
 
     const totalSuccess = createCount + updateCount;
     if (totalSuccess > 0) {
-      core.info(`✅ Posted ${createCount} new and updated ${updateCount} inline comment(s)`);
+      core.info(`✅ Posted ${createCount} new and updated ${updateCount} inline review comment(s)`);
+    }
+
+    // Post annotations outside diff as regular PR comments (for testing mode)
+    if (annotationsAsComments.length > 0) {
+      core.info(`Posting ${annotationsAsComments.length} annotation(s) outside PR diff as regular comments...`);
+
+      let commentBody = '## 📍 SDK Issues in Files Outside PR\n\n';
+      commentBody += '_These files contain RudderStack SDK issues but are not part of this PR._\n\n';
+
+      annotationsAsComments.forEach((ann) => {
+        const icon = ann.annotation_level === 'failure' ? '❌' : '⚠️';
+        commentBody += `### ${icon} ${ann.path}:${ann.line}\n\n`;
+        commentBody += `${ann.message}\n\n`;
+        commentBody += '---\n\n';
+      });
+
+      try {
+        await octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: pullNumber,
+          body: commentBody,
+        });
+        core.info(`✅ Posted summary comment for ${annotationsAsComments.length} annotation(s) outside PR diff`);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to post comment for outside-diff annotations: ${errorMessage}`);
+      }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
