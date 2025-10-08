@@ -267,17 +267,37 @@ async function clearPreviousInlineComments(
 
     core.info(`Found ${reviews.length} total review(s) on PR`);
 
-    // Identify our reviews that have the comment identifier in their associated comments
-    // We'll match reviews that have our inline comments
+    // Identify our reviews by:
+    // 1. Reviews that have our inline comments attached
+    // 2. Reviews with our identifiers in the body (for reviews with no inline comments)
     const reviewIdsWithOurComments = new Set(
       ourExistingComments.map(c => c.pull_request_review_id).filter(id => id != null)
     );
 
-    const ourReviews = reviews.filter((review) =>
-      reviewIdsWithOurComments.has(review.id) && review.state === 'COMMENTED'
-    );
+    const ourReviews = reviews.filter((review) => {
+      // Match by inline comments
+      if (reviewIdsWithOurComments.has(review.id) && review.state === 'COMMENTED') {
+        return true;
+      }
+      // Match by review body content (for reviews with no inline comments)
+      const hasOurContent = review.body && (
+        review.body.includes('💡 Suggestions') ||
+        review.body.includes('📍 Issues in Files Outside PR')
+      );
+      return hasOurContent && review.state === 'COMMENTED';
+    });
 
     core.info(`Found ${ourExistingComments.length} inline comment(s) and ${ourReviews.length} review(s) to hide`);
+
+    // Log each review for debugging
+    reviews.forEach((review) => {
+      const matchByComments = reviewIdsWithOurComments.has(review.id);
+      const matchByBody = review.body && (
+        review.body.includes('💡 Suggestions') ||
+        review.body.includes('📍 Issues in Files Outside PR')
+      );
+      core.info(`Review #${review.id}: state=${review.state}, matchByComments=${matchByComments}, matchByBody=${matchByBody}`);
+    });
 
     let deletedCount = 0;
     let dismissedCount = 0;
@@ -297,7 +317,7 @@ async function clearPreviousInlineComments(
       }
     }
 
-    // Dismiss our reviews as outdated (this "hides" them)
+    // Dismiss our reviews (this minimizes them to reduce clutter)
     for (const review of ourReviews) {
       try {
         await octokit.rest.pulls.dismissReview({
@@ -305,10 +325,10 @@ async function clearPreviousInlineComments(
           repo,
           pull_number: pullNumber,
           review_id: review.id,
-          message: '⚠️ Outdated - New analysis available below',
+          message: 'Superseded by new analysis',
         });
         dismissedCount++;
-        core.info(`✅ Dismissed review ${review.id} as outdated`);
+        core.info(`✅ Dismissed review ${review.id}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         core.warning(`Failed to dismiss review ${review.id}: ${errorMessage}`);
