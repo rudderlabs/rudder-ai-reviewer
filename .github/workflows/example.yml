@@ -24,3 +24,4 @@ jobs:
           output_verbosity: standard # minimal | standard | detailed
           root_directory: testApps/cdn-invalid
           clear_previous_comments: true # Clear all previous inline comments on each run (useful for development)
+          annotate_files_outside_pr: true # Post inline comments even for files not in PR diff (testing only)

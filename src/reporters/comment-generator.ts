@@ -37,22 +37,20 @@ export function generatePRComment(
   // Files Analyzed
   sections.push(generateFilesSection(result.filesAnalyzed));
 
-  // Errors (always expanded)
+  // Note about where to find detailed issues
   const errors = result.issues.filter((i) => i.severity === 'error');
-  if (errors.length > 0) {
-    sections.push(generateIssuesSection('error', errors, false));
-  }
-
-  // Warnings (collapsible)
   const warnings = result.issues.filter((i) => i.severity === 'warning');
-  if (warnings.length > 0) {
-    sections.push(generateIssuesSection('warning', warnings, options.verbosity !== 'detailed'));
-  }
-
-  // Suggestions (collapsible)
   const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
-  if (suggestions.length > 0) {
-    sections.push(generateIssuesSection('suggestion', suggestions, true));
+
+  if (errors.length > 0 || warnings.length > 0 || suggestions.length > 0) {
+    const messages: string[] = [];
+    if (errors.length > 0 || warnings.length > 0) {
+      messages.push('**Errors and warnings** are shown as inline review comments on specific lines');
+    }
+    if (suggestions.length > 0) {
+      messages.push('**Suggestions** are included in the review comment below');
+    }
+    sections.push(messages.join('\n\n') + '\n');
   }
 
   // Destination Impacts (collapsible)
@@ -399,4 +397,48 @@ export function generateProgressComment(stage: string): string {
 Currently: ${stage}...
 
 *This comment will be updated with results when analysis is complete.*`;
+}
+
+/**
+ * Generate PR review comment body (for GitHub review submission)
+ * This is the message that accompanies the review and inline comments
+ */
+export function generateReviewComment(result: AnalysisResult): string {
+  const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
+
+  if (suggestions.length === 0) {
+    return ''; // No review comment needed if no suggestions
+  }
+
+  const lines: string[] = [];
+
+  lines.push('## 💡 Suggestions\n');
+  lines.push('_Consider these improvements to enhance your tracking implementation:_\n');
+
+  // Group suggestions by file
+  const suggestionsByFile = new Map<string, typeof suggestions>();
+  suggestions.forEach(s => {
+    if (!suggestionsByFile.has(s.file)) {
+      suggestionsByFile.set(s.file, []);
+    }
+    suggestionsByFile.get(s.file)!.push(s);
+  });
+
+  suggestionsByFile.forEach((fileSuggestions, file) => {
+    lines.push(`### 📄 ${file}\n`);
+    fileSuggestions.forEach(s => {
+      lines.push(`**Line ${s.line}:** ${s.message}\n`);
+      if (s.impact) {
+        lines.push(`_Impact:_ ${s.impact}\n`);
+      }
+      if (s.fix) {
+        lines.push('_Suggested fix:_');
+        lines.push('```javascript');
+        lines.push(s.fix);
+        lines.push('```\n');
+      }
+    });
+  });
+
+  return lines.join('\n');
 }

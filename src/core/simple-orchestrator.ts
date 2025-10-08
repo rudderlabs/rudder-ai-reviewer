@@ -5,10 +5,38 @@
 
 import * as core from '@actions/core';
 import * as path from 'path';
-import { ActionConfig, AnalysisResult } from '../types/common';
+import { ActionConfig, AnalysisResult, Issue } from '../types/common';
 import { JavaScriptAnalyzer } from '../analyzers/javascript/javascript-analyzer';
 import { getPRContext, getChangedFiles, postOrUpdateComment, setOutputs } from '../integrations/github';
-import { generatePRComment } from '../reporters/comment-generator';
+import { generatePRComment, generateReviewComment } from '../reporters/comment-generator';
+import { postInlineAnnotations, InlineAnnotation } from '../integrations/github/pr-client';
+
+/**
+ * Format issue as inline comment message
+ */
+function formatInlineMessage(issue: Issue): string {
+  const severityIcon = issue.severity === 'error' ? '❌' : '⚠️';
+  const lines: string[] = [];
+
+  lines.push(`${severityIcon} **${issue.message}**`);
+
+  if (issue.impact) {
+    lines.push(`\n_Impact:_ ${issue.impact}`);
+  }
+
+  if (issue.fix) {
+    lines.push('\n_Suggested fix:_');
+    lines.push('```javascript');
+    lines.push(issue.fix);
+    lines.push('```');
+  }
+
+  if (issue.confidence) {
+    lines.push(`\n_Confidence: ${issue.confidence}_`);
+  }
+
+  return lines.join('\n');
+}
 
 /**
  * Simplified orchestration - focuses on core functionality that works
@@ -133,6 +161,40 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     }, sdkInfo);
 
     await postOrUpdateComment(prContext, config.githubToken, comment);
+
+    // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
+    core.info('Posting inline review comments...');
+
+    // Convert issues to inline annotations (only errors and warnings)
+    const inlineAnnotations: InlineAnnotation[] = [];
+    result.issues.forEach((issue) => {
+      if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
+        inlineAnnotations.push({
+          path: issue.file,
+          line: issue.line,
+          message: formatInlineMessage(issue),
+          annotation_level: issue.severity === 'error' ? 'failure' : 'warning',
+        });
+      }
+    });
+
+    // Generate review comment body (suggestions)
+    const reviewBody = generateReviewComment(result);
+
+    // Post review with inline comments and suggestions
+    if (inlineAnnotations.length > 0 || reviewBody) {
+      await postInlineAnnotations(inlineAnnotations, {
+        owner: prContext.owner,
+        repo: prContext.repo,
+        pullNumber: prContext.prNumber,
+        token: config.githubToken,
+        clearPrevious: config.clearPreviousComments,
+        annotateFilesOutsidePR: config.annotateFilesOutsidePR,
+        reviewBody: reviewBody || undefined,
+      });
+    } else {
+      core.info('No inline comments or suggestions to post');
+    }
 
     // Step 8: Set outputs
     const errorCount = issues.filter((i) => i.severity === 'error').length;
