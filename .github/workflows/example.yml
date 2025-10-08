@@ -22,5 +22,5 @@ jobs:
           service_access_token: ${{ secrets.RUDDERSTACK_ACCESS_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           output_verbosity: standard # minimal | standard | detailed
-          root_directory: testApps/react-app
+          root_directory: testApps/cdn-invalid
           clear_previous_comments: true # Clear all previous inline comments on each run (useful for development)
