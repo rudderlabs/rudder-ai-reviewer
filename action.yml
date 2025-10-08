@@ -42,6 +42,10 @@ inputs:
     description: 'Clear all previous inline review comments before posting new ones (true/false) - useful for development'
     required: false
     default: 'false'
+  annotate_files_outside_pr:
+    description: 'Post inline review comments even for files not changed in the PR (true/false) - for testing purposes only'
+    required: false
+    default: 'false'
 
 outputs:
   analysis_status:

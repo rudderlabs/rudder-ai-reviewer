@@ -27,6 +27,7 @@ export interface ActionConfig {
   annotateExistingCode: boolean;
   outputVerbosity: 'minimal' | 'standard' | 'detailed';
   clearPreviousComments: boolean;
+  annotateFilesOutsidePR: boolean;
 }
 
 export interface FileConfig {

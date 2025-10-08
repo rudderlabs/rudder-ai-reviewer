@@ -235,7 +235,7 @@ export async function postAnalysisReport(
 }
 
 /**
- * Clears all previous inline comments from the PR
+ * Hides previous reviews by dismissing them as outdated
  */
 async function clearPreviousInlineComments(
   owner: string,
@@ -258,14 +258,51 @@ async function clearPreviousInlineComments(
       comment.body?.includes(commentIdentifier)
     );
 
-    if (ourExistingComments.length === 0) {
-      core.info('No previous inline comments to clear');
-      return;
-    }
+    // Get all reviews on the PR
+    const { data: reviews } = await octokit.rest.pulls.listReviews({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
 
-    core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
+    core.info(`Found ${reviews.length} total review(s) on PR`);
+
+    // Identify our reviews by:
+    // 1. Reviews that have our inline comments attached
+    // 2. Reviews with our identifiers in the body (for reviews with no inline comments)
+    const reviewIdsWithOurComments = new Set(
+      ourExistingComments.map(c => c.pull_request_review_id).filter(id => id != null)
+    );
+
+    const ourReviews = reviews.filter((review) => {
+      // Match by inline comments
+      if (reviewIdsWithOurComments.has(review.id) && review.state === 'COMMENTED') {
+        return true;
+      }
+      // Match by review body content (for reviews with no inline comments)
+      const hasOurContent = review.body && (
+        review.body.includes('💡 Suggestions') ||
+        review.body.includes('📍 Issues in Files Outside PR')
+      );
+      return hasOurContent && review.state === 'COMMENTED';
+    });
+
+    core.info(`Found ${ourExistingComments.length} inline comment(s) and ${ourReviews.length} review(s) to hide`);
+
+    // Log each review for debugging
+    reviews.forEach((review) => {
+      const matchByComments = reviewIdsWithOurComments.has(review.id);
+      const matchByBody = review.body && (
+        review.body.includes('💡 Suggestions') ||
+        review.body.includes('📍 Issues in Files Outside PR')
+      );
+      core.info(`Review #${review.id}: state=${review.state}, matchByComments=${matchByComments}, matchByBody=${matchByBody}`);
+    });
+
     let deletedCount = 0;
+    let dismissedCount = 0;
 
+    // Delete individual review comments
     for (const comment of ourExistingComments) {
       try {
         await octokit.rest.pulls.deleteReviewComment({
@@ -275,11 +312,30 @@ async function clearPreviousInlineComments(
         });
         deletedCount++;
       } catch (error) {
-        core.debug(`Failed to delete comment ${comment.id}: ${error}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to delete comment ${comment.id}: ${errorMessage}`);
       }
     }
 
-    core.info(`✅ Cleared ${deletedCount} previous inline comment(s)`);
+    // Dismiss our reviews (this minimizes them to reduce clutter)
+    for (const review of ourReviews) {
+      try {
+        await octokit.rest.pulls.dismissReview({
+          owner,
+          repo,
+          pull_number: pullNumber,
+          review_id: review.id,
+          message: 'Superseded by new analysis',
+        });
+        dismissedCount++;
+        core.info(`✅ Dismissed review ${review.id}`);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to dismiss review ${review.id}: ${errorMessage}`);
+      }
+    }
+
+    core.info(`✅ Deleted ${deletedCount} comment(s) and dismissed ${dismissedCount} review(s)`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     core.warning(`Failed to clear previous comments: ${errorMessage}`);
@@ -287,13 +343,14 @@ async function clearPreviousInlineComments(
 }
 
 /**
- * Post inline review comments to PR files (only for changed files)
+ * Post inline review comments to PR files (only for changed files by default)
+ * Note: Previous reviews are dismissed as "outdated" when clear_previous_comments is true
  */
 export async function postInlineAnnotations(
   annotations: InlineAnnotation[],
-  options: PRCommentOptions & { clearPrevious?: boolean }
+  options: PRCommentOptions & { clearPrevious?: boolean; annotateFilesOutsidePR?: boolean; reviewBody?: string }
 ): Promise<void> {
-  const { owner, repo, pullNumber, token, clearPrevious = false } = options;
+  const { owner, repo, pullNumber, token, clearPrevious = false, annotateFilesOutsidePR = false, reviewBody } = options;
 
   // Clear all previous comments first if requested (regardless of new annotations)
   if (clearPrevious) {
@@ -322,11 +379,22 @@ export async function postInlineAnnotations(
     core.info(`Changed files in PR: ${Array.from(changedFiles).join(', ')}`);
     core.info(`SDK locations to annotate: ${annotations.map(a => a.path).join(', ')}`);
 
-    // Filter annotations to only include files that are in the PR diff
+    // Separate annotations into those in PR diff and those outside
     const annotationsInDiff = annotations.filter((ann) => changedFiles.has(ann.path));
+    const annotationsOutsideDiff = annotations.filter((ann) => !changedFiles.has(ann.path));
 
-    if (annotationsInDiff.length === 0) {
-      core.info('No SDK locations in changed files (see main comment for all locations)');
+    // Determine which annotations to process
+    let annotationsToReview = annotationsInDiff;
+    let annotationsAsComments: typeof annotations = [];
+
+    if (annotateFilesOutsidePR && annotationsOutsideDiff.length > 0) {
+      core.info(`⚠️ Testing mode: ${annotationsOutsideDiff.length} annotation(s) are outside PR diff`);
+      core.info('Files outside PR diff cannot use review comments - they will be posted as regular PR comments instead');
+      annotationsAsComments = annotationsOutsideDiff;
+    }
+
+    if (annotationsToReview.length === 0 && annotationsAsComments.length === 0) {
+      core.info('No SDK locations to annotate');
       return;
     }
 
@@ -340,13 +408,13 @@ export async function postInlineAnnotations(
     const commitSha = pr.head.sha;
 
     // If we cleared previous comments, all annotations are new
-    let newAnnotations: typeof annotationsInDiff;
-    let updatedAnnotations: Array<{ ann: typeof annotationsInDiff[0]; existingComment: any }> = [];
+    let newAnnotations: typeof annotationsToReview;
+    let updatedAnnotations: Array<{ ann: typeof annotationsToReview[0]; existingComment: any }> = [];
 
     if (clearPrevious) {
       // All annotations are new since we cleared previous comments
-      newAnnotations = annotationsInDiff;
-      core.info(`Creating ${newAnnotations.length} new comment(s)`);
+      newAnnotations = annotationsToReview;
+      core.info(`Creating ${newAnnotations.length} new review comment(s)`);
     } else {
       // Get existing review comments to check what needs updating
       const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
@@ -369,7 +437,7 @@ export async function postInlineAnnotations(
       // Separate annotations into new and updates
       newAnnotations = [];
 
-      for (const ann of annotationsInDiff) {
+      for (const ann of annotationsToReview) {
         const location = `${ann.path}:${ann.line}`;
         const existingComment = existingCommentsByLocation.get(location);
 
@@ -385,11 +453,14 @@ export async function postInlineAnnotations(
       }
 
       if (newAnnotations.length === 0 && updatedAnnotations.length === 0) {
-        core.info('All locations already have up-to-date comments');
-        return;
+        if (!reviewBody) {
+          core.info('All locations already have up-to-date comments and no review body to post');
+          return;
+        }
+        core.info('All locations already have up-to-date comments, but posting review body');
+      } else {
+        core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
       }
-
-      core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
     }
 
     // Update existing comments individually (they're already posted, so we have to update them one by one)
@@ -409,9 +480,9 @@ export async function postInlineAnnotations(
       }
     }
 
-    // Create a review with all new comments at once
+    // Create a review with inline comments and review body
     let createCount = 0;
-    if (newAnnotations.length > 0) {
+    if (newAnnotations.length > 0 || reviewBody) {
       try {
         const reviewComments = newAnnotations.map(ann => ({
           path: ann.path,
@@ -419,20 +490,23 @@ export async function postInlineAnnotations(
           body: `${commentIdentifier}\n${ann.message}`,
         }));
 
+        // Create review with inline comments and review body
         await octokit.rest.pulls.createReview({
           owner,
           repo,
           pull_number: pullNumber,
           commit_id: commitSha,
           event: 'COMMENT',
-          comments: reviewComments,
+          body: reviewBody || undefined,
+          comments: reviewComments.length > 0 ? reviewComments : undefined,
         });
 
         createCount = newAnnotations.length;
-        core.info(`✅ Submitted review with ${createCount} comment(s)`);
+        const reviewMsg = reviewBody ? ' with review body' : '';
+        core.info(`✅ Submitted review with ${createCount} inline comment(s)${reviewMsg}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        core.warning(`Failed to create review with comments: ${errorMessage}`);
+        core.warning(`Failed to create review: ${errorMessage}`);
         core.info('Falling back to individual comments...');
 
         // Fallback: Create comments individually if review fails
@@ -458,7 +532,12 @@ export async function postInlineAnnotations(
 
     const totalSuccess = createCount + updateCount;
     if (totalSuccess > 0) {
-      core.info(`✅ Posted ${createCount} new and updated ${updateCount} inline comment(s)`);
+      core.info(`✅ Posted ${createCount} new and updated ${updateCount} inline review comment(s)`);
+    }
+
+    // Note about outside-diff annotations
+    if (annotationsAsComments.length > 0) {
+      core.info(`ℹ️ ${annotationsAsComments.length} annotation(s) outside PR diff are included in review body`);
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

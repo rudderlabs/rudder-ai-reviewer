@@ -88492,6 +88492,7 @@ function loadWorkflowInputs() {
         annotateExistingCode: core.getBooleanInput('annotate_existing_code') || false,
         outputVerbosity: core.getInput('output_verbosity') || 'standard',
         clearPreviousComments: core.getBooleanInput('clear_previous_comments') || false,
+        annotateFilesOutsidePR: core.getBooleanInput('annotate_files_outside_pr') || false,
     };
 }
 /**
@@ -89710,6 +89711,28 @@ const path = __importStar(__nccwpck_require__(16928));
 const javascript_analyzer_1 = __nccwpck_require__(36031);
 const github_1 = __nccwpck_require__(22707);
 const comment_generator_1 = __nccwpck_require__(42403);
+const pr_client_1 = __nccwpck_require__(63433);
+/**
+ * Format issue as inline comment message
+ */
+function formatInlineMessage(issue) {
+    const severityIcon = issue.severity === 'error' ? '❌' : '⚠️';
+    const lines = [];
+    lines.push(`${severityIcon} **${issue.message}**`);
+    if (issue.impact) {
+        lines.push(`\n_Impact:_ ${issue.impact}`);
+    }
+    if (issue.fix) {
+        lines.push('\n_Suggested fix:_');
+        lines.push('```javascript');
+        lines.push(issue.fix);
+        lines.push('```');
+    }
+    if (issue.confidence) {
+        lines.push(`\n_Confidence: ${issue.confidence}_`);
+    }
+    return lines.join('\n');
+}
 /**
  * Simplified orchestration - focuses on core functionality that works
  */
@@ -89805,11 +89828,70 @@ async function runSimplifiedAnalysis(config) {
             methodCallsCount: methodCallCount,
             framework: undefined, // Can be enhanced later with framework detection
         };
+        // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
+        core.info('Posting inline review comments...');
+        // Separate issues into those in PR files and those outside
+        const changedFilesSet = new Set(changedFiles);
+        const inlineAnnotations = [];
+        const outsideIssues = { errors: [], warnings: [] };
+        let outsideSuggestionCount = 0;
+        result.issues.forEach((issue) => {
+            const isInPR = changedFilesSet.has(issue.file);
+            const shouldIncludeOutside = config.annotateFilesOutsidePR;
+            if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
+                if (isInPR || shouldIncludeOutside) {
+                    // Add to inline annotations (will be filtered later in pr-client)
+                    inlineAnnotations.push({
+                        path: issue.file,
+                        line: issue.line,
+                        message: formatInlineMessage(issue),
+                        annotation_level: issue.severity === 'error' ? 'failure' : 'warning',
+                    });
+                }
+                // Track outside issues for review comment
+                if (!isInPR && shouldIncludeOutside) {
+                    if (issue.severity === 'error') {
+                        outsideIssues.errors.push(issue);
+                    }
+                    else {
+                        outsideIssues.warnings.push(issue);
+                    }
+                }
+            }
+            // Track outside suggestions
+            if (issue.severity === 'suggestion' && !isInPR && shouldIncludeOutside) {
+                outsideSuggestionCount++;
+            }
+        });
+        // Generate review comment body (suggestions + outside issues)
+        const reviewBody = (0, comment_generator_1.generateReviewComment)(result, outsideIssues);
+        // Prepare outside issues info for summary comment
+        const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
+            errorCount: outsideIssues.errors.length,
+            warningCount: outsideIssues.warnings.length,
+            suggestionCount: outsideSuggestionCount,
+        } : undefined;
+        // Generate and post summary comment with outside issues breakdown
         const comment = (0, comment_generator_1.generatePRComment)(result, {
             verbosity: config.outputVerbosity,
             includePropertyDetails: false,
-        }, sdkInfo);
+        }, sdkInfo, outsideIssuesInfo);
         await (0, github_1.postOrUpdateComment)(prContext, config.githubToken, comment);
+        // Post review with inline comments and suggestions
+        if (inlineAnnotations.length > 0 || reviewBody) {
+            await (0, pr_client_1.postInlineAnnotations)(inlineAnnotations, {
+                owner: prContext.owner,
+                repo: prContext.repo,
+                pullNumber: prContext.prNumber,
+                token: config.githubToken,
+                clearPrevious: config.clearPreviousComments,
+                annotateFilesOutsidePR: config.annotateFilesOutsidePR,
+                reviewBody: reviewBody || undefined,
+            });
+        }
+        else {
+            core.info('No inline comments or suggestions to post');
+        }
         // Step 8: Set outputs
         const errorCount = issues.filter((i) => i.severity === 'error').length;
         const warningCount = issues.filter((i) => i.severity === 'warning').length;
@@ -90410,6 +90492,492 @@ Object.defineProperty(exports, "isLineChanged", ({ enumerable: true, get: functi
 
 /***/ }),
 
+/***/ 63433:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+/**
+ * GitHub PR client for posting comments and annotations
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.postNoSDKComment = postNoSDKComment;
+exports.formatAnalysisReport = formatAnalysisReport;
+exports.postAnalysisReport = postAnalysisReport;
+exports.postInlineAnnotations = postInlineAnnotations;
+const github = __importStar(__nccwpck_require__(93228));
+const core = __importStar(__nccwpck_require__(37484));
+/**
+ * Post simple comment when no SDK is detected
+ */
+async function postNoSDKComment(options) {
+    const { owner, repo, pullNumber, token } = options;
+    const octokit = github.getOctokit(token);
+    const commentBody = `## <img src="https://github.com/rudderlabs/pr-reviewer/blob/test.sdk-changes-detection/icon.png?raw=true" alt="RudderStack" width="22" height="22" align="center"> RudderStack Instrumentation Review
+
+### ℹ️ No RudderStack SDK instrumentation detected
+
+If you're adding RudderStack JavaScript SDK for the first time, make sure to:
+- Install the SDK via NPM: \`npm i @rudderstack/analytics-js --save-dev\`
+- Or add the CDN loading snippet (refer to the source setup in RudderStack dashboard)
+
+---
+_🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer)_`;
+    const commentIdentifier = '<!-- rudderstack-pr-reviewer-analysis -->';
+    const fullCommentBody = `${commentIdentifier}\n${commentBody}`;
+    try {
+        // Find existing comment
+        const { data: comments } = await octokit.rest.issues.listComments({
+            owner,
+            repo,
+            issue_number: pullNumber,
+        });
+        const existingComment = comments.find((comment) => comment.body?.includes(commentIdentifier));
+        if (existingComment) {
+            // Update existing comment
+            core.info(`Updating existing comment #${existingComment.id}`);
+            await octokit.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body: fullCommentBody,
+            });
+        }
+        else {
+            // Create new comment
+            core.info('Creating new PR comment');
+            await octokit.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pullNumber,
+                body: fullCommentBody,
+            });
+        }
+        core.info('✅ Successfully posted no-SDK comment');
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to post comment: ${errorMessage}`);
+    }
+}
+/**
+ * Format full analysis report with validation issues and changes
+ */
+function formatAnalysisReport(sdkDetection, validation, changes, _options) {
+    let report = `## <img src="https://github.com/rudderlabs/pr-reviewer/blob/test.sdk-changes-detection/icon.png?raw=true" alt="RudderStack" width="22" height="22" align="center"> RudderStack Instrumentation Review
+
+`;
+    // Summary statistics
+    report += '### 📊 Summary\n\n';
+    // Changes section
+    if (changes.isFirstTimeInstrumentation) {
+        report += `✅ This PR adds RudderStack instrumentation for the first time. Found **${changes.addedCalls.length}** SDK method call(s).\n\n`;
+    }
+    else if (changes.hasChanges) {
+        report += '🔄 Changes detected in the RudderStack instrumentation\n\n';
+    }
+    report += `JavaScript SDK is installed via ${sdkDetection.installationType === 'cdn' ? 'CDN snippet' : 'NPM package'} (v${sdkDetection.installationType === 'npm' ? sdkDetection.npmVersion : sdkDetection.cdnVersion})\n\n`;
+    const totalIssues = validation.errors.length + validation.warnings.length + validation.suggestions.length;
+    if (totalIssues === 0) {
+        report += '✅ No issues found - all SDK calls are valid!\n\n';
+    }
+    else {
+        const statusEmoji = validation.errors.length > 0 ? '❌' : validation.warnings.length > 0 ? '⚠️' : '💡';
+        report += `${statusEmoji} **${totalIssues}** issue(s) found\n\n`;
+        if (validation.errors.length > 0) {
+            report += `- ❌ **Errors:** ${validation.errors.length}\n`;
+        }
+        if (validation.warnings.length > 0) {
+            report += `- ⚠️ **Warnings:** ${validation.warnings.length}\n`;
+        }
+        if (validation.suggestions.length > 0) {
+            report += `- 💡 **Suggestions:** ${validation.suggestions.length}\n`;
+        }
+        report += '\n';
+        if (validation.errors.length > 0 || validation.warnings.length > 0) {
+            report += '_See inline comments on the changed files for error and warning details._\n\n';
+        }
+    }
+    // Add suggestions section if there are any
+    if (validation.suggestions.length > 0) {
+        report += '### 💡 Suggestions\n\n';
+        report += '_Consider these improvements to enhance your tracking implementation:_\n\n';
+        // Group suggestions by file
+        const suggestionsByFile = new Map();
+        validation.suggestions.forEach(s => {
+            if (!suggestionsByFile.has(s.file)) {
+                suggestionsByFile.set(s.file, []);
+            }
+            suggestionsByFile.get(s.file).push(s);
+        });
+        suggestionsByFile.forEach((suggestions, file) => {
+            report += `**${file}**\n`;
+            suggestions.forEach(s => {
+                report += `- Line ${s.line}: ${s.message}\n`;
+                if (s.fix) {
+                    report += `  \`\`\`javascript\n  ${s.fix}\n  \`\`\`\n`;
+                }
+            });
+            report += '\n';
+        });
+    }
+    report += '---\n';
+    report += '_🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer)_\n';
+    return report;
+}
+/**
+ * Post or update PR comment with full analysis report
+ */
+async function postAnalysisReport(sdkDetection, validation, changes, options) {
+    const { owner, repo, pullNumber, token, pathPrefix } = options;
+    const octokit = github.getOctokit(token);
+    try {
+        // Get PR to get commit SHA
+        const { data: pr } = await octokit.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        const commitSha = pr.head.sha;
+        const commentBody = formatAnalysisReport(sdkDetection, validation, changes, {
+            owner,
+            repo,
+            commitSha,
+            pathPrefix,
+        });
+        const commentIdentifier = '<!-- rudderstack-pr-reviewer-analysis -->';
+        const fullCommentBody = `${commentIdentifier}\n${commentBody}`;
+        // Find existing comment
+        const { data: comments } = await octokit.rest.issues.listComments({
+            owner,
+            repo,
+            issue_number: pullNumber,
+        });
+        const existingComment = comments.find((comment) => comment.body?.includes(commentIdentifier));
+        if (existingComment) {
+            // Update existing comment
+            core.info(`Updating existing analysis comment #${existingComment.id}`);
+            await octokit.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body: fullCommentBody,
+            });
+        }
+        else {
+            // Create new comment
+            core.info('Creating new analysis comment');
+            await octokit.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pullNumber,
+                body: fullCommentBody,
+            });
+        }
+        core.info('✅ Successfully posted analysis report');
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to post analysis report: ${errorMessage}`);
+        throw error;
+    }
+}
+/**
+ * Hides previous reviews by dismissing them as outdated
+ */
+async function clearPreviousInlineComments(owner, repo, pullNumber, token) {
+    const octokit = github.getOctokit(token);
+    const commentIdentifier = '<!-- rudderstack-sdk-location -->';
+    try {
+        // Get all existing review comments created by us
+        const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
+        // Get all reviews on the PR
+        const { data: reviews } = await octokit.rest.pulls.listReviews({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        core.info(`Found ${reviews.length} total review(s) on PR`);
+        // Identify our reviews by:
+        // 1. Reviews that have our inline comments attached
+        // 2. Reviews with our identifiers in the body (for reviews with no inline comments)
+        const reviewIdsWithOurComments = new Set(ourExistingComments.map(c => c.pull_request_review_id).filter(id => id != null));
+        const ourReviews = reviews.filter((review) => {
+            // Match by inline comments
+            if (reviewIdsWithOurComments.has(review.id) && review.state === 'COMMENTED') {
+                return true;
+            }
+            // Match by review body content (for reviews with no inline comments)
+            const hasOurContent = review.body && (review.body.includes('💡 Suggestions') ||
+                review.body.includes('📍 Issues in Files Outside PR'));
+            return hasOurContent && review.state === 'COMMENTED';
+        });
+        core.info(`Found ${ourExistingComments.length} inline comment(s) and ${ourReviews.length} review(s) to hide`);
+        // Log each review for debugging
+        reviews.forEach((review) => {
+            const matchByComments = reviewIdsWithOurComments.has(review.id);
+            const matchByBody = review.body && (review.body.includes('💡 Suggestions') ||
+                review.body.includes('📍 Issues in Files Outside PR'));
+            core.info(`Review #${review.id}: state=${review.state}, matchByComments=${matchByComments}, matchByBody=${matchByBody}`);
+        });
+        let deletedCount = 0;
+        let dismissedCount = 0;
+        // Delete individual review comments
+        for (const comment of ourExistingComments) {
+            try {
+                await octokit.rest.pulls.deleteReviewComment({
+                    owner,
+                    repo,
+                    comment_id: comment.id,
+                });
+                deletedCount++;
+            }
+            catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                core.warning(`Failed to delete comment ${comment.id}: ${errorMessage}`);
+            }
+        }
+        // Dismiss our reviews (this minimizes them to reduce clutter)
+        for (const review of ourReviews) {
+            try {
+                await octokit.rest.pulls.dismissReview({
+                    owner,
+                    repo,
+                    pull_number: pullNumber,
+                    review_id: review.id,
+                    message: 'Superseded by new analysis',
+                });
+                dismissedCount++;
+                core.info(`✅ Dismissed review ${review.id}`);
+            }
+            catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                core.warning(`Failed to dismiss review ${review.id}: ${errorMessage}`);
+            }
+        }
+        core.info(`✅ Deleted ${deletedCount} comment(s) and dismissed ${dismissedCount} review(s)`);
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to clear previous comments: ${errorMessage}`);
+    }
+}
+/**
+ * Post inline review comments to PR files (only for changed files by default)
+ * Note: Previous reviews are dismissed as "outdated" when clear_previous_comments is true
+ */
+async function postInlineAnnotations(annotations, options) {
+    const { owner, repo, pullNumber, token, clearPrevious = false, annotateFilesOutsidePR = false, reviewBody } = options;
+    // Clear all previous comments first if requested (regardless of new annotations)
+    if (clearPrevious) {
+        await clearPreviousInlineComments(owner, repo, pullNumber, token);
+    }
+    if (annotations.length === 0) {
+        core.info('No inline annotations to post');
+        return;
+    }
+    const octokit = github.getOctokit(token);
+    try {
+        const commentIdentifier = '<!-- rudderstack-sdk-location -->';
+        // Get PR files to see what's actually in the diff
+        const { data: prFiles } = await octokit.rest.pulls.listFiles({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        const changedFiles = new Set(prFiles.map((f) => f.filename));
+        core.info(`Changed files in PR: ${Array.from(changedFiles).join(', ')}`);
+        core.info(`SDK locations to annotate: ${annotations.map(a => a.path).join(', ')}`);
+        // Separate annotations into those in PR diff and those outside
+        const annotationsInDiff = annotations.filter((ann) => changedFiles.has(ann.path));
+        const annotationsOutsideDiff = annotations.filter((ann) => !changedFiles.has(ann.path));
+        // Determine which annotations to process
+        let annotationsToReview = annotationsInDiff;
+        let annotationsAsComments = [];
+        if (annotateFilesOutsidePR && annotationsOutsideDiff.length > 0) {
+            core.info(`⚠️ Testing mode: ${annotationsOutsideDiff.length} annotation(s) are outside PR diff`);
+            core.info('Files outside PR diff cannot use review comments - they will be posted as regular PR comments instead');
+            annotationsAsComments = annotationsOutsideDiff;
+        }
+        if (annotationsToReview.length === 0 && annotationsAsComments.length === 0) {
+            core.info('No SDK locations to annotate');
+            return;
+        }
+        // Get the PR to get commit SHA
+        const { data: pr } = await octokit.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: pullNumber,
+        });
+        const commitSha = pr.head.sha;
+        // If we cleared previous comments, all annotations are new
+        let newAnnotations;
+        let updatedAnnotations = [];
+        if (clearPrevious) {
+            // All annotations are new since we cleared previous comments
+            newAnnotations = annotationsToReview;
+            core.info(`Creating ${newAnnotations.length} new review comment(s)`);
+        }
+        else {
+            // Get existing review comments to check what needs updating
+            const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
+                owner,
+                repo,
+                pull_number: pullNumber,
+            });
+            const ourExistingComments = existingComments.filter((comment) => comment.body?.includes(commentIdentifier));
+            core.info(`Found ${ourExistingComments.length} existing SDK location comment(s)`);
+            // Map existing comments by location for easy lookup
+            const existingCommentsByLocation = new Map(ourExistingComments.map((c) => [`${c.path}:${c.line}`, c]));
+            // Separate annotations into new and updates
+            newAnnotations = [];
+            for (const ann of annotationsToReview) {
+                const location = `${ann.path}:${ann.line}`;
+                const existingComment = existingCommentsByLocation.get(location);
+                if (existingComment) {
+                    // Check if the message has changed
+                    const existingBody = existingComment.body?.replace(commentIdentifier + '\n', '') || '';
+                    if (existingBody !== ann.message) {
+                        updatedAnnotations.push({ ann, existingComment });
+                    }
+                }
+                else {
+                    newAnnotations.push(ann);
+                }
+            }
+            if (newAnnotations.length === 0 && updatedAnnotations.length === 0) {
+                if (!reviewBody) {
+                    core.info('All locations already have up-to-date comments and no review body to post');
+                    return;
+                }
+                core.info('All locations already have up-to-date comments, but posting review body');
+            }
+            else {
+                core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
+            }
+        }
+        // Update existing comments individually (they're already posted, so we have to update them one by one)
+        let updateCount = 0;
+        for (const { ann, existingComment } of updatedAnnotations) {
+            try {
+                await octokit.rest.pulls.updateReviewComment({
+                    owner,
+                    repo,
+                    comment_id: existingComment.id,
+                    body: `${commentIdentifier}\n${ann.message}`,
+                });
+                updateCount++;
+            }
+            catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                core.debug(`Could not update inline comment on ${ann.path}:${ann.line}: ${errorMessage}`);
+            }
+        }
+        // Create a review with inline comments and review body
+        let createCount = 0;
+        if (newAnnotations.length > 0 || reviewBody) {
+            try {
+                const reviewComments = newAnnotations.map(ann => ({
+                    path: ann.path,
+                    line: ann.line,
+                    body: `${commentIdentifier}\n${ann.message}`,
+                }));
+                // Create review with inline comments and review body
+                await octokit.rest.pulls.createReview({
+                    owner,
+                    repo,
+                    pull_number: pullNumber,
+                    commit_id: commitSha,
+                    event: 'COMMENT',
+                    body: reviewBody || undefined,
+                    comments: reviewComments.length > 0 ? reviewComments : undefined,
+                });
+                createCount = newAnnotations.length;
+                const reviewMsg = reviewBody ? ' with review body' : '';
+                core.info(`✅ Submitted review with ${createCount} inline comment(s)${reviewMsg}`);
+            }
+            catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                core.warning(`Failed to create review: ${errorMessage}`);
+                core.info('Falling back to individual comments...');
+                // Fallback: Create comments individually if review fails
+                for (const ann of newAnnotations) {
+                    try {
+                        await octokit.rest.pulls.createReviewComment({
+                            owner,
+                            repo,
+                            pull_number: pullNumber,
+                            body: `${commentIdentifier}\n${ann.message}`,
+                            commit_id: commitSha,
+                            path: ann.path,
+                            line: ann.line,
+                        });
+                        createCount++;
+                    }
+                    catch (individualError) {
+                        const individualErrorMessage = individualError instanceof Error ? individualError.message : String(individualError);
+                        core.debug(`Could not post inline comment on ${ann.path}:${ann.line}: ${individualErrorMessage}`);
+                    }
+                }
+            }
+        }
+        const totalSuccess = createCount + updateCount;
+        if (totalSuccess > 0) {
+            core.info(`✅ Posted ${createCount} new and updated ${updateCount} inline review comment(s)`);
+        }
+        // Note about outside-diff annotations
+        if (annotationsAsComments.length > 0) {
+            core.info(`ℹ️ ${annotationsAsComments.length} annotation(s) outside PR diff are included in review body`);
+        }
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.warning(`Failed to post inline annotations: ${errorMessage}`);
+        // Don't throw - inline annotations are nice-to-have
+    }
+}
+
+
+/***/ }),
+
 /***/ 41730:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -90511,31 +91079,56 @@ run();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.generatePRComment = generatePRComment;
 exports.generateProgressComment = generateProgressComment;
+exports.generateReviewComment = generateReviewComment;
 /**
  * Generate complete PR comment
  */
-function generatePRComment(result, options = { verbosity: 'standard', includePropertyDetails: false }, sdkInfo) {
+function generatePRComment(result, options = { verbosity: 'standard', includePropertyDetails: false }, sdkInfo, outsideIssuesInfo) {
     const sections = [];
     // Header with icon
     sections.push('## <img src="https://github.com/rudderlabs/pr-reviewer/raw/develop/icon.png" width="22" height="22" /> RudderStack Instrumentation Review\n');
     // Summary
-    sections.push(generateSummary(result, sdkInfo));
+    sections.push(generateSummary(result, sdkInfo, outsideIssuesInfo));
     // Files Analyzed
     sections.push(generateFilesSection(result.filesAnalyzed));
-    // Errors (always expanded)
+    // Note about where to find detailed issues
     const errors = result.issues.filter((i) => i.severity === 'error');
-    if (errors.length > 0) {
-        sections.push(generateIssuesSection('error', errors, false));
-    }
-    // Warnings (collapsible)
     const warnings = result.issues.filter((i) => i.severity === 'warning');
-    if (warnings.length > 0) {
-        sections.push(generateIssuesSection('warning', warnings, options.verbosity !== 'detailed'));
-    }
-    // Suggestions (collapsible)
     const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
-    if (suggestions.length > 0) {
-        sections.push(generateIssuesSection('suggestion', suggestions, true));
+    if (errors.length > 0 || warnings.length > 0 || suggestions.length > 0) {
+        const messages = [];
+        // Calculate in-PR vs outside-PR counts
+        const inPRErrors = errors.length - (outsideIssuesInfo?.errorCount || 0);
+        const inPRWarnings = warnings.length - (outsideIssuesInfo?.warningCount || 0);
+        const inPRSuggestions = suggestions.length - (outsideIssuesInfo?.suggestionCount || 0);
+        if (errors.length > 0 || warnings.length > 0) {
+            if (outsideIssuesInfo && (outsideIssuesInfo.errorCount > 0 || outsideIssuesInfo.warningCount > 0)) {
+                // Mixed: some in PR, some outside
+                const parts = [];
+                if (inPRErrors > 0 || inPRWarnings > 0) {
+                    parts.push('**Errors and warnings in PR changes** are shown as inline review comments on specific lines');
+                }
+                if (outsideIssuesInfo.errorCount > 0 || outsideIssuesInfo.warningCount > 0) {
+                    parts.push('**Errors and warnings in files outside this PR** are included in the review comment below');
+                }
+                messages.push(parts.join('\n\n'));
+            }
+            else {
+                messages.push('**Errors and warnings** are shown as inline review comments on specific lines');
+            }
+        }
+        if (suggestions.length > 0) {
+            if (outsideIssuesInfo && outsideIssuesInfo.suggestionCount > 0 && inPRSuggestions > 0) {
+                messages.push('**Suggestions** (both in PR and outside) are included in the review comment below');
+            }
+            else if (outsideIssuesInfo && outsideIssuesInfo.suggestionCount > 0) {
+                messages.push('**Suggestions from files outside this PR** are included in the review comment below');
+            }
+            else {
+                messages.push('**Suggestions** are included in the review comment below');
+            }
+        }
+        sections.push(messages.join('\n\n') + '\n');
     }
     // Destination Impacts (collapsible)
     if (result.destinationImpacts && result.destinationImpacts.length > 0) {
@@ -90561,7 +91154,7 @@ function generatePRComment(result, options = { verbosity: 'standard', includePro
 /**
  * Generate summary section
  */
-function generateSummary(result, sdkInfo) {
+function generateSummary(result, sdkInfo, outsideIssuesInfo) {
     const errors = result.issues.filter((i) => i.severity === 'error').length;
     const warnings = result.issues.filter((i) => i.severity === 'warning').length;
     const suggestions = result.issues.filter((i) => i.severity === 'suggestion').length;
@@ -90596,15 +91189,50 @@ function generateSummary(result, sdkInfo) {
     }
     lines.push(`${statusIcon} **${statusText}**\n`);
     // Issue breakdown
-    const breakdown = [];
-    if (errors > 0)
-        breakdown.push(`❌ ${errors} Error${errors !== 1 ? 's' : ''}`);
-    if (warnings > 0)
-        breakdown.push(`⚠️ ${warnings} Warning${warnings !== 1 ? 's' : ''}`);
-    if (suggestions > 0)
-        breakdown.push(`💡 ${suggestions} Suggestion${suggestions !== 1 ? 's' : ''}`);
-    if (breakdown.length > 0) {
-        lines.push(`**Issues:** ${breakdown.join(' • ')}`);
+    const hasOutsideIssues = outsideIssuesInfo && (outsideIssuesInfo.errorCount > 0 ||
+        outsideIssuesInfo.warningCount > 0 ||
+        outsideIssuesInfo.suggestionCount > 0);
+    if (hasOutsideIssues) {
+        // Show breakdown with in-PR vs outside-PR distinction
+        const inPRErrors = errors - (outsideIssuesInfo?.errorCount || 0);
+        const inPRWarnings = warnings - (outsideIssuesInfo?.warningCount || 0);
+        const inPRSuggestions = suggestions - (outsideIssuesInfo?.suggestionCount || 0);
+        lines.push('**Issues in PR changes:**');
+        const inPRBreakdown = [];
+        if (inPRErrors > 0)
+            inPRBreakdown.push(`❌ ${inPRErrors} Error${inPRErrors !== 1 ? 's' : ''}`);
+        if (inPRWarnings > 0)
+            inPRBreakdown.push(`⚠️ ${inPRWarnings} Warning${inPRWarnings !== 1 ? 's' : ''}`);
+        if (inPRSuggestions > 0)
+            inPRBreakdown.push(`💡 ${inPRSuggestions} Suggestion${inPRSuggestions !== 1 ? 's' : ''}`);
+        if (inPRBreakdown.length > 0) {
+            lines.push(inPRBreakdown.join(' • '));
+        }
+        else {
+            lines.push('None');
+        }
+        lines.push('\n**Issues in files outside PR:**');
+        const outsideBreakdown = [];
+        if (outsideIssuesInfo.errorCount > 0)
+            outsideBreakdown.push(`❌ ${outsideIssuesInfo.errorCount} Error${outsideIssuesInfo.errorCount !== 1 ? 's' : ''}`);
+        if (outsideIssuesInfo.warningCount > 0)
+            outsideBreakdown.push(`⚠️ ${outsideIssuesInfo.warningCount} Warning${outsideIssuesInfo.warningCount !== 1 ? 's' : ''}`);
+        if (outsideIssuesInfo.suggestionCount > 0)
+            outsideBreakdown.push(`💡 ${outsideIssuesInfo.suggestionCount} Suggestion${outsideIssuesInfo.suggestionCount !== 1 ? 's' : ''}`);
+        lines.push(outsideBreakdown.join(' • '));
+    }
+    else {
+        // Standard breakdown when all issues are in PR
+        const breakdown = [];
+        if (errors > 0)
+            breakdown.push(`❌ ${errors} Error${errors !== 1 ? 's' : ''}`);
+        if (warnings > 0)
+            breakdown.push(`⚠️ ${warnings} Warning${warnings !== 1 ? 's' : ''}`);
+        if (suggestions > 0)
+            breakdown.push(`💡 ${suggestions} Suggestion${suggestions !== 1 ? 's' : ''}`);
+        if (breakdown.length > 0) {
+            lines.push(`**Issues:** ${breakdown.join(' • ')}`);
+        }
     }
     return lines.join('\n');
 }
@@ -90804,6 +91432,97 @@ function generateProgressComment(stage) {
 Currently: ${stage}...
 
 *This comment will be updated with results when analysis is complete.*`;
+}
+/**
+ * Generate PR review comment body (for GitHub review submission)
+ * This is the message that accompanies the review and inline comments
+ */
+function generateReviewComment(result, outsideIssues) {
+    const suggestions = result.issues.filter((i) => i.severity === 'suggestion');
+    const hasOutsideIssues = outsideIssues && (outsideIssues.errors.length > 0 || outsideIssues.warnings.length > 0);
+    if (suggestions.length === 0 && !hasOutsideIssues) {
+        return ''; // No review comment needed if no suggestions and no outside issues
+    }
+    const sections = [];
+    // Suggestions section (collapsible)
+    if (suggestions.length > 0) {
+        const lines = [];
+        lines.push('<details>');
+        lines.push(`<summary><strong>💡 Suggestions (${suggestions.length})</strong></summary>\n`);
+        lines.push('_Consider these improvements to enhance your tracking implementation:_\n');
+        // Group suggestions by file
+        const suggestionsByFile = new Map();
+        suggestions.forEach(s => {
+            if (!suggestionsByFile.has(s.file)) {
+                suggestionsByFile.set(s.file, []);
+            }
+            suggestionsByFile.get(s.file).push(s);
+        });
+        suggestionsByFile.forEach((fileSuggestions, file) => {
+            lines.push(`#### 📄 ${file}\n`);
+            fileSuggestions.forEach(s => {
+                lines.push(`**Line ${s.line}:** ${s.message}\n`);
+                if (s.impact) {
+                    lines.push(`_Impact:_ ${s.impact}\n`);
+                }
+                if (s.fix) {
+                    lines.push('_Suggested fix:_');
+                    lines.push('```javascript');
+                    lines.push(s.fix);
+                    lines.push('```\n');
+                }
+            });
+        });
+        lines.push('</details>');
+        sections.push(lines.join('\n'));
+    }
+    // Issues in files outside PR (collapsible)
+    if (hasOutsideIssues) {
+        const lines = [];
+        const totalOutside = outsideIssues.errors.length + outsideIssues.warnings.length;
+        lines.push('<details>');
+        lines.push(`<summary><strong>📍 Issues in Files Outside PR (${totalOutside})</strong></summary>\n`);
+        lines.push('_These files contain RudderStack SDK issues but are not part of this PR._\n');
+        // Errors outside PR
+        if (outsideIssues.errors.length > 0) {
+            lines.push(`#### ❌ Errors (${outsideIssues.errors.length})\n`);
+            outsideIssues.errors.forEach(issue => {
+                lines.push(`**${issue.file}:${issue.line}**\n`);
+                lines.push(`${issue.message}\n`);
+                if (issue.impact) {
+                    lines.push(`_Impact:_ ${issue.impact}\n`);
+                }
+                if (issue.fix) {
+                    lines.push('_Suggested fix:_');
+                    lines.push('```javascript');
+                    lines.push(issue.fix);
+                    lines.push('```');
+                }
+                lines.push('');
+            });
+        }
+        // Warnings outside PR
+        if (outsideIssues.warnings.length > 0) {
+            lines.push(`#### ⚠️ Warnings (${outsideIssues.warnings.length})\n`);
+            outsideIssues.warnings.forEach(issue => {
+                lines.push(`**${issue.file}:${issue.line}**\n`);
+                lines.push(`${issue.message}\n`);
+                if (issue.impact) {
+                    lines.push(`_Impact:_ ${issue.impact}\n`);
+                }
+                if (issue.fix) {
+                    lines.push('_Suggested fix:_');
+                    lines.push('```javascript');
+                    lines.push(issue.fix);
+                    lines.push('```');
+                }
+                lines.push('');
+            });
+        }
+        lines.push('</details>');
+        sections.push(lines.join('\n'));
+    }
+    return sections.join('\n\n');
 }
 
 

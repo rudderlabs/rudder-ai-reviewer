@@ -5,10 +5,38 @@
 
 import * as core from '@actions/core';
 import * as path from 'path';
-import { ActionConfig, AnalysisResult } from '../types/common';
+import { ActionConfig, AnalysisResult, Issue } from '../types/common';
 import { JavaScriptAnalyzer } from '../analyzers/javascript/javascript-analyzer';
 import { getPRContext, getChangedFiles, postOrUpdateComment, setOutputs } from '../integrations/github';
-import { generatePRComment } from '../reporters/comment-generator';
+import { generatePRComment, generateReviewComment } from '../reporters/comment-generator';
+import { postInlineAnnotations, InlineAnnotation } from '../integrations/github/pr-client';
+
+/**
+ * Format issue as inline comment message
+ */
+function formatInlineMessage(issue: Issue): string {
+  const severityIcon = issue.severity === 'error' ? '❌' : '⚠️';
+  const lines: string[] = [];
+
+  lines.push(`${severityIcon} **${issue.message}**`);
+
+  if (issue.impact) {
+    lines.push(`\n_Impact:_ ${issue.impact}`);
+  }
+
+  if (issue.fix) {
+    lines.push('\n_Suggested fix:_');
+    lines.push('```javascript');
+    lines.push(issue.fix);
+    lines.push('```');
+  }
+
+  if (issue.confidence) {
+    lines.push(`\n_Confidence: ${issue.confidence}_`);
+  }
+
+  return lines.join('\n');
+}
 
 /**
  * Simplified orchestration - focuses on core functionality that works
@@ -127,12 +155,78 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
       framework: undefined as string | undefined, // Can be enhanced later with framework detection
     };
 
+    // Step 7b: Post review with inline comments (errors/warnings) and review body (suggestions)
+    core.info('Posting inline review comments...');
+
+    // Separate issues into those in PR files and those outside
+    const changedFilesSet = new Set(changedFiles);
+    const inlineAnnotations: InlineAnnotation[] = [];
+    const outsideIssues = { errors: [] as typeof result.issues, warnings: [] as typeof result.issues };
+    let outsideSuggestionCount = 0;
+
+    result.issues.forEach((issue) => {
+      const isInPR = changedFilesSet.has(issue.file);
+      const shouldIncludeOutside = config.annotateFilesOutsidePR;
+
+      if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
+        if (isInPR || shouldIncludeOutside) {
+          // Add to inline annotations (will be filtered later in pr-client)
+          inlineAnnotations.push({
+            path: issue.file,
+            line: issue.line,
+            message: formatInlineMessage(issue),
+            annotation_level: issue.severity === 'error' ? 'failure' : 'warning',
+          });
+        }
+
+        // Track outside issues for review comment
+        if (!isInPR && shouldIncludeOutside) {
+          if (issue.severity === 'error') {
+            outsideIssues.errors.push(issue);
+          } else {
+            outsideIssues.warnings.push(issue);
+          }
+        }
+      }
+
+      // Track outside suggestions
+      if (issue.severity === 'suggestion' && !isInPR && shouldIncludeOutside) {
+        outsideSuggestionCount++;
+      }
+    });
+
+    // Generate review comment body (suggestions + outside issues)
+    const reviewBody = generateReviewComment(result, outsideIssues);
+
+    // Prepare outside issues info for summary comment
+    const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
+      errorCount: outsideIssues.errors.length,
+      warningCount: outsideIssues.warnings.length,
+      suggestionCount: outsideSuggestionCount,
+    } : undefined;
+
+    // Generate and post summary comment with outside issues breakdown
     const comment = generatePRComment(result, {
       verbosity: config.outputVerbosity,
       includePropertyDetails: false,
-    }, sdkInfo);
+    }, sdkInfo, outsideIssuesInfo);
 
     await postOrUpdateComment(prContext, config.githubToken, comment);
+
+    // Post review with inline comments and suggestions
+    if (inlineAnnotations.length > 0 || reviewBody) {
+      await postInlineAnnotations(inlineAnnotations, {
+        owner: prContext.owner,
+        repo: prContext.repo,
+        pullNumber: prContext.prNumber,
+        token: config.githubToken,
+        clearPrevious: config.clearPreviousComments,
+        annotateFilesOutsidePR: config.annotateFilesOutsidePR,
+        reviewBody: reviewBody || undefined,
+      });
+    } else {
+      core.info('No inline comments or suggestions to post');
+    }
 
     // Step 8: Set outputs
     const errorCount = issues.filter((i) => i.severity === 'error').length;
