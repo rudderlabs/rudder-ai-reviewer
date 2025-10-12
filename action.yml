@@ -48,7 +48,7 @@ inputs:
   max_tokens_per_request:
     description: 'Maximum tokens per AI request (for chunking)'
     required: false
-    default: '150000'
+    default: '64000'
   annotation_mode:
     description: 'Annotation mode: errors_only, errors_warnings'
     required: false

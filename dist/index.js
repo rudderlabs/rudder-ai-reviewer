@@ -86241,7 +86241,7 @@ function loadWorkflowInputs() {
         outputVerbosity: core.getInput('output_verbosity') || 'standard',
         reviewUnchangedFiles: core.getBooleanInput('review_unchanged_files') || false,
         aiModel: core.getInput('ai_model') || 'claude-sonnet-4-5',
-        maxTokensPerRequest: parseInt(core.getInput('max_tokens_per_request') || '150000', 10),
+        maxTokensPerRequest: parseInt(core.getInput('max_tokens_per_request') || '64000', 10),
         annotationMode: core.getInput('annotation_mode') || 'errors_warnings',
     };
 }
@@ -86292,9 +86292,9 @@ function mergeConfigurations(workflowConfig, fileConfig) {
     const aiModel = workflowConfig.aiModel !== 'claude-sonnet-4-5'
         ? workflowConfig.aiModel
         : fileConfig.ai?.model || 'claude-sonnet-4-5';
-    const maxTokensPerRequest = workflowConfig.maxTokensPerRequest !== 150000
+    const maxTokensPerRequest = workflowConfig.maxTokensPerRequest !== 64000
         ? workflowConfig.maxTokensPerRequest
-        : fileConfig.ai?.max_tokens_per_request || 150000;
+        : fileConfig.ai?.max_tokens_per_request || 64000;
     const annotationMode = workflowConfig.annotationMode !== 'errors_warnings'
         ? workflowConfig.annotationMode
         : fileConfig.annotation_mode || 'errors_warnings';
