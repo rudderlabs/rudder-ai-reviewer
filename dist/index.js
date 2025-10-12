@@ -86733,6 +86733,8 @@ class AnthropicClient {
         this.config = config;
         this.client = new sdk_1.default({
             apiKey: config.apiKey,
+            timeout: 600000, // 10 minutes timeout
+            maxRetries: 2,
         });
     }
     /**
@@ -86754,16 +86756,17 @@ class AnthropicClient {
         }
     }
     /**
-     * Analyze code with AI
+     * Analyze code with AI using streaming
      * @param request Analysis request with system prompt, user prompt, and code context
      * @returns AI analysis response
      */
     async analyze(request) {
         try {
-            core.debug(`Making AI analysis request with model: ${this.config.model}`);
+            core.info(`Making AI analysis request with model: ${this.config.model}`);
             core.debug(`System prompt length: ${request.systemPrompt.length} chars`);
             core.debug(`User prompt length: ${request.userPrompt.length} chars`);
-            const response = await this.client.messages.create({
+            // Use streaming for long-running requests
+            const stream = await this.client.messages.stream({
                 model: this.config.model,
                 max_tokens: this.config.maxTokens,
                 system: request.systemPrompt,
@@ -86774,18 +86777,29 @@ class AnthropicClient {
                     },
                 ],
             });
-            // Extract text content from response
-            const content = response.content[0];
-            if (content.type !== 'text') {
-                throw new Error('Unexpected response type from Anthropic API');
-            }
-            core.debug(`AI response length: ${content.text.length} chars`);
+            let fullContent = '';
+            let lastProgressUpdate = Date.now();
+            const progressInterval = 5000; // Update progress every 5 seconds
+            // Listen to stream events
+            stream.on('text', (text) => {
+                fullContent += text;
+                // Show progress periodically
+                const now = Date.now();
+                if (now - lastProgressUpdate >= progressInterval) {
+                    const charCount = fullContent.length;
+                    core.info(`  → Receiving response... (${charCount} characters so far)`);
+                    lastProgressUpdate = now;
+                }
+            });
+            // Wait for stream to complete
+            const finalMessage = await stream.finalMessage();
+            core.info(`✓ AI response received (${fullContent.length} characters)`);
             return {
                 status: 'success',
-                content: content.text,
+                content: fullContent,
                 usage: {
-                    inputTokens: response.usage.input_tokens,
-                    outputTokens: response.usage.output_tokens,
+                    inputTokens: finalMessage.usage.input_tokens,
+                    outputTokens: finalMessage.usage.output_tokens,
                 },
             };
         }
