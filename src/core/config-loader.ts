@@ -55,11 +55,11 @@ function loadWorkflowInputs(): ActionConfig {
     configPath: core.getInput('config_path') || '.rudderstack-pr-reviewer.yml',
     filePatterns: parseCommaSeparated(core.getInput('file_patterns')),
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
-    outputVerbosity: (core.getInput('output_verbosity') as any) || 'standard',
+    outputVerbosity: (core.getInput('output_verbosity') as 'minimal' | 'standard' | 'detailed') || 'standard',
     reviewUnchangedFiles: core.getBooleanInput('review_unchanged_files') || false,
-    aiModel: (core.getInput('ai_model') as any) || 'claude-sonnet-4.5',
+    aiModel: (core.getInput('ai_model') as 'claude-sonnet-4.5' | 'claude-opus-4') || 'claude-sonnet-4.5',
     maxTokensPerRequest: parseInt(core.getInput('max_tokens_per_request') || '150000', 10),
-    annotationMode: (core.getInput('annotation_mode') as any) || 'errors_warnings',
+    annotationMode: (core.getInput('annotation_mode') as 'errors_only' | 'errors_warnings') || 'errors_warnings',
   };
 }
 

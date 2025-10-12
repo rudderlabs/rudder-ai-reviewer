@@ -4,7 +4,7 @@
  */
 
 import * as core from '@actions/core';
-import { ActionConfig, PRContext } from '../types/common';
+import { ActionConfig } from '../types/common';
 import { orchestrateAIAnalysis, mergeAIResults } from '../integrations/anthropic/orchestrator';
 import { createRudderStackClient } from '../integrations/rudderstack-api';
 import {
@@ -14,7 +14,7 @@ import {
   postPRReview,
   setOutputs,
 } from '../integrations/github';
-import { storeAnalysisArtifact, retrieveAnalysisArtifact } from '../integrations/github/artifact-manager';
+import { retrieveAnalysisArtifact } from '../integrations/github/artifact-manager';
 import { AIAnalysisResult } from '../integrations/anthropic/types';
 
 /**
@@ -110,8 +110,8 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
     const aiResult = await orchestrateAIAnalysis({
       changedFilePaths,
       unchangedFilePaths,
-      trackingPlan,
-      workspaceConfig,
+      trackingPlan: trackingPlan || undefined,
+      workspaceConfig: workspaceConfig || undefined,
       config: {
         apiKey: config.anthropicApiKey,
         model: config.aiModel,

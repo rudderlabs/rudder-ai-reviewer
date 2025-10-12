@@ -11,9 +11,7 @@ import { createChunks } from './chunker';
 import { AIAnalysisResult, AnthropicConfig, FileContent } from './types';
 import { TrackingPlan, WorkspaceConfig } from '../../types/common';
 
-export interface AIOrchestrat
-
-orInput {
+export interface AIOrchestratorInput {
   changedFilePaths: string[];
   unchangedFilePaths: string[];
   trackingPlan?: TrackingPlan;
