@@ -20,6 +20,7 @@ jobs:
         uses: ./
         with:
           service_access_token: ${{ secrets.RUDDERSTACK_ACCESS_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           source_id: ${{ secrets.RUDDERSTACK_SOURCE_ID }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           output_verbosity: standard # minimal | standard | detailed
