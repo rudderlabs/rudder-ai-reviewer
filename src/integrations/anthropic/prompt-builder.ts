@@ -37,7 +37,14 @@ Users often create wrappers around RudderStack calls. Look for:
 - Event builder functions
 
 Output Format:
-Return a JSON object with natural language markdown in the following structure:
+IMPORTANT: Return ONLY valid JSON. Ensure all strings are properly escaped:
+- Escape double quotes inside strings: \\"
+- Escape backslashes: \\\\
+- Escape newlines: \\n
+- Do not include any text outside the JSON object
+- Do not wrap in markdown code blocks
+
+Return a JSON object in the following structure:
 {
   "summary": {
     "overallAssessment": "High-level assessment of the instrumentation (2-3 sentences)",
@@ -168,7 +175,11 @@ export function buildUserPrompt(
   prompt += `6. **Provide fixes**: For each issue in changed code, provide file path, line number, and specific fix\n`;
   prompt += `7. **Review unchanged files**: If you find issues in unchanged files, list them separately\n\n`;
 
-  prompt += `Return your analysis as a JSON object following the structure specified in the system prompt.`;
+  prompt += `Return your analysis as a JSON object following the structure specified in the system prompt.\n\n`;
+  prompt += `CRITICAL: Ensure the JSON is valid:\n`;
+  prompt += `- Properly escape all special characters in strings (quotes, backslashes, newlines)\n`;
+  prompt += `- Do not include any text outside the JSON object\n`;
+  prompt += `- Return ONLY the JSON object, no markdown formatting`;
 
   return prompt;
 }

@@ -87030,13 +87030,20 @@ function parseAIResponse(responseText) {
     // Remove markdown code blocks if present
     const jsonBlockMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonBlockMatch) {
-        jsonText = jsonBlockMatch[1];
+        jsonText = jsonBlockMatch[1].trim();
     }
     else {
         // Try without json marker
         const codeBlockMatch = jsonText.match(/```\s*([\s\S]*?)\s*```/);
         if (codeBlockMatch) {
-            jsonText = codeBlockMatch[1];
+            jsonText = codeBlockMatch[1].trim();
+        }
+    }
+    // Try to find JSON object boundaries if there's surrounding text
+    if (!jsonText.startsWith('{')) {
+        const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            jsonText = jsonMatch[0];
         }
     }
     try {
@@ -87049,6 +87056,8 @@ function parseAIResponse(responseText) {
     }
     catch (error) {
         core.error(`Failed to parse AI response: ${error}`);
+        core.error(`First 500 chars of response: ${responseText.substring(0, 500)}`);
+        core.error(`Last 500 chars of response: ${responseText.substring(Math.max(0, responseText.length - 500))}`);
         throw new Error(`Invalid JSON response from AI: ${error}`);
     }
 }
@@ -87153,7 +87162,14 @@ Users often create wrappers around RudderStack calls. Look for:
 - Event builder functions
 
 Output Format:
-Return a JSON object with natural language markdown in the following structure:
+IMPORTANT: Return ONLY valid JSON. Ensure all strings are properly escaped:
+- Escape double quotes inside strings: \\"
+- Escape backslashes: \\\\
+- Escape newlines: \\n
+- Do not include any text outside the JSON object
+- Do not wrap in markdown code blocks
+
+Return a JSON object in the following structure:
 {
   "summary": {
     "overallAssessment": "High-level assessment of the instrumentation (2-3 sentences)",
@@ -87269,7 +87285,11 @@ function buildUserPrompt(changedFiles, unchangedFiles, trackingPlan, workspaceCo
     prompt += `5. **Detect issues**: Find errors, warnings, and areas for improvement\n`;
     prompt += `6. **Provide fixes**: For each issue in changed code, provide file path, line number, and specific fix\n`;
     prompt += `7. **Review unchanged files**: If you find issues in unchanged files, list them separately\n\n`;
-    prompt += `Return your analysis as a JSON object following the structure specified in the system prompt.`;
+    prompt += `Return your analysis as a JSON object following the structure specified in the system prompt.\n\n`;
+    prompt += `CRITICAL: Ensure the JSON is valid:\n`;
+    prompt += `- Properly escape all special characters in strings (quotes, backslashes, newlines)\n`;
+    prompt += `- Do not include any text outside the JSON object\n`;
+    prompt += `- Return ONLY the JSON object, no markdown formatting`;
     return prompt;
 }
 /**

@@ -205,12 +205,20 @@ function parseAIResponse(responseText: string): AIAnalysisResult {
   // Remove markdown code blocks if present
   const jsonBlockMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
   if (jsonBlockMatch) {
-    jsonText = jsonBlockMatch[1];
+    jsonText = jsonBlockMatch[1].trim();
   } else {
     // Try without json marker
     const codeBlockMatch = jsonText.match(/```\s*([\s\S]*?)\s*```/);
     if (codeBlockMatch) {
-      jsonText = codeBlockMatch[1];
+      jsonText = codeBlockMatch[1].trim();
+    }
+  }
+
+  // Try to find JSON object boundaries if there's surrounding text
+  if (!jsonText.startsWith('{')) {
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonText = jsonMatch[0];
     }
   }
 
@@ -225,6 +233,8 @@ function parseAIResponse(responseText: string): AIAnalysisResult {
     return parsed as AIAnalysisResult;
   } catch (error) {
     core.error(`Failed to parse AI response: ${error}`);
+    core.error(`First 500 chars of response: ${responseText.substring(0, 500)}`);
+    core.error(`Last 500 chars of response: ${responseText.substring(Math.max(0, responseText.length - 500))}`);
     throw new Error(`Invalid JSON response from AI: ${error}`);
   }
 }
