@@ -17,6 +17,9 @@ inputs:
     description: 'GitHub token for PR comments and annotations'
     required: true
     default: ${{ github.token }}
+  anthropic_api_key:
+    description: 'Anthropic API key for AI-based analysis'
+    required: true
   root_directory:
     description: 'Root directory to analyze (defaults to repository root). When set, analyzes ALL files in this directory, not just changed files. Useful for testing with sample apps.'
     required: false
@@ -38,6 +41,18 @@ inputs:
     description: 'Post inline review comments even for files not changed in the PR (true/false) - for testing purposes only'
     required: false
     default: 'false'
+  ai_model:
+    description: 'AI model to use for analysis: claude-sonnet-4.5, claude-opus-4'
+    required: false
+    default: 'claude-sonnet-4.5'
+  max_tokens_per_request:
+    description: 'Maximum tokens per AI request (for chunking)'
+    required: false
+    default: '150000'
+  annotation_mode:
+    description: 'Annotation mode: errors_only, errors_warnings'
+    required: false
+    default: 'errors_warnings'
 
 outputs:
   analysis_status:

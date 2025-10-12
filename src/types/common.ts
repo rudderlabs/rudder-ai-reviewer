@@ -20,12 +20,16 @@ export interface ActionConfig {
   serviceAccessToken: string;
   sourceId?: string;
   githubToken: string;
+  anthropicApiKey: string;
   rootDirectory?: string;
   configPath: string;
   filePatterns?: string[];
   excludePatterns?: string[];
   outputVerbosity: 'minimal' | 'standard' | 'detailed';
   reviewUnchangedFiles: boolean;
+  aiModel: 'claude-sonnet-4.5' | 'claude-opus-4';
+  maxTokensPerRequest: number;
+  annotationMode: 'errors_only' | 'errors_warnings';
 }
 
 export interface FileConfig {
@@ -40,6 +44,11 @@ export interface FileConfig {
     max_files?: number;
     max_file_size_mb?: number;
   };
+  ai?: {
+    model?: 'claude-sonnet-4.5' | 'claude-opus-4';
+    max_tokens_per_request?: number;
+  };
+  annotation_mode?: 'errors_only' | 'errors_warnings';
 }
 
 export interface PerformanceLimits {

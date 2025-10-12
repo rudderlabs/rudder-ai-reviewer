@@ -20,3 +20,5 @@ export {
 } from './artifact-manager';
 
 export { getPRDiff, isLineChanged } from './diff-parser';
+
+export { postOrUpdateGlobalSummary, postPRReview } from './three-comment-strategy';

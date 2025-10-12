@@ -50,12 +50,16 @@ function loadWorkflowInputs(): ActionConfig {
     serviceAccessToken: core.getInput('service_access_token', { required: true }),
     sourceId: core.getInput('source_id') || undefined,
     githubToken: core.getInput('github_token', { required: true }),
+    anthropicApiKey: core.getInput('anthropic_api_key', { required: true }),
     rootDirectory: core.getInput('root_directory') || undefined,
     configPath: core.getInput('config_path') || '.rudderstack-pr-reviewer.yml',
     filePatterns: parseCommaSeparated(core.getInput('file_patterns')),
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
     outputVerbosity: (core.getInput('output_verbosity') as any) || 'standard',
     reviewUnchangedFiles: core.getBooleanInput('review_unchanged_files') || false,
+    aiModel: (core.getInput('ai_model') as any) || 'claude-sonnet-4.5',
+    maxTokensPerRequest: parseInt(core.getInput('max_tokens_per_request') || '150000', 10),
+    annotationMode: (core.getInput('annotation_mode') as any) || 'errors_warnings',
   };
 }
 
@@ -117,11 +121,28 @@ function mergeConfigurations(
       ? workflowConfig.outputVerbosity
       : fileConfig.output_format?.verbosity || 'standard';
 
+  // AI configuration (workflow overrides file config)
+  const aiModel =
+    workflowConfig.aiModel !== 'claude-sonnet-4.5' ? workflowConfig.aiModel : fileConfig.ai?.model || 'claude-sonnet-4.5';
+
+  const maxTokensPerRequest =
+    workflowConfig.maxTokensPerRequest !== 150000
+      ? workflowConfig.maxTokensPerRequest
+      : fileConfig.ai?.max_tokens_per_request || 150000;
+
+  const annotationMode =
+    workflowConfig.annotationMode !== 'errors_warnings'
+      ? workflowConfig.annotationMode
+      : fileConfig.annotation_mode || 'errors_warnings';
+
   return {
     ...workflowConfig,
     filePatterns,
     excludePatterns,
     outputVerbosity,
+    aiModel,
+    maxTokensPerRequest,
+    annotationMode,
   };
 }
 
@@ -173,8 +194,24 @@ export function validateConfig(config: ActionConfig): boolean {
     errors.push('github_token is required');
   }
 
+  if (!config.anthropicApiKey) {
+    errors.push('anthropic_api_key is required');
+  }
+
   if (!['minimal', 'standard', 'detailed'].includes(config.outputVerbosity)) {
     errors.push(`Invalid output_verbosity: ${config.outputVerbosity}`);
+  }
+
+  if (!['claude-sonnet-4.5', 'claude-opus-4'].includes(config.aiModel)) {
+    errors.push(`Invalid ai_model: ${config.aiModel}`);
+  }
+
+  if (config.maxTokensPerRequest < 10000 || config.maxTokensPerRequest > 200000) {
+    errors.push(`Invalid max_tokens_per_request: ${config.maxTokensPerRequest} (must be between 10000 and 200000)`);
+  }
+
+  if (!['errors_only', 'errors_warnings'].includes(config.annotationMode)) {
+    errors.push(`Invalid annotation_mode: ${config.annotationMode}`);
   }
 
   if (errors.length > 0) {
