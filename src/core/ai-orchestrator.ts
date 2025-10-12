@@ -41,9 +41,9 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
       core.info(`root_directory specified: ${config.rootDirectory}`);
       core.info('Analyzing ALL files in root_directory instead of just PR changes');
 
-      const allFiles = await scanDirectoryForJSFiles(config.rootDirectory);
+      const allFiles = await scanDirectoryForAnalysis(config.rootDirectory);
       jsFiles = allFiles;
-      core.info(`Found ${jsFiles.length} JavaScript/TypeScript files in ${config.rootDirectory}`);
+      core.info(`Found ${jsFiles.length} files to analyze in ${config.rootDirectory}`);
     } else {
       // Normal PR mode - analyze only changed files
       const changedFiles = await getChangedFiles(prContext, config.githubToken);
@@ -220,9 +220,17 @@ function isJavaScriptFile(file: string): boolean {
 }
 
 /**
- * Recursively scan directory for JavaScript/TypeScript files
+ * Check if file should be analyzed (JS/TS/HTML)
  */
-async function scanDirectoryForJSFiles(dir: string): Promise<string[]> {
+function isAnalyzableFile(file: string): boolean {
+  const ext = file.split('.').pop()?.toLowerCase();
+  return ['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'html', 'htm'].includes(ext || '');
+}
+
+/**
+ * Recursively scan directory for analyzable files (JS/TS/HTML)
+ */
+async function scanDirectoryForAnalysis(dir: string): Promise<string[]> {
   const fs = await import('fs');
   const path = await import('path');
   const files: string[] = [];
@@ -239,7 +247,7 @@ async function scanDirectoryForJSFiles(dir: string): Promise<string[]> {
           if (!['node_modules', 'dist', 'build', '.git'].includes(entry.name)) {
             await scan(fullPath);
           }
-        } else if (entry.isFile() && isJavaScriptFile(entry.name)) {
+        } else if (entry.isFile() && isAnalyzableFile(entry.name)) {
           files.push(fullPath);
         }
       }

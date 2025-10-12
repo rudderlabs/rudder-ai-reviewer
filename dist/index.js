@@ -85952,9 +85952,9 @@ async function orchestrateAIBasedAnalysis(config) {
             // When root_directory is specified, analyze ALL JS/TS files in that directory
             core.info(`root_directory specified: ${config.rootDirectory}`);
             core.info('Analyzing ALL files in root_directory instead of just PR changes');
-            const allFiles = await scanDirectoryForJSFiles(config.rootDirectory);
+            const allFiles = await scanDirectoryForAnalysis(config.rootDirectory);
             jsFiles = allFiles;
-            core.info(`Found ${jsFiles.length} JavaScript/TypeScript files in ${config.rootDirectory}`);
+            core.info(`Found ${jsFiles.length} files to analyze in ${config.rootDirectory}`);
         }
         else {
             // Normal PR mode - analyze only changed files
@@ -86108,9 +86108,16 @@ function isJavaScriptFile(file) {
     return ['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs'].includes(ext || '');
 }
 /**
- * Recursively scan directory for JavaScript/TypeScript files
+ * Check if file should be analyzed (JS/TS/HTML)
  */
-async function scanDirectoryForJSFiles(dir) {
+function isAnalyzableFile(file) {
+    const ext = file.split('.').pop()?.toLowerCase();
+    return ['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'html', 'htm'].includes(ext || '');
+}
+/**
+ * Recursively scan directory for analyzable files (JS/TS/HTML)
+ */
+async function scanDirectoryForAnalysis(dir) {
     const fs = await Promise.resolve().then(() => __importStar(__nccwpck_require__(79896)));
     const path = await Promise.resolve().then(() => __importStar(__nccwpck_require__(16928)));
     const files = [];
@@ -86125,7 +86132,7 @@ async function scanDirectoryForJSFiles(dir) {
                         await scan(fullPath);
                     }
                 }
-                else if (entry.isFile() && isJavaScriptFile(entry.name)) {
+                else if (entry.isFile() && isAnalyzableFile(entry.name)) {
                     files.push(fullPath);
                 }
             }
