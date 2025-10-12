@@ -17,7 +17,7 @@
     var sdkVersion = "v3";
     var sdkFileName = "rsa.min.js";
 
-    !function(){var e=window.rudderanalytics=window.rudderanalytics||[];e.methods=["load","page","track","identify","alias","group","ready","reset","getAnonymousId","setAnonymousId"],e.factory=function(t){return function(){var r=Array.prototype.slice.call(arguments);return r.unshift(t),e.push(r),e}};for(var t=0;t<e.methods.length;t++){var r=e.methods[t];e[r]=e.factory(r)}e.loadJS=function(e,t){var r=document.createElement("script");r.type="text/javascript",r.async=!0,r.src=e;var n=document.getElementsByTagName("script")[0];n.parentNode.insertBefore(r,n)},e.loadJS(sdkBaseUrl+"/"+sdkVersion+"/"+sdkFileName),e.load("WRITE_KEY","https://dataplane.rudderstack.com")}();
+    !function(){var e=window.rudderanalytics=window.rudderanalytics||[];e.methods=["load","page","track","identify","alias","group","ready","reset","getAnonymousId","setAnonymousId"],e.factory=function(t){return function(){var r=Array.prototype.slice.call(arguments);return r.unshift(t),e.push(r),e}};for(var t=0;t<e.methods.length;t++){var r=e.methods[t];e[r]=e.factory(r)}e.loadJS=function(e,t){var r=document.createElement("script");r.type="text/javascript",r.async=!0,r.src=e;var n=document.getElementsByTagName("script")[0];n.parentNode.insertBefore(r,n)},e.loadJS(sdkBaseUrl+"/"+sdkVersion+"/"+sdkFileName),e.load("<PLACEHOLDER_WRITE_KEY>","<PLACEHOLDER_DATAPLANE_URL>")}();
 
     // Valid track calls
     rudderanalytics.track('page_loaded', {
