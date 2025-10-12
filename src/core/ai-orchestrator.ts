@@ -33,22 +33,34 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
 
     core.info(`Analyzing PR #${prContext.prNumber} in ${prContext.owner}/${prContext.repo}`);
 
-    // Step 2: Get changed files
-    const changedFiles = await getChangedFiles(prContext, config.githubToken);
-    prContext.changedFiles = changedFiles;
+    // Step 2: Determine files to analyze
+    let jsFiles: string[];
 
-    core.info(`Found ${changedFiles.length} changed files`);
+    if (config.rootDirectory) {
+      // When root_directory is specified, analyze ALL JS/TS files in that directory
+      core.info(`root_directory specified: ${config.rootDirectory}`);
+      core.info('Analyzing ALL files in root_directory instead of just PR changes');
 
-    if (changedFiles.length === 0) {
-      core.info('No changed files to analyze');
-      setOutputs({ status: 'success', errorCount: 0, warningCount: 0, suggestionCount: 0 });
-      return;
+      const allFiles = await scanDirectoryForJSFiles(config.rootDirectory);
+      jsFiles = allFiles;
+      core.info(`Found ${jsFiles.length} JavaScript/TypeScript files in ${config.rootDirectory}`);
+    } else {
+      // Normal PR mode - analyze only changed files
+      const changedFiles = await getChangedFiles(prContext, config.githubToken);
+      prContext.changedFiles = changedFiles;
+
+      core.info(`Found ${changedFiles.length} changed files in PR`);
+
+      if (changedFiles.length === 0) {
+        core.info('No changed files to analyze');
+        setOutputs({ status: 'success', errorCount: 0, warningCount: 0, suggestionCount: 0 });
+        return;
+      }
+
+      // Filter JavaScript/TypeScript files
+      jsFiles = changedFiles.filter(isJavaScriptFile);
+      core.info(`Found ${jsFiles.length} JavaScript/TypeScript files`);
     }
-
-    // Step 3: Filter JavaScript/TypeScript files
-    const jsFiles = changedFiles.filter(isJavaScriptFile);
-
-    core.info(`Found ${jsFiles.length} JavaScript/TypeScript files`);
 
     if (jsFiles.length === 0) {
       core.info('No JavaScript/TypeScript files to analyze');
@@ -98,11 +110,19 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
     }
 
     // Step 5: Prepare file paths for AI analysis
-    // For now, analyze only changed files (cast wide net)
-    const changedFilePaths = jsFiles.map((file) => `${process.cwd()}/${file}`);
+    let changedFilePaths: string[];
+
+    if (config.rootDirectory) {
+      // Files are already absolute paths from root_directory
+      changedFilePaths = jsFiles;
+    } else {
+      // Convert relative paths to absolute for normal PR mode
+      changedFilePaths = jsFiles.map((file) => `${process.cwd()}/${file}`);
+    }
+
     const unchangedFilePaths: string[] = []; // Could add related files here in future
 
-    core.info(`Analyzing ${changedFilePaths.length} changed files`);
+    core.info(`Analyzing ${changedFilePaths.length} files`);
 
     // Step 6: Run AI analysis
     core.info('Running AI analysis...');
@@ -197,4 +217,37 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
 function isJavaScriptFile(file: string): boolean {
   const ext = file.split('.').pop()?.toLowerCase();
   return ['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs'].includes(ext || '');
+}
+
+/**
+ * Recursively scan directory for JavaScript/TypeScript files
+ */
+async function scanDirectoryForJSFiles(dir: string): Promise<string[]> {
+  const fs = await import('fs');
+  const path = await import('path');
+  const files: string[] = [];
+
+  async function scan(currentDir: string): Promise<void> {
+    try {
+      const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(currentDir, entry.name);
+
+        // Skip node_modules, dist, build directories
+        if (entry.isDirectory()) {
+          if (!['node_modules', 'dist', 'build', '.git'].includes(entry.name)) {
+            await scan(fullPath);
+          }
+        } else if (entry.isFile() && isJavaScriptFile(entry.name)) {
+          files.push(fullPath);
+        }
+      }
+    } catch (error) {
+      core.warning(`Failed to scan directory ${currentDir}: ${error}`);
+    }
+  }
+
+  await scan(dir);
+  return files;
 }
