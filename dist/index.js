@@ -86184,7 +86184,7 @@ function loadWorkflowInputs() {
         excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
         outputVerbosity: core.getInput('output_verbosity') || 'standard',
         reviewUnchangedFiles: core.getBooleanInput('review_unchanged_files') || false,
-        aiModel: core.getInput('ai_model') || 'claude-sonnet-4.5',
+        aiModel: core.getInput('ai_model') || 'claude-sonnet-4-5',
         maxTokensPerRequest: parseInt(core.getInput('max_tokens_per_request') || '150000', 10),
         annotationMode: core.getInput('annotation_mode') || 'errors_warnings',
     };
@@ -86233,7 +86233,9 @@ function mergeConfigurations(workflowConfig, fileConfig) {
         ? workflowConfig.outputVerbosity
         : fileConfig.output_format?.verbosity || 'standard';
     // AI configuration (workflow overrides file config)
-    const aiModel = workflowConfig.aiModel !== 'claude-sonnet-4.5' ? workflowConfig.aiModel : fileConfig.ai?.model || 'claude-sonnet-4.5';
+    const aiModel = workflowConfig.aiModel !== 'claude-sonnet-4-5'
+        ? workflowConfig.aiModel
+        : fileConfig.ai?.model || 'claude-sonnet-4-5';
     const maxTokensPerRequest = workflowConfig.maxTokensPerRequest !== 150000
         ? workflowConfig.maxTokensPerRequest
         : fileConfig.ai?.max_tokens_per_request || 150000;
@@ -86297,8 +86299,9 @@ function validateConfig(config) {
     if (!['minimal', 'standard', 'detailed'].includes(config.outputVerbosity)) {
         errors.push(`Invalid output_verbosity: ${config.outputVerbosity}`);
     }
-    if (!['claude-sonnet-4.5', 'claude-opus-4'].includes(config.aiModel)) {
-        errors.push(`Invalid ai_model: ${config.aiModel}`);
+    // Allow any model name - validation happens at Anthropic API level
+    if (!config.aiModel || config.aiModel.trim() === '') {
+        errors.push('ai_model cannot be empty');
     }
     if (config.maxTokensPerRequest < 10000 || config.maxTokensPerRequest > 200000) {
         errors.push(`Invalid max_tokens_per_request: ${config.maxTokensPerRequest} (must be between 10000 and 200000)`);

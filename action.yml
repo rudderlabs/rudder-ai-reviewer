@@ -42,9 +42,9 @@ inputs:
     required: false
     default: 'false'
   ai_model:
-    description: 'AI model to use for analysis: claude-sonnet-4.5, claude-opus-4'
+    description: 'AI model to use for analysis: claude-sonnet-4-5, claude-sonnet-3-4, claude-opus-4, etc.'
     required: false
-    default: 'claude-sonnet-4.5'
+    default: 'claude-sonnet-4-5'
   max_tokens_per_request:
     description: 'Maximum tokens per AI request (for chunking)'
     required: false

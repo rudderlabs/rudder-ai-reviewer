@@ -8,7 +8,7 @@
 
 export interface AnthropicConfig {
   apiKey: string;
-  model: 'claude-sonnet-4.5' | 'claude-opus-4' | string;
+  model: string; // Any Anthropic model name (e.g., claude-3-5-sonnet-20241022)
   maxTokens: number;
 }
 

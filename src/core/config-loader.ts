@@ -57,7 +57,7 @@ function loadWorkflowInputs(): ActionConfig {
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
     outputVerbosity: (core.getInput('output_verbosity') as 'minimal' | 'standard' | 'detailed') || 'standard',
     reviewUnchangedFiles: core.getBooleanInput('review_unchanged_files') || false,
-    aiModel: (core.getInput('ai_model') as 'claude-sonnet-4.5' | 'claude-opus-4') || 'claude-sonnet-4.5',
+    aiModel: core.getInput('ai_model') || 'claude-sonnet-4-5',
     maxTokensPerRequest: parseInt(core.getInput('max_tokens_per_request') || '150000', 10),
     annotationMode: (core.getInput('annotation_mode') as 'errors_only' | 'errors_warnings') || 'errors_warnings',
   };
@@ -123,7 +123,9 @@ function mergeConfigurations(
 
   // AI configuration (workflow overrides file config)
   const aiModel =
-    workflowConfig.aiModel !== 'claude-sonnet-4.5' ? workflowConfig.aiModel : fileConfig.ai?.model || 'claude-sonnet-4.5';
+    workflowConfig.aiModel !== 'claude-sonnet-4-5'
+      ? workflowConfig.aiModel
+      : fileConfig.ai?.model || 'claude-sonnet-4-5';
 
   const maxTokensPerRequest =
     workflowConfig.maxTokensPerRequest !== 150000
@@ -202,8 +204,9 @@ export function validateConfig(config: ActionConfig): boolean {
     errors.push(`Invalid output_verbosity: ${config.outputVerbosity}`);
   }
 
-  if (!['claude-sonnet-4.5', 'claude-opus-4'].includes(config.aiModel)) {
-    errors.push(`Invalid ai_model: ${config.aiModel}`);
+  // Allow any model name - validation happens at Anthropic API level
+  if (!config.aiModel || config.aiModel.trim() === '') {
+    errors.push('ai_model cannot be empty');
   }
 
   if (config.maxTokensPerRequest < 10000 || config.maxTokensPerRequest > 200000) {

@@ -27,7 +27,7 @@ export interface ActionConfig {
   excludePatterns?: string[];
   outputVerbosity: 'minimal' | 'standard' | 'detailed';
   reviewUnchangedFiles: boolean;
-  aiModel: 'claude-sonnet-4.5' | 'claude-opus-4';
+  aiModel: string; // Allow any Anthropic model name
   maxTokensPerRequest: number;
   annotationMode: 'errors_only' | 'errors_warnings';
 }
@@ -45,7 +45,7 @@ export interface FileConfig {
     max_file_size_mb?: number;
   };
   ai?: {
-    model?: 'claude-sonnet-4.5' | 'claude-opus-4';
+    model?: string; // Allow any Anthropic model name
     max_tokens_per_request?: number;
   };
   annotation_mode?: 'errors_only' | 'errors_warnings';
