@@ -33,8 +33,6 @@ export async function loadConfig(rootDirectory?: string): Promise<ActionConfig> 
  */
 function loadWorkflowInputs(): ActionConfig {
   return {
-    serviceAccessToken: core.getInput('service_access_token', { required: true }),
-    sourceId: core.getInput('source_id') || undefined,
     githubToken: core.getInput('github_token', { required: true }),
     anthropicApiKey: core.getInput('anthropic_api_key', { required: true }),
     rootDirectory: core.getInput('root_directory') || undefined,
@@ -116,10 +114,6 @@ function mergeConfigurations(
  */
 export function validateConfig(config: ActionConfig): boolean {
   const errors: string[] = [];
-
-  if (!config.serviceAccessToken) {
-    errors.push('service_access_token is required');
-  }
 
   if (!config.githubToken) {
     errors.push('github_token is required');

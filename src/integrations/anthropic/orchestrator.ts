@@ -9,13 +9,10 @@ import { AnthropicClient, createAnthropicClient } from './client';
 import { buildSystemPrompt, buildUserPrompt } from './prompt-builder';
 import { createChunks } from './chunker';
 import { AIAnalysisResult, AnthropicConfig, FileContent } from './types';
-import { TrackingPlan, WorkspaceConfig } from '../../types/common';
 
 export interface AIOrchestratorInput {
   changedFilePaths: string[];
   unchangedFilePaths: string[];
-  trackingPlan?: TrackingPlan;
-  workspaceConfig?: WorkspaceConfig;
   config: AnthropicConfig;
 }
 
@@ -75,13 +72,7 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
 
     // Step 3: Create chunks
     core.info('Creating chunks...');
-    const chunks = createChunks(
-      changedFiles,
-      unchangedFiles,
-      input.config.maxTokens,
-      input.trackingPlan,
-      input.workspaceConfig
-    );
+    const chunks = createChunks(changedFiles, unchangedFiles, input.config.maxTokens);
 
     core.info(`Created ${chunks.length} chunk(s) for analysis`);
 
@@ -98,7 +89,7 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
       const changedChunkFiles = chunk.files.filter((f) => f.isChanged);
       const unchangedChunkFiles = chunk.files.filter((f) => !f.isChanged);
 
-      const userPrompt = buildUserPrompt(changedChunkFiles, unchangedChunkFiles, input.trackingPlan, input.workspaceConfig);
+      const userPrompt = buildUserPrompt(changedChunkFiles, unchangedChunkFiles);
 
       const response = await client.analyze({
         systemPrompt,

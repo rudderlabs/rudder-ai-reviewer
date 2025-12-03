@@ -5,7 +5,6 @@
 
 import * as core from '@actions/core';
 import { CodeChunk, FileContent } from './types';
-import { TrackingPlan, WorkspaceConfig } from '../../types/common';
 import { estimateTokens, buildSystemPrompt, buildUserPrompt } from './prompt-builder';
 
 /**
@@ -13,31 +12,19 @@ import { estimateTokens, buildSystemPrompt, buildUserPrompt } from './prompt-bui
  * @param changedFiles Files that were changed in the PR
  * @param unchangedFiles Files that provide context but weren't changed
  * @param maxTokensPerRequest Maximum tokens allowed per request
- * @param trackingPlan Optional tracking plan data
- * @param workspaceConfig Optional workspace config data
  * @returns Array of code chunks ready for AI analysis
  */
 export function createChunks(
   changedFiles: FileContent[],
   unchangedFiles: FileContent[],
   maxTokensPerRequest: number,
-  trackingPlan?: TrackingPlan,
-  workspaceConfig?: WorkspaceConfig
 ): CodeChunk[] {
   core.info('=== Starting Chunking Process ===');
 
   // Estimate tokens for context (system prompt + RS data)
   const systemPrompt = buildSystemPrompt();
-  const systemPromptTokens = estimateTokens(systemPrompt);
+  const contextTokens = estimateTokens(systemPrompt);
 
-  let contextTokens = systemPromptTokens;
-
-  if (trackingPlan) {
-    contextTokens += estimateTokens(JSON.stringify(trackingPlan));
-  }
-  if (workspaceConfig) {
-    contextTokens += estimateTokens(JSON.stringify(workspaceConfig));
-  }
 
   core.info(`Context tokens (system prompt + RS data): ~${contextTokens}`);
   core.info(`Available tokens for code: ~${maxTokensPerRequest - contextTokens}`);

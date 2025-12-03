@@ -6,7 +6,6 @@
 import * as core from '@actions/core';
 import { ActionConfig } from '../types/common';
 import { orchestrateAIAnalysis, mergeAIResults } from '../integrations/anthropic/orchestrator';
-import { createRudderStackClient } from '../integrations/rudderstack-api';
 import {
   getPRContext,
   getChangedFiles,
@@ -14,7 +13,7 @@ import {
   postPRReview,
   setOutputs,
 } from '../integrations/github';
-import { retrieveAnalysisArtifact } from '../integrations/github/artifact-manager';
+import { retrieveAnalysisArtifact, storeAnalysisArtifact } from '../integrations/github/artifact-manager';
 import { AIAnalysisResult } from '../integrations/anthropic/types';
 
 /**
@@ -68,46 +67,7 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
       return;
     }
 
-    // Step 4: Fetch RudderStack workspace data (tracking plan, destinations)
-    core.info('Fetching RudderStack workspace data...');
-
-    let trackingPlan;
-    let workspaceConfig;
-
-    try {
-      const rudderStackClient = createRudderStackClient({
-        serviceAccessToken: config.serviceAccessToken,
-        sourceId: config.sourceId,
-      });
-
-      // Test connection
-      const connected = await rudderStackClient.testConnection();
-
-      if (connected) {
-        core.info('✓ Connected to RudderStack API');
-
-        // Fetch tracking plan
-        trackingPlan = await rudderStackClient.getTrackingPlan();
-        if (trackingPlan) {
-          core.info(`✓ Tracking plan retrieved with ${trackingPlan.events.length} events`);
-        } else {
-          core.info('No tracking plan found');
-        }
-
-        // Fetch workspace config
-        workspaceConfig = await rudderStackClient.getWorkspaceConfig();
-        if (workspaceConfig) {
-          core.info(`✓ Workspace config retrieved with ${workspaceConfig.destinations.length} destinations`);
-        } else {
-          core.info('No workspace config found');
-        }
-      } else {
-        core.warning('Could not connect to RudderStack API - continuing without workspace data');
-      }
-    } catch (error) {
-      core.warning(`Failed to fetch RudderStack data: ${error}`);
-      // Continue without workspace data
-    }
+    // Step 4: (RudderStack API integration removed - AI analyzes SDK usage directly from code)
 
     // Step 5: Prepare file paths for AI analysis
     let changedFilePaths: string[];
@@ -130,8 +90,6 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
     const aiResult = await orchestrateAIAnalysis({
       changedFilePaths,
       unchangedFilePaths,
-      trackingPlan: trackingPlan || undefined,
-      workspaceConfig: workspaceConfig || undefined,
       config: {
         apiKey: config.anthropicApiKey,
         model: config.aiModel,
@@ -154,17 +112,21 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
 
     core.info(`Merged results: ${mergedResult.events.length} events, ${mergedResult.issues.errors.length} errors, ${mergedResult.issues.warnings.length} warnings, ${mergedResult.issues.suggestions.length} suggestions`);
 
-    // Step 8: Retrieve previous analysis (for incremental delta)
-    // TODO: Implement incremental analysis
+    // Step 9: Retrieve previous analysis (for incremental delta)
+    core.info('Checking for previous analysis artifact...');
     let previousResult: AIAnalysisResult | null = null;
 
-    // Incremental analysis not yet implemented - always null for now
-    // When implemented:
-    // 1. Retrieve artifact: await retrieveAnalysisArtifact(prContext.prNumber)
-    // 2. Parse AIAnalysisResult from artifact
-    // 3. Use for delta calculation in three-comment strategy
+    try {
+      const artifact = await retrieveAnalysisArtifact(prContext.prNumber);
+      if (artifact && artifact.analysisResult) {
+        previousResult = artifact.analysisResult as AIAnalysisResult;
+        core.info(`✓ Using previous analysis from ${artifact.timestamp} for delta calculation`);
+      }
+    } catch (error) {
+      core.debug(`No previous analysis found: ${error}`);
+    }
 
-    // Step 9: Post three-comment strategy
+    // Step 10: Post three-comment strategy
     core.info('Posting analysis results...');
 
     // 9a. Global summary comment (cumulative)
@@ -173,12 +135,16 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
     // 9b. PR review with incremental delta + inline annotations
     await postPRReview(prContext, config.githubToken, mergedResult, previousResult, config.annotationMode);
 
-    // Step 10: Store analysis artifact for future incremental analysis
-    // TODO: Implement artifact storage
-    // When implemented:
-    // await storeAnalysisArtifact(prContext.prNumber, prContext.headSha, mergedResult);
+    // Step 11: Store analysis artifact for future incremental analysis
+    core.info('Storing analysis artifact for future runs...');
+    try {
+      await storeAnalysisArtifact(prContext.prNumber, prContext.headSha, mergedResult);
+    } catch (error) {
+      core.warning(`Failed to store analysis artifact: ${error}`);
+      // Don't fail the action if artifact storage fails
+    }
 
-    // Step 11: Set outputs
+    // Step 12: Set outputs
     const errorCount = mergedResult.issues.errors.length;
     const warningCount = mergedResult.issues.warnings.length;
     const suggestionCount = mergedResult.issues.suggestions.length;
