@@ -130,7 +130,7 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
     core.info('Posting analysis results...');
 
     // 9a. Global summary comment (cumulative)
-    await postOrUpdateGlobalSummary(prContext, config.githubToken, mergedResult, previousResult ? [previousResult] : []);
+    await postOrUpdateGlobalSummary(prContext, config.githubToken, mergedResult, previousResult ? [previousResult] : [], aiResult.truncatedFiles);
 
     // 9b. PR review with incremental delta + inline annotations
     await postPRReview(prContext, config.githubToken, mergedResult, previousResult, config.annotationMode);

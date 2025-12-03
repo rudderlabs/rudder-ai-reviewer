@@ -114,3 +114,14 @@ export interface FileContent {
   content: string;
   isChanged: boolean;
 }
+
+export interface TruncatedFileInfo {
+  path: string;
+  originalTokens: number;
+  truncatedTokens: number;
+}
+
+export interface ChunkingResult {
+  chunks: CodeChunk[];
+  truncatedFiles: TruncatedFileInfo[];
+}

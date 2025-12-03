@@ -25,7 +25,7 @@ RudderStack SDK Methods:
 - rudderanalytics.page(category, name, properties, options, callback)
 - rudderanalytics.group(groupId, traits, options, callback)
 - rudderanalytics.alias(to, from, options, callback)
-- rudderanalylytics.reset()
+- rudderanalytics.reset()
 
 Custom Abstractions:
 Users often create wrappers around RudderStack calls. Look for:

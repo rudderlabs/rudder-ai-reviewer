@@ -78958,7 +78958,7 @@ async function orchestrateAIBasedAnalysis(config) {
         // Step 10: Post three-comment strategy
         core.info('Posting analysis results...');
         // 9a. Global summary comment (cumulative)
-        await (0, github_1.postOrUpdateGlobalSummary)(prContext, config.githubToken, mergedResult, previousResult ? [previousResult] : []);
+        await (0, github_1.postOrUpdateGlobalSummary)(prContext, config.githubToken, mergedResult, previousResult ? [previousResult] : [], aiResult.truncatedFiles);
         // 9b. PR review with incremental delta + inline annotations
         await (0, github_1.postPRReview)(prContext, config.githubToken, mergedResult, previousResult, config.annotationMode);
         // Step 11: Store analysis artifact for future incremental analysis
@@ -79250,7 +79250,7 @@ const prompt_builder_1 = __nccwpck_require__(32162);
  * @param changedFiles Files that were changed in the PR
  * @param unchangedFiles Files that provide context but weren't changed
  * @param maxTokensPerRequest Maximum tokens allowed per request
- * @returns Array of code chunks ready for AI analysis
+ * @returns Chunking result with chunks and truncated file info
  */
 function createChunks(changedFiles, unchangedFiles, maxTokensPerRequest) {
     core.info('=== Starting Chunking Process ===');
@@ -79281,35 +79281,38 @@ function createChunks(changedFiles, unchangedFiles, maxTokensPerRequest) {
     // Strategy 1: Try to fit everything in one chunk
     if (totalCodeTokens <= availableTokens) {
         core.info('✓ All files fit in single chunk');
-        return [
-            {
-                id: 'chunk-1',
-                files: [...changedFiles, ...unchangedFiles],
-                isChangedFiles: true,
-                estimatedTokens: contextTokens + totalCodeTokens,
-            },
-        ];
+        return {
+            chunks: [
+                {
+                    id: 'chunk-1',
+                    files: [...changedFiles, ...unchangedFiles],
+                    isChangedFiles: true,
+                    estimatedTokens: contextTokens + totalCodeTokens,
+                },
+            ],
+            truncatedFiles: [],
+        };
     }
     core.info('⚠ Files exceed token limit, applying chunking strategy...');
     // Strategy 2: Try smart grouping (group related files - e.g., same directory)
     core.info('Attempting Strategy 1: Smart grouping by directory...');
-    const smartChunks = createSmartGroupChunks(changedFilesWithTokens, unchangedFilesWithTokens, availableTokens, contextTokens);
-    if (smartChunks.length > 0) {
-        core.info(`✓ Smart grouping successful: ${smartChunks.length} chunk(s)`);
-        return smartChunks;
+    const smartResult = createSmartGroupChunks(changedFilesWithTokens, unchangedFilesWithTokens, availableTokens, contextTokens);
+    if (smartResult.chunks.length > 0) {
+        core.info(`✓ Smart grouping successful: ${smartResult.chunks.length} chunk(s)`);
+        return smartResult;
     }
     // Strategy 3: Fallback to changed vs unchanged split
     core.info('Attempting Strategy 2: Changed vs unchanged split...');
-    const splitChunks = createChangedUnchangedSplitChunks(changedFilesWithTokens, unchangedFilesWithTokens, availableTokens, contextTokens);
-    if (splitChunks.length > 0) {
-        core.info(`✓ Changed/unchanged split successful: ${splitChunks.length} chunk(s)`);
-        return splitChunks;
+    const splitResult = createChangedUnchangedSplitChunks(changedFilesWithTokens, unchangedFilesWithTokens, availableTokens, contextTokens);
+    if (splitResult.chunks.length > 0) {
+        core.info(`✓ Changed/unchanged split successful: ${splitResult.chunks.length} chunk(s)`);
+        return splitResult;
     }
     // Strategy 4: Ultimate fallback to file-based chunks
     core.info('Attempting Strategy 3: File-based chunking...');
-    const fileChunks = createFileBasedChunks(changedFilesWithTokens, unchangedFilesWithTokens, availableTokens, contextTokens);
-    core.info(`✓ File-based chunking complete: ${fileChunks.length} chunk(s)`);
-    return fileChunks;
+    const fileResult = createFileBasedChunks(changedFilesWithTokens, unchangedFilesWithTokens, availableTokens, contextTokens);
+    core.info(`✓ File-based chunking complete: ${fileResult.chunks.length} chunk(s)`);
+    return fileResult;
 }
 /**
  * Strategy 1: Smart grouping - group files by directory/feature
@@ -79353,7 +79356,7 @@ function createSmartGroupChunks(changedFiles, unchangedFiles, availableTokens, c
             }
             else {
                 // Group itself is too large, can't use smart grouping
-                return [];
+                return { chunks: [], truncatedFiles: [] };
             }
         }
     }
@@ -79375,7 +79378,7 @@ function createSmartGroupChunks(changedFiles, unchangedFiles, availableTokens, c
             lastChunk.estimatedTokens += unchangedTokens;
         }
     }
-    return chunks;
+    return { chunks, truncatedFiles: [] };
 }
 /**
  * Strategy 2: Split changed and unchanged files
@@ -79401,16 +79404,17 @@ function createChangedUnchangedSplitChunks(changedFiles, unchangedFiles, availab
                 estimatedTokens: contextTokens + unchangedTokens,
             });
         }
-        return chunks;
+        return { chunks, truncatedFiles: [] };
     }
     // Changed files don't fit, need to split them
-    return [];
+    return { chunks: [], truncatedFiles: [] };
 }
 /**
  * Strategy 3: File-based chunking (ultimate fallback)
  */
 function createFileBasedChunks(changedFiles, unchangedFiles, availableTokens, contextTokens) {
     const chunks = [];
+    const truncatedFiles = [];
     let currentChunk = [];
     let currentTokens = 0;
     let chunkIndex = 1;
@@ -79420,11 +79424,18 @@ function createFileBasedChunks(changedFiles, unchangedFiles, availableTokens, co
             core.warning(`File ${file.path} is too large (${file.tokens} tokens) and will be truncated`);
             // Truncate file content to fit
             const truncatedContent = file.content.substring(0, Math.floor(availableTokens * 4 * 0.9)); // Leave 10% buffer
+            const truncatedTokens = (0, prompt_builder_1.estimateTokens)(truncatedContent);
+            // Track truncation
+            truncatedFiles.push({
+                path: file.path,
+                originalTokens: file.tokens,
+                truncatedTokens: truncatedTokens,
+            });
             chunks.push({
                 id: `chunk-${chunkIndex++}`,
                 files: [{ path: file.path, content: truncatedContent, isChanged: file.isChanged }],
                 isChangedFiles: true,
-                estimatedTokens: contextTokens + (0, prompt_builder_1.estimateTokens)(truncatedContent),
+                estimatedTokens: contextTokens + truncatedTokens,
             });
             continue;
         }
@@ -79485,7 +79496,7 @@ function createFileBasedChunks(changedFiles, unchangedFiles, availableTokens, co
             estimatedTokens: contextTokens + currentTokens,
         });
     }
-    return chunks;
+    return { chunks, truncatedFiles };
 }
 
 
@@ -79718,6 +79729,7 @@ async function orchestrateAIAnalysis(input) {
                 totalChunks: 0,
                 totalInputTokens: 0,
                 totalOutputTokens: 0,
+                truncatedFiles: [],
                 error: 'Failed to connect to Anthropic API',
             };
         }
@@ -79735,19 +79747,26 @@ async function orchestrateAIAnalysis(input) {
                 totalChunks: 0,
                 totalInputTokens: 0,
                 totalOutputTokens: 0,
+                truncatedFiles: [],
             };
         }
         // Step 3: Create chunks
         core.info('Creating chunks...');
-        const chunks = (0, chunker_1.createChunks)(changedFiles, unchangedFiles, input.config.maxTokens);
-        core.info(`Created ${chunks.length} chunk(s) for analysis`);
+        const chunkingResult = (0, chunker_1.createChunks)(changedFiles, unchangedFiles, input.config.maxTokens);
+        core.info(`Created ${chunkingResult.chunks.length} chunk(s) for analysis`);
+        if (chunkingResult.truncatedFiles.length > 0) {
+            core.warning(`${chunkingResult.truncatedFiles.length} file(s) were truncated due to size limits`);
+            chunkingResult.truncatedFiles.forEach((tf) => {
+                core.warning(`  - ${tf.path}: ${tf.originalTokens} → ${tf.truncatedTokens} tokens`);
+            });
+        }
         // Step 4: Analyze each chunk
         const results = [];
         let totalInputTokens = 0;
         let totalOutputTokens = 0;
-        for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
-            core.info(`Analyzing chunk ${i + 1}/${chunks.length} (${chunk.id}, ${chunk.files.length} files, ~${chunk.estimatedTokens} tokens)`);
+        for (let i = 0; i < chunkingResult.chunks.length; i++) {
+            const chunk = chunkingResult.chunks[i];
+            core.info(`Analyzing chunk ${i + 1}/${chunkingResult.chunks.length} (${chunk.id}, ${chunk.files.length} files, ~${chunk.estimatedTokens} tokens)`);
             const systemPrompt = (0, prompt_builder_1.buildSystemPrompt)();
             const changedChunkFiles = chunk.files.filter((f) => f.isChanged);
             const unchangedChunkFiles = chunk.files.filter((f) => !f.isChanged);
@@ -79762,9 +79781,10 @@ async function orchestrateAIAnalysis(input) {
                 return {
                     status: 'failed',
                     results,
-                    totalChunks: chunks.length,
+                    totalChunks: chunkingResult.chunks.length,
                     totalInputTokens,
                     totalOutputTokens,
+                    truncatedFiles: chunkingResult.truncatedFiles,
                     error: `Analysis failed on chunk ${chunk.id}: ${response.error}`,
                 };
             }
@@ -79785,9 +79805,10 @@ async function orchestrateAIAnalysis(input) {
                 return {
                     status: 'failed',
                     results,
-                    totalChunks: chunks.length,
+                    totalChunks: chunkingResult.chunks.length,
                     totalInputTokens,
                     totalOutputTokens,
+                    truncatedFiles: chunkingResult.truncatedFiles,
                     error: `Failed to parse AI response for chunk ${chunk.id}`,
                 };
             }
@@ -79798,9 +79819,10 @@ async function orchestrateAIAnalysis(input) {
         return {
             status: 'success',
             results,
-            totalChunks: chunks.length,
+            totalChunks: chunkingResult.chunks.length,
             totalInputTokens,
             totalOutputTokens,
+            truncatedFiles: chunkingResult.truncatedFiles,
         };
     }
     catch (error) {
@@ -79812,6 +79834,7 @@ async function orchestrateAIAnalysis(input) {
             totalChunks: 0,
             totalInputTokens: 0,
             totalOutputTokens: 0,
+            truncatedFiles: [],
             error: errorMessage,
         };
     }
@@ -79966,7 +79989,7 @@ RudderStack SDK Methods:
 - rudderanalytics.page(category, name, properties, options, callback)
 - rudderanalytics.group(groupId, traits, options, callback)
 - rudderanalytics.alias(to, from, options, callback)
-- rudderanalylytics.reset()
+- rudderanalytics.reset()
 
 Custom Abstractions:
 Users often create wrappers around RudderStack calls. Look for:
@@ -80741,12 +80764,12 @@ const REVIEW_IDENTIFIER = '<!-- rudderstack-review -->';
 /**
  * Post or update global summary comment (cumulative)
  */
-async function postOrUpdateGlobalSummary(prContext, token, analysisResult, analysisHistory) {
+async function postOrUpdateGlobalSummary(prContext, token, analysisResult, analysisHistory, truncatedFiles = []) {
     core.info('Posting/updating global summary comment...');
     try {
         const octokit = github.getOctokit(token);
         // Generate cumulative summary
-        const summaryBody = generateGlobalSummary(analysisResult, analysisHistory);
+        const summaryBody = generateGlobalSummary(analysisResult, analysisHistory, truncatedFiles);
         const fullBody = `${GLOBAL_SUMMARY_IDENTIFIER}\n${summaryBody}`;
         // Find existing comment
         const { data: comments } = await octokit.rest.issues.listComments({
@@ -80785,7 +80808,7 @@ async function postOrUpdateGlobalSummary(prContext, token, analysisResult, analy
 /**
  * Generate global summary comment body
  */
-function generateGlobalSummary(current, history) {
+function generateGlobalSummary(current, history, truncatedFiles = []) {
     const allResults = [...history, current];
     // Merge all results for cumulative view
     const allEvents = allResults.flatMap((r) => r.events);
@@ -80812,6 +80835,16 @@ function generateGlobalSummary(current, history) {
     body += `  - ❌ Errors: ${allErrors.length}\n`;
     body += `  - ⚠️ Warnings: ${allWarnings.length}\n`;
     body += `  - 💡 Suggestions: ${allSuggestions.length}\n\n`;
+    // Truncation warning (if files were truncated)
+    if (truncatedFiles.length > 0) {
+        body += `> **⚠️ Note**: ${truncatedFiles.length} file(s) were too large and had to be partially analyzed:\n`;
+        truncatedFiles.forEach((tf) => {
+            const percentAnalyzed = Math.round((tf.truncatedTokens / tf.originalTokens) * 100);
+            body += `> - \`${tf.path}\` (~${percentAnalyzed}% analyzed)\n`;
+        });
+        body += `>\n`;
+        body += `> **Recommendation**: Consider splitting these files or increasing \`max_tokens_per_request\` for complete analysis.\n\n`;
+    }
     // Events section (collapsible)
     if (uniqueEvents.size > 0) {
         body += `<details>\n<summary><b>🎯 Events Found (${uniqueEvents.size})</b></summary>\n\n`;

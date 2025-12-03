@@ -4,7 +4,7 @@
  */
 
 import * as core from '@actions/core';
-import { CodeChunk, FileContent } from './types';
+import { CodeChunk, FileContent, ChunkingResult, TruncatedFileInfo } from './types';
 import { estimateTokens, buildSystemPrompt, buildUserPrompt } from './prompt-builder';
 
 /**
@@ -12,13 +12,13 @@ import { estimateTokens, buildSystemPrompt, buildUserPrompt } from './prompt-bui
  * @param changedFiles Files that were changed in the PR
  * @param unchangedFiles Files that provide context but weren't changed
  * @param maxTokensPerRequest Maximum tokens allowed per request
- * @returns Array of code chunks ready for AI analysis
+ * @returns Chunking result with chunks and truncated file info
  */
 export function createChunks(
   changedFiles: FileContent[],
   unchangedFiles: FileContent[],
   maxTokensPerRequest: number,
-): CodeChunk[] {
+): ChunkingResult {
   core.info('=== Starting Chunking Process ===');
 
   // Estimate tokens for context (system prompt + RS data)
@@ -57,52 +57,55 @@ export function createChunks(
   // Strategy 1: Try to fit everything in one chunk
   if (totalCodeTokens <= availableTokens) {
     core.info('✓ All files fit in single chunk');
-    return [
-      {
-        id: 'chunk-1',
-        files: [...changedFiles, ...unchangedFiles],
-        isChangedFiles: true,
-        estimatedTokens: contextTokens + totalCodeTokens,
-      },
-    ];
+    return {
+      chunks: [
+        {
+          id: 'chunk-1',
+          files: [...changedFiles, ...unchangedFiles],
+          isChangedFiles: true,
+          estimatedTokens: contextTokens + totalCodeTokens,
+        },
+      ],
+      truncatedFiles: [],
+    };
   }
 
   core.info('⚠ Files exceed token limit, applying chunking strategy...');
 
   // Strategy 2: Try smart grouping (group related files - e.g., same directory)
   core.info('Attempting Strategy 1: Smart grouping by directory...');
-  const smartChunks = createSmartGroupChunks(
+  const smartResult = createSmartGroupChunks(
     changedFilesWithTokens,
     unchangedFilesWithTokens,
     availableTokens,
     contextTokens
   );
 
-  if (smartChunks.length > 0) {
-    core.info(`✓ Smart grouping successful: ${smartChunks.length} chunk(s)`);
-    return smartChunks;
+  if (smartResult.chunks.length > 0) {
+    core.info(`✓ Smart grouping successful: ${smartResult.chunks.length} chunk(s)`);
+    return smartResult;
   }
 
   // Strategy 3: Fallback to changed vs unchanged split
   core.info('Attempting Strategy 2: Changed vs unchanged split...');
-  const splitChunks = createChangedUnchangedSplitChunks(
+  const splitResult = createChangedUnchangedSplitChunks(
     changedFilesWithTokens,
     unchangedFilesWithTokens,
     availableTokens,
     contextTokens
   );
 
-  if (splitChunks.length > 0) {
-    core.info(`✓ Changed/unchanged split successful: ${splitChunks.length} chunk(s)`);
-    return splitChunks;
+  if (splitResult.chunks.length > 0) {
+    core.info(`✓ Changed/unchanged split successful: ${splitResult.chunks.length} chunk(s)`);
+    return splitResult;
   }
 
   // Strategy 4: Ultimate fallback to file-based chunks
   core.info('Attempting Strategy 3: File-based chunking...');
-  const fileChunks = createFileBasedChunks(changedFilesWithTokens, unchangedFilesWithTokens, availableTokens, contextTokens);
+  const fileResult = createFileBasedChunks(changedFilesWithTokens, unchangedFilesWithTokens, availableTokens, contextTokens);
 
-  core.info(`✓ File-based chunking complete: ${fileChunks.length} chunk(s)`);
-  return fileChunks;
+  core.info(`✓ File-based chunking complete: ${fileResult.chunks.length} chunk(s)`);
+  return fileResult;
 }
 
 /**
@@ -113,7 +116,7 @@ function createSmartGroupChunks(
   unchangedFiles: Array<FileContent & { tokens: number }>,
   availableTokens: number,
   contextTokens: number
-): CodeChunk[] {
+): ChunkingResult {
   // Group files by directory
   const groups = new Map<string, Array<FileContent & { tokens: number }>>();
 
@@ -155,7 +158,7 @@ function createSmartGroupChunks(
         currentTokens = groupTokens;
       } else {
         // Group itself is too large, can't use smart grouping
-        return [];
+        return { chunks: [], truncatedFiles: [] };
       }
     }
   }
@@ -181,7 +184,7 @@ function createSmartGroupChunks(
     }
   }
 
-  return chunks;
+  return { chunks, truncatedFiles: [] };
 }
 
 /**
@@ -192,7 +195,7 @@ function createChangedUnchangedSplitChunks(
   unchangedFiles: Array<FileContent & { tokens: number }>,
   availableTokens: number,
   contextTokens: number
-): CodeChunk[] {
+): ChunkingResult {
   const chunks: CodeChunk[] = [];
 
   const changedTokens = changedFiles.reduce((sum, f) => sum + f.tokens, 0);
@@ -217,11 +220,11 @@ function createChangedUnchangedSplitChunks(
       });
     }
 
-    return chunks;
+    return { chunks, truncatedFiles: [] };
   }
 
   // Changed files don't fit, need to split them
-  return [];
+  return { chunks: [], truncatedFiles: [] };
 }
 
 /**
@@ -232,8 +235,9 @@ function createFileBasedChunks(
   unchangedFiles: Array<FileContent & { tokens: number }>,
   availableTokens: number,
   contextTokens: number
-): CodeChunk[] {
+): ChunkingResult {
   const chunks: CodeChunk[] = [];
+  const truncatedFiles: TruncatedFileInfo[] = [];
   let currentChunk: FileContent[] = [];
   let currentTokens = 0;
   let chunkIndex = 1;
@@ -244,11 +248,20 @@ function createFileBasedChunks(
       core.warning(`File ${file.path} is too large (${file.tokens} tokens) and will be truncated`);
       // Truncate file content to fit
       const truncatedContent = file.content.substring(0, Math.floor(availableTokens * 4 * 0.9)); // Leave 10% buffer
+      const truncatedTokens = estimateTokens(truncatedContent);
+
+      // Track truncation
+      truncatedFiles.push({
+        path: file.path,
+        originalTokens: file.tokens,
+        truncatedTokens: truncatedTokens,
+      });
+
       chunks.push({
         id: `chunk-${chunkIndex++}`,
         files: [{ path: file.path, content: truncatedContent, isChanged: file.isChanged }],
         isChangedFiles: true,
-        estimatedTokens: contextTokens + estimateTokens(truncatedContent),
+        estimatedTokens: contextTokens + truncatedTokens,
       });
       continue;
     }
@@ -314,5 +327,5 @@ function createFileBasedChunks(
     });
   }
 
-  return chunks;
+  return { chunks, truncatedFiles };
 }
