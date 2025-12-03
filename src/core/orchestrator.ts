@@ -288,7 +288,6 @@ export async function orchestrateAnalysis(config: ActionConfig): Promise<void> {
 
     // Step 13: Generate and post annotations
     const annotations = generateAnnotations(finalResult.issues, {
-      annotateExistingCode: config.annotateExistingCode,
       changedLines: new Set(changedFiles.map((f) => `${f}:0`)), // Simplified
     });
 

@@ -20,9 +20,9 @@ jobs:
         uses: ./
         with:
           service_access_token: ${{ secrets.RUDDERSTACK_ACCESS_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           source_id: ${{ secrets.RUDDERSTACK_SOURCE_ID }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           output_verbosity: standard # minimal | standard | detailed
           root_directory: testApps/cdn-valid
-          clear_previous_comments: true # Clear all previous inline comments on each run (useful for development)
-          annotate_files_outside_pr: true # Post inline comments even for files not in PR diff (testing only)
+          review_unchanged_files: true # Post inline comments even for files not in PR diff (testing only)

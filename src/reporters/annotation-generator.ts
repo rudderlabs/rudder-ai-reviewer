@@ -6,7 +6,6 @@
 import { Issue, PRAnnotation } from '../types/common';
 
 export interface AnnotationOptions {
-  annotateExistingCode: boolean;
   changedLines?: Set<string>; // Set of "file:line" strings for changed lines
 }
 
@@ -20,8 +19,8 @@ export function generateAnnotations(
   const annotations: PRAnnotation[] = [];
 
   for (const issue of issues) {
-    // Skip if we're not annotating existing code and this isn't a changed line
-    if (!options.annotateExistingCode && options.changedLines) {
+    // Only annotate changed lines if changedLines is provided
+    if (options.changedLines) {
       const lineKey = `${issue.file}:${issue.line || 0}`;
       if (!options.changedLines.has(lineKey)) {
         continue;

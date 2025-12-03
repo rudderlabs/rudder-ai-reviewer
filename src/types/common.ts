@@ -20,14 +20,16 @@ export interface ActionConfig {
   serviceAccessToken: string;
   sourceId?: string;
   githubToken: string;
+  anthropicApiKey: string;
   rootDirectory?: string;
   configPath: string;
   filePatterns?: string[];
   excludePatterns?: string[];
-  annotateExistingCode: boolean;
   outputVerbosity: 'minimal' | 'standard' | 'detailed';
-  clearPreviousComments: boolean;
-  annotateFilesOutsidePR: boolean;
+  reviewUnchangedFiles: boolean;
+  aiModel: string; // Allow any Anthropic model name
+  maxTokensPerRequest: number;
+  annotationMode: 'errors_only' | 'errors_warnings';
 }
 
 export interface FileConfig {
@@ -35,7 +37,6 @@ export interface FileConfig {
     include?: string[];
     exclude?: string[];
   };
-  annotate_existing_code?: boolean;
   output_format?: {
     verbosity?: 'minimal' | 'standard' | 'detailed';
   };
@@ -43,6 +44,11 @@ export interface FileConfig {
     max_files?: number;
     max_file_size_mb?: number;
   };
+  ai?: {
+    model?: string; // Allow any Anthropic model name
+    max_tokens_per_request?: number;
+  };
+  annotation_mode?: 'errors_only' | 'errors_warnings';
 }
 
 export interface PerformanceLimits {

@@ -291,7 +291,7 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     result.issues.forEach((issue) => {
       // Check if both file AND specific line are in the PR diff
       const isInPR = changedFilesSet.has(issue.file) && issue.line && isLineChanged(diffInfo, issue.file, issue.line);
-      const shouldIncludeOutside = config.annotateFilesOutsidePR;
+      const shouldIncludeOutside = config.reviewUnchangedFiles;
 
       if ((issue.severity === 'error' || issue.severity === 'warning') && issue.line) {
         if (isInPR || shouldIncludeOutside) {
@@ -328,7 +328,7 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
     const reviewBody = generateReviewComment(inPRSuggestions, outsideIssues);
 
     // Prepare outside issues info for summary comment
-    const outsideIssuesInfo = config.annotateFilesOutsidePR ? {
+    const outsideIssuesInfo = config.reviewUnchangedFiles ? {
       errorCount: outsideIssues.errors.length,
       warningCount: outsideIssues.warnings.length,
       suggestionCount: outsideIssues.suggestions.length,
@@ -349,8 +349,7 @@ export async function runSimplifiedAnalysis(config: ActionConfig): Promise<void>
         repo: prContext.repo,
         pullNumber: prContext.prNumber,
         token: config.githubToken,
-        clearPrevious: config.clearPreviousComments,
-        annotateFilesOutsidePR: config.annotateFilesOutsidePR,
+        reviewUnchangedFiles: config.reviewUnchangedFiles,
         reviewBody: reviewBody || undefined,
       });
     } else {

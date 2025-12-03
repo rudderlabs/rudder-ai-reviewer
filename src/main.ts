@@ -6,7 +6,7 @@
 
 import * as core from '@actions/core';
 import { loadConfig, validateConfig } from './core/config-loader';
-import { runSimplifiedAnalysis } from './core/simple-orchestrator';
+import { orchestrateAIBasedAnalysis } from './core/ai-orchestrator';
 
 /**
  * Main action entry point
@@ -27,10 +27,12 @@ async function run(): Promise<void> {
     core.info('Configuration:');
     core.info(`- Source ID: ${config.sourceId || 'not specified'}`);
     core.info(`- Output verbosity: ${config.outputVerbosity}`);
-    core.info(`- Annotate existing code: ${config.annotateExistingCode}`);
+    core.info(`- AI Model: ${config.aiModel}`);
+    core.info(`- Max tokens per request: ${config.maxTokensPerRequest}`);
+    core.info(`- Annotation mode: ${config.annotationMode}`);
 
-    // Run simplified analysis (core functionality that works)
-    await runSimplifiedAnalysis(config);
+    // Run AI-based analysis
+    await orchestrateAIBasedAnalysis(config);
 
     core.info('✅ Analysis complete');
   } catch (error) {

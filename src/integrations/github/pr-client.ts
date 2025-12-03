@@ -235,79 +235,15 @@ export async function postAnalysisReport(
   }
 }
 
-/**
- * Clears previous inline review comments
- * Note: Reviews themselves cannot be deleted or dismissed (GitHub API limitation)
- */
-async function clearPreviousInlineComments(
-  owner: string,
-  repo: string,
-  pullNumber: number,
-  token: string
-): Promise<void> {
-  const octokit = github.getOctokit(token);
-  const commentIdentifier = '<!-- rudderstack-sdk-location -->';
-
-  try {
-    // Get all existing review comments created by us
-    const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
-      owner,
-      repo,
-      pull_number: pullNumber,
-    });
-
-    const ourExistingComments = existingComments.filter((comment) =>
-      comment.body?.includes(commentIdentifier)
-    );
-
-    if (ourExistingComments.length === 0) {
-      core.info('No previous inline comments to clear');
-      return;
-    }
-
-    core.info(`🗑️  Clearing ${ourExistingComments.length} previous inline comment(s)...`);
-    let deletedCount = 0;
-
-    // Delete individual review comments
-    for (const comment of ourExistingComments) {
-      try {
-        await octokit.rest.pulls.deleteReviewComment({
-          owner,
-          repo,
-          comment_id: comment.id,
-        });
-        deletedCount++;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        core.warning(`Failed to delete comment ${comment.id}: ${errorMessage}`);
-      }
-    }
-
-    core.info(`✅ Cleared ${deletedCount} inline comment(s)`);
-
-    if (deletedCount > 0) {
-      core.info('ℹ️ Note: Reviews remain visible (cannot be deleted via GitHub API)');
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    core.warning(`Failed to clear previous comments: ${errorMessage}`);
-  }
-}
 
 /**
  * Post inline review comments to PR files (only for changed files by default)
- * Note: Previous reviews are dismissed as "outdated" when clear_previous_comments is true
  */
 export async function postInlineAnnotations(
   annotations: InlineAnnotation[],
-  options: PRCommentOptions & { clearPrevious?: boolean; annotateFilesOutsidePR?: boolean; reviewBody?: string }
+  options: PRCommentOptions & { reviewUnchangedFiles?: boolean; reviewBody?: string }
 ): Promise<void> {
-  const { owner, repo, pullNumber, token, clearPrevious = false, annotateFilesOutsidePR = false, reviewBody } = options;
-
-  // Clear all previous comments first if requested (regardless of new annotations)
-  if (clearPrevious) {
-    await clearPreviousInlineComments(owner, repo, pullNumber, token);
-  }
+  const { owner, repo, pullNumber, token, reviewUnchangedFiles = false, reviewBody } = options;
 
   if (annotations.length === 0) {
     core.info('No inline annotations to post');
@@ -339,7 +275,7 @@ export async function postInlineAnnotations(
     let annotationsToReview = annotationsInDiff;
     let annotationsAsComments: typeof annotations = [];
 
-    if (annotateFilesOutsidePR && annotationsOutsideDiff.length > 0) {
+    if (reviewUnchangedFiles && annotationsOutsideDiff.length > 0) {
       core.info(`⚠️ Testing mode: ${annotationsOutsideDiff.length} annotation(s) are outside PR diff`);
       core.info('Files outside PR diff cannot use review comments - they will be posted as regular PR comments instead');
       annotationsAsComments = annotationsOutsideDiff;
@@ -359,60 +295,51 @@ export async function postInlineAnnotations(
 
     const commitSha = pr.head.sha;
 
-    // If we cleared previous comments, all annotations are new
-    let newAnnotations: typeof annotationsToReview;
-    let updatedAnnotations: Array<{ ann: typeof annotationsToReview[0]; existingComment: any }> = [];
+    // Get existing review comments to check what needs updating
+    const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
 
-    if (clearPrevious) {
-      // All annotations are new since we cleared previous comments
-      newAnnotations = annotationsToReview;
-      core.info(`Creating ${newAnnotations.length} new review comment(s)`);
-    } else {
-      // Get existing review comments to check what needs updating
-      const { data: existingComments } = await octokit.rest.pulls.listReviewComments({
-        owner,
-        repo,
-        pull_number: pullNumber,
-      });
+    const ourExistingComments = existingComments.filter((comment) =>
+      comment.body?.includes(commentIdentifier)
+    );
 
-      const ourExistingComments = existingComments.filter((comment) =>
-        comment.body?.includes(commentIdentifier)
-      );
+    core.info(`Found ${ourExistingComments.length} existing SDK location comment(s)`);
 
-      core.info(`Found ${ourExistingComments.length} existing SDK location comment(s)`);
+    // Map existing comments by location for easy lookup
+    const existingCommentsByLocation = new Map(
+      ourExistingComments.map((c) => [`${c.path}:${c.line}`, c])
+    );
 
-      // Map existing comments by location for easy lookup
-      const existingCommentsByLocation = new Map(
-        ourExistingComments.map((c) => [`${c.path}:${c.line}`, c])
-      );
+    // Separate annotations into new and updates
+    const newAnnotations: typeof annotationsToReview = [];
+    const updatedAnnotations: Array<{ ann: typeof annotationsToReview[0]; existingComment: any }> = [];
 
-      // Separate annotations into new and updates
-      newAnnotations = [];
+    for (const ann of annotationsToReview) {
+      const location = `${ann.path}:${ann.line}`;
+      const existingComment = existingCommentsByLocation.get(location);
 
-      for (const ann of annotationsToReview) {
-        const location = `${ann.path}:${ann.line}`;
-        const existingComment = existingCommentsByLocation.get(location);
-
-        if (existingComment) {
-          // Check if the message has changed
-          const existingBody = existingComment.body?.replace(commentIdentifier + '\n', '') || '';
-          if (existingBody !== ann.message) {
-            updatedAnnotations.push({ ann, existingComment });
-          }
-        } else {
-          newAnnotations.push(ann);
+      if (existingComment) {
+        // Check if the message has changed
+        const existingBody = existingComment.body?.replace(commentIdentifier + '\n', '') || '';
+        if (existingBody !== ann.message) {
+          updatedAnnotations.push({ ann, existingComment });
         }
-      }
-
-      if (newAnnotations.length === 0 && updatedAnnotations.length === 0) {
-        if (!reviewBody) {
-          core.info('All locations already have up-to-date comments and no review body to post');
-          return;
-        }
-        core.info('All locations already have up-to-date comments, but posting review body');
       } else {
-        core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
+        newAnnotations.push(ann);
       }
+    }
+
+    if (newAnnotations.length === 0 && updatedAnnotations.length === 0) {
+      if (!reviewBody) {
+        core.info('All locations already have up-to-date comments and no review body to post');
+        return;
+      }
+      core.info('All locations already have up-to-date comments, but posting review body');
+    } else {
+      core.info(`Creating ${newAnnotations.length} new comment(s), updating ${updatedAnnotations.length} existing comment(s)`);
     }
 
     // Update existing comments individually (they're already posted, so we have to update them one by one)

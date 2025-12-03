@@ -50,14 +50,16 @@ function loadWorkflowInputs(): ActionConfig {
     serviceAccessToken: core.getInput('service_access_token', { required: true }),
     sourceId: core.getInput('source_id') || undefined,
     githubToken: core.getInput('github_token', { required: true }),
+    anthropicApiKey: core.getInput('anthropic_api_key', { required: true }),
     rootDirectory: core.getInput('root_directory') || undefined,
     configPath: core.getInput('config_path') || '.rudderstack-pr-reviewer.yml',
     filePatterns: parseCommaSeparated(core.getInput('file_patterns')),
     excludePatterns: parseCommaSeparated(core.getInput('exclude_patterns')),
-    annotateExistingCode: core.getBooleanInput('annotate_existing_code') || false,
-    outputVerbosity: (core.getInput('output_verbosity') as any) || 'standard',
-    clearPreviousComments: core.getBooleanInput('clear_previous_comments') || false,
-    annotateFilesOutsidePR: core.getBooleanInput('annotate_files_outside_pr') || false,
+    outputVerbosity: (core.getInput('output_verbosity') as 'minimal' | 'standard' | 'detailed') || 'standard',
+    reviewUnchangedFiles: core.getBooleanInput('review_unchanged_files') || false,
+    aiModel: core.getInput('ai_model') || 'claude-sonnet-4-5',
+    maxTokensPerRequest: parseInt(core.getInput('max_tokens_per_request') || '64000', 10),
+    annotationMode: (core.getInput('annotation_mode') as 'errors_only' | 'errors_warnings') || 'errors_warnings',
   };
 }
 
@@ -119,16 +121,30 @@ function mergeConfigurations(
       ? workflowConfig.outputVerbosity
       : fileConfig.output_format?.verbosity || 'standard';
 
-  // Annotate existing code
-  const annotateExistingCode =
-    workflowConfig.annotateExistingCode || fileConfig.annotate_existing_code || false;
+  // AI configuration (workflow overrides file config)
+  const aiModel =
+    workflowConfig.aiModel !== 'claude-sonnet-4-5'
+      ? workflowConfig.aiModel
+      : fileConfig.ai?.model || 'claude-sonnet-4-5';
+
+  const maxTokensPerRequest =
+    workflowConfig.maxTokensPerRequest !== 64000
+      ? workflowConfig.maxTokensPerRequest
+      : fileConfig.ai?.max_tokens_per_request || 64000;
+
+  const annotationMode =
+    workflowConfig.annotationMode !== 'errors_warnings'
+      ? workflowConfig.annotationMode
+      : fileConfig.annotation_mode || 'errors_warnings';
 
   return {
     ...workflowConfig,
     filePatterns,
     excludePatterns,
     outputVerbosity,
-    annotateExistingCode,
+    aiModel,
+    maxTokensPerRequest,
+    annotationMode,
   };
 }
 
@@ -180,8 +196,25 @@ export function validateConfig(config: ActionConfig): boolean {
     errors.push('github_token is required');
   }
 
+  if (!config.anthropicApiKey) {
+    errors.push('anthropic_api_key is required');
+  }
+
   if (!['minimal', 'standard', 'detailed'].includes(config.outputVerbosity)) {
     errors.push(`Invalid output_verbosity: ${config.outputVerbosity}`);
+  }
+
+  // Allow any model name - validation happens at Anthropic API level
+  if (!config.aiModel || config.aiModel.trim() === '') {
+    errors.push('ai_model cannot be empty');
+  }
+
+  if (config.maxTokensPerRequest < 10000 || config.maxTokensPerRequest > 200000) {
+    errors.push(`Invalid max_tokens_per_request: ${config.maxTokensPerRequest} (must be between 10000 and 200000)`);
+  }
+
+  if (!['errors_only', 'errors_warnings'].includes(config.annotationMode)) {
+    errors.push(`Invalid annotation_mode: ${config.annotationMode}`);
   }
 
   if (errors.length > 0) {
