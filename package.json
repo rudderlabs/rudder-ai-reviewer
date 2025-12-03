@@ -36,17 +36,11 @@
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
     "@anthropic-ai/sdk": "0.38.0",
-    "@babel/parser": "7.28.4",
-    "@babel/traverse": "7.28.4",
-    "@babel/types": "7.28.4",
     "@octokit/rest": "22.0.0",
-    "@typescript-eslint/typescript-estree": "8.45.0",
     "js-yaml": "4.1.0",
-    "minimatch": "10.0.3",
     "typescript": "5.9.3"
   },
   "devDependencies": {
-    "@types/babel__traverse": "7.28.0",
     "@types/js-yaml": "4.0.9",
     "@types/node": "24.7.0",
     "@typescript-eslint/eslint-plugin": "8.45.0",

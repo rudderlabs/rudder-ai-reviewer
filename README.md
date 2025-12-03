@@ -43,12 +43,15 @@ jobs:
       - uses: rudderlabs/pr-reviewer@v1
         with:
           service_access_token: ${{ secrets.RUDDERSTACK_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### 2. Add Your RudderStack Token
+### 2. Add Required Secrets
 
-1. Get your service access token from RudderStack dashboard
-2. Add it as a repository secret named `RUDDERSTACK_TOKEN`
+Add these as repository secrets:
+
+1. **RUDDERSTACK_TOKEN** - Get your service access token from RudderStack dashboard
+2. **ANTHROPIC_API_KEY** - Get your API key from [Anthropic Console](https://console.anthropic.com/)
 3. That's it! The action will run automatically on pull requests
 
 ## Configuration
@@ -141,11 +144,17 @@ Use in subsequent steps:
 
 ## Privacy & Security
 
-Your code stays private:
-- ✅ All analysis runs in your GitHub Actions runner
-- ✅ No source code sent to external services
-- ✅ AI analysis uses only AST metadata (no actual code)
+**Important Privacy Notice:**
+- ✅ All analysis runs in your GitHub Actions runner (your infrastructure)
+- ⚠️ **Source code is sent to Anthropic AI** for intelligent analysis via their API
+- ✅ Tracking plan and destination data fetched from RudderStack (encrypted in transit)
 - ✅ Authenticated via your RudderStack service token
+- ⚠️ Review [Anthropic's Privacy Policy](https://www.anthropic.com/legal/privacy) before use
+
+**What gets sent where:**
+- **To Anthropic:** Changed file contents from your PR (for AI analysis)
+- **To RudderStack:** API requests for tracking plans and destination configs (no code sent)
+- **Stays private:** Everything runs in your GitHub Actions runner, no data stored by us
 
 ## Troubleshooting
 

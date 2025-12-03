@@ -155,18 +155,14 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
     core.info(`Merged results: ${mergedResult.events.length} events, ${mergedResult.issues.errors.length} errors, ${mergedResult.issues.warnings.length} warnings, ${mergedResult.issues.suggestions.length} suggestions`);
 
     // Step 8: Retrieve previous analysis (for incremental delta)
+    // TODO: Implement incremental analysis
     let previousResult: AIAnalysisResult | null = null;
 
-    try {
-      const artifact = await retrieveAnalysisArtifact(prContext.prNumber);
-      if (artifact) {
-        // Extract AI result from artifact (we'll need to store it in proper format)
-        core.info('Retrieved previous analysis artifact');
-        // previousResult = artifact.analysisResult; // TODO: Convert from old format
-      }
-    } catch (error) {
-      core.debug(`No previous analysis found: ${error}`);
-    }
+    // Incremental analysis not yet implemented - always null for now
+    // When implemented:
+    // 1. Retrieve artifact: await retrieveAnalysisArtifact(prContext.prNumber)
+    // 2. Parse AIAnalysisResult from artifact
+    // 3. Use for delta calculation in three-comment strategy
 
     // Step 9: Post three-comment strategy
     core.info('Posting analysis results...');
@@ -178,13 +174,9 @@ export async function orchestrateAIBasedAnalysis(config: ActionConfig): Promise<
     await postPRReview(prContext, config.githubToken, mergedResult, previousResult, config.annotationMode);
 
     // Step 10: Store analysis artifact for future incremental analysis
-    try {
-      // TODO: Store in proper format
-      // await storeAnalysisArtifact(prContext.prNumber, prContext.headSha, mergedResult);
-      core.info('Analysis artifact stored for incremental analysis');
-    } catch (error) {
-      core.warning(`Failed to store analysis artifact: ${error}`);
-    }
+    // TODO: Implement artifact storage
+    // When implemented:
+    // await storeAnalysisArtifact(prContext.prNumber, prContext.headSha, mergedResult);
 
     // Step 11: Set outputs
     const errorCount = mergedResult.issues.errors.length;
