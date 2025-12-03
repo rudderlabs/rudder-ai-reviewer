@@ -94,15 +94,65 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
 
   let body = `## 🔍 RudderStack Instrumentation Review\n\n`;
 
+  // Status badge based on findings
+  const hasErrors = allErrors.length > 0;
+  const hasWarnings = allWarnings.length > 0;
+  let statusBadge = '';
+  let actionRequired = '';
+
+  if (hasErrors) {
+    statusBadge = '🔴 **Action Required** — Critical issues found';
+    actionRequired = `⚠️ **Next Step:** Fix ${allErrors.length} critical error${allErrors.length > 1 ? 's' : ''} before merging`;
+  } else if (hasWarnings) {
+    statusBadge = '🟡 **Review Recommended** — Warnings detected';
+    actionRequired = `💡 **Next Step:** Review ${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} and address if needed`;
+  } else {
+    statusBadge = '🟢 **All Clear** — No critical issues found';
+    actionRequired = `✅ **Ready:** Instrumentation looks good!`;
+  }
+
+  body += `${statusBadge}\n\n`;
+  body += `> ${actionRequired}\n\n`;
+
+  // SDK Version Badge (if available)
+  if (current.summary.sdkVersion && current.summary.sdkVersion !== 'unknown') {
+    const installBadge = current.summary.sdkInstallationType === 'npm' ? '📦 NPM' : current.summary.sdkInstallationType === 'cdn' ? '🌐 CDN' : '';
+    body += `**SDK Version:** \`${current.summary.sdkVersion}\` ${installBadge}\n\n`;
+  }
+
+  body += `---\n\n`;
+
   // High-level summary
-  body += `### 📊 Summary\n\n`;
+  body += `### 📊 Analysis Summary\n\n`;
   body += `${current.summary.overallAssessment}\n\n`;
-  body += `- **Files Analyzed**: ${current.summary.filesAnalyzed}\n`;
-  body += `- **Events Found**: ${uniqueEvents.size}\n`;
-  body += `- **Total Issues**: ${allErrors.length + allWarnings.length + allSuggestions.length}\n`;
-  body += `  - ❌ Errors: ${allErrors.length}\n`;
-  body += `  - ⚠️ Warnings: ${allWarnings.length}\n`;
-  body += `  - 💡 Suggestions: ${allSuggestions.length}\n\n`;
+
+  // Summary table with visual indicators and trends
+  const previousErrors = history.length > 0 ? history[history.length - 1].issues.errors.length : 0;
+  const previousWarnings = history.length > 0 ? history[history.length - 1].issues.warnings.length : 0;
+  const errorTrend = history.length > 0 ? getTrend(allErrors.length, previousErrors) : '';
+  const warningTrend = history.length > 0 ? getTrend(allWarnings.length, previousWarnings) : '';
+
+  body += `| Metric | Count | Status |\n`;
+  body += `|--------|-------|--------|\n`;
+  body += `| 📁 Files Analyzed | ${current.summary.filesAnalyzed} | - |\n`;
+  body += `| 🎯 Events Found | ${uniqueEvents.size} | ${uniqueEvents.size > 0 ? '✓' : '-'} |\n`;
+  body += `| ❌ Errors | ${allErrors.length}${errorTrend} | ${allErrors.length > 0 ? '🔴 Fix Required' : '✅ None'} |\n`;
+  body += `| ⚠️ Warnings | ${allWarnings.length}${warningTrend} | ${allWarnings.length > 0 ? '🟡 Review' : '✅ None'} |\n`;
+  body += `| 💡 Suggestions | ${allSuggestions.length} | ${allSuggestions.length > 0 ? '📝 Optional' : '-'} |\n\n`;
+
+  // Quick action links (if there are issues)
+  if (allErrors.length > 0 || allWarnings.length > 0 || allSuggestions.length > 0) {
+    body += `<details>\n<summary><b>📑 Quick Navigation</b></summary>\n\n`;
+    body += `Jump to specific sections:\n\n`;
+    const links = [];
+    if (allErrors.length > 0) links.push(`- 🔴 [Critical Errors (${allErrors.length})](#-errors-${allErrors.length})`);
+    if (allWarnings.length > 0) links.push(`- 🟡 [Warnings (${allWarnings.length})](#️-warnings-${allWarnings.length})`);
+    if (allSuggestions.length > 0) links.push(`- 💡 [Suggestions (${allSuggestions.length})](#-suggestions-${allSuggestions.length})`);
+    if (uniqueEvents.size > 0) links.push(`- 🎯 [Events Found (${uniqueEvents.size})](#-events-found-${uniqueEvents.size})`);
+    if (allDestinationImpacts.length > 0) links.push(`- 🎯 [Destination Impacts (${allDestinationImpacts.length})](#-destination-impacts-${allDestinationImpacts.length})`);
+    body += links.join('\n');
+    body += `\n\n</details>\n\n`;
+  }
 
   // Truncation warning (if files were truncated)
   if (truncatedFiles.length > 0) {
@@ -115,7 +165,7 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
     body += `> **Recommendation**: Consider splitting these files or increasing \`max_tokens_per_request\` for complete analysis.\n\n`;
   }
 
-  // Events section (collapsible)
+  // Events section (collapsible with enhanced details)
   if (uniqueEvents.size > 0) {
     body += `<details>\n<summary><b>🎯 Events Found (${uniqueEvents.size})</b></summary>\n\n`;
 
@@ -131,41 +181,152 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
     });
 
     if (eventsByStatus.added.length > 0) {
-      body += `**✅ Added Events (${eventsByStatus.added.length}):**\n\n`;
+      body += `#### ✅ Added Events (${eventsByStatus.added.length})\n\n`;
       eventsByStatus.added.forEach((e) => {
-        body += `- \`${e.name}\` in \`${e.file}\`${e.line ? `:${e.line}` : ''}\n`;
+        body += `- **\`${e.name}\`**\n`;
+        body += `  📍 **Location:** \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n`;
+        if (e.properties && e.properties.length > 0) {
+          body += `  <details><summary>📦 Properties (${e.properties.length})</summary>\n\n`;
+          e.properties.forEach((p) => {
+            const requiredBadge = p.required ? '🔴 Required' : '⚪ Optional';
+            body += `  - \`${p.name}\`: \`${p.type}\` ${requiredBadge}\n`;
+          });
+          body += `  </details>\n`;
+        }
+        if (e.issues && e.issues.length > 0) {
+          body += `  > ⚠️ ${e.issues.join(', ')}\n`;
+        }
+        body += '\n';
       });
-      body += '\n';
     }
 
     if (eventsByStatus.modified.length > 0) {
-      body += `**✏️ Modified Events (${eventsByStatus.modified.length}):**\n\n`;
+      body += `#### ✏️ Modified Events (${eventsByStatus.modified.length})\n\n`;
       eventsByStatus.modified.forEach((e) => {
-        body += `- \`${e.name}\` in \`${e.file}\`${e.line ? `:${e.line}` : ''}\n`;
+        body += `- **\`${e.name}\`**\n`;
+        body += `  📍 **Location:** \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n`;
+        if (e.properties && e.properties.length > 0) {
+          body += `  <details><summary>📦 Properties (${e.properties.length})</summary>\n\n`;
+          e.properties.forEach((p) => {
+            const requiredBadge = p.required ? '🔴 Required' : '⚪ Optional';
+            body += `  - \`${p.name}\`: \`${p.type}\` ${requiredBadge}\n`;
+          });
+          body += `  </details>\n`;
+        }
+        if (e.issues && e.issues.length > 0) {
+          body += `  > ⚠️ ${e.issues.join(', ')}\n`;
+        }
+        body += '\n';
       });
-      body += '\n';
     }
 
     if (eventsByStatus.removed.length > 0) {
-      body += `**❌ Removed Events (${eventsByStatus.removed.length}):**\n\n`;
+      body += `#### ❌ Removed Events (${eventsByStatus.removed.length})\n\n`;
       eventsByStatus.removed.forEach((e) => {
-        body += `- \`${e.name}\` in \`${e.file}\`${e.line ? `:${e.line}` : ''}\n`;
+        body += `- ~~**\`${e.name}\`**~~\n`;
+        body += `  📍 **Was in:** \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n\n`;
       });
-      body += '\n';
     }
 
     body += `</details>\n\n`;
   }
 
-  // Issue count summary
-  if (allErrors.length > 0 || allWarnings.length > 0) {
-    body += `### 🚨 Issues Summary\n\n`;
-    body += `See inline review comments for detailed error and warning information.\n\n`;
+  // Errors section (expanded by default if present)
+  if (allErrors.length > 0) {
+    body += `### ❌ Errors (${allErrors.length})\n\n`;
+    body += `> **🚨 Critical issues that must be fixed before merging**\n\n`;
+
+    // Categorize errors by type for better organization
+    const errorsByType = new Map<string, typeof allErrors>();
+    allErrors.forEach((err) => {
+      const type = categorizeIssue(err.message);
+      if (!errorsByType.has(type)) {
+        errorsByType.set(type, []);
+      }
+      errorsByType.get(type)!.push(err);
+    });
+
+    // Show error summary by category
+    if (errorsByType.size > 1) {
+      body += `**By Category:**\n\n`;
+      errorsByType.forEach((errors, type) => {
+        body += `- ${type}: ${errors.length}\n`;
+      });
+      body += '\n';
+    }
+
+    // Group errors by file for better organization
+    const errorsByFile = new Map<string, typeof allErrors>();
+    allErrors.forEach((err) => {
+      if (!errorsByFile.has(err.file)) {
+        errorsByFile.set(err.file, []);
+      }
+      errorsByFile.get(err.file)!.push(err);
+    });
+
+    errorsByFile.forEach((errors, file) => {
+      body += `<details open>\n<summary><b>📄 \`${file}\`</b> — ${errors.length} error${errors.length > 1 ? 's' : ''}</summary>\n\n`;
+      errors.forEach((err, idx) => {
+        body += `**${idx + 1}. ${err.message}**\n\n`;
+        body += `| Property | Value |\n`;
+        body += `|----------|-------|\n`;
+        body += `| 📍 File | \`${err.file}\` |\n`;
+        body += `| 📏 Line | ${err.line || 'N/A'} |\n`;
+        if (err.column) {
+          body += `| 📐 Column | ${err.column} |\n`;
+        }
+        body += `| 🎯 Confidence | ${err.confidence} |\n\n`;
+        if (err.impact) {
+          body += `**💥 Impact:**\n> ${err.impact}\n\n`;
+        }
+        if (err.fix) {
+          body += `**🔧 Suggested Fix:**\n\`\`\`javascript\n${err.fix}\n\`\`\`\n\n`;
+        }
+        body += `---\n\n`;
+      });
+      body += `</details>\n\n`;
+    });
+  }
+
+  // Warnings section (collapsed)
+  if (allWarnings.length > 0) {
+    body += `<details>\n<summary><b>⚠️ Warnings (${allWarnings.length})</b></summary>\n\n`;
+    body += `Issues that should be addressed:\n\n`;
+
+    const warningsByFile = new Map<string, typeof allWarnings>();
+    allWarnings.forEach((warn) => {
+      if (!warningsByFile.has(warn.file)) {
+        warningsByFile.set(warn.file, []);
+      }
+      warningsByFile.get(warn.file)!.push(warn);
+    });
+
+    warningsByFile.forEach((warnings, file) => {
+      body += `**📄 \`${file}\`** — ${warnings.length} warning${warnings.length > 1 ? 's' : ''}\n\n`;
+      warnings.forEach((warn, idx) => {
+        body += `${idx + 1}. **${warn.message}**\n\n`;
+        body += `   📍 **Location:** \`${warn.file}\` (Line ${warn.line || 'N/A'})\n`;
+        if (warn.column) {
+          body += `   📐 **Column:** ${warn.column}\n`;
+        }
+        if (warn.impact) {
+          body += `   💥 **Impact:** ${warn.impact}\n`;
+        }
+        if (warn.fix) {
+          body += `   🔧 **Fix:** \`${warn.fix}\`\n`;
+        }
+        body += `   🎯 **Confidence:** ${warn.confidence}\n\n`;
+      });
+      body += '\n';
+    });
+
+    body += `</details>\n\n`;
   }
 
   // Suggestions (collapsible)
   if (allSuggestions.length > 0) {
     body += `<details>\n<summary><b>💡 Suggestions (${allSuggestions.length})</b></summary>\n\n`;
+    body += `Recommendations for improvement:\n\n`;
 
     const suggestionsByFile = new Map<string, typeof allSuggestions>();
     allSuggestions.forEach((s) => {
@@ -176,12 +337,14 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
     });
 
     suggestionsByFile.forEach((suggestions, file) => {
-      body += `**${file}**\n\n`;
-      suggestions.forEach((s) => {
-        body += `- Line ${s.line || 'N/A'}: ${s.message}\n`;
+      body += `**📄 \`${file}\`** — ${suggestions.length} suggestion${suggestions.length > 1 ? 's' : ''}\n\n`;
+      suggestions.forEach((s, idx) => {
+        body += `${idx + 1}. **${s.message}**\n\n`;
+        body += `   📍 **Location:** \`${s.file}\` (Line ${s.line || 'N/A'})\n`;
         if (s.fix) {
-          body += `  \`\`\`javascript\n  ${s.fix}\n  \`\`\`\n`;
+          body += `   🔧 **Suggestion:**\n   \`\`\`javascript\n   ${s.fix}\n   \`\`\`\n`;
         }
+        body += `   🎯 **Confidence:** ${s.confidence}\n\n`;
       });
       body += '\n';
     });
@@ -189,22 +352,34 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
     body += `</details>\n\n`;
   }
 
-  // Destination impacts (collapsible)
+  // Destination impacts (collapsible with better formatting)
   if (allDestinationImpacts.length > 0) {
     body += `<details>\n<summary><b>🎯 Destination Impacts (${allDestinationImpacts.length})</b></summary>\n\n`;
+    body += `Analysis of how changes affect downstream destinations:\n\n`;
 
-    allDestinationImpacts.forEach((impact) => {
-      body += `**${impact.destinationName} (${impact.destinationType})**\n\n`;
-      body += `${impact.impact}\n\n`;
+    allDestinationImpacts.forEach((impact, idx) => {
+      body += `#### ${idx + 1}. ${impact.destinationName} (${impact.destinationType})\n\n`;
+
+      body += `> **Impact:** ${impact.impact}\n\n`;
+
       if (impact.affectedEvents.length > 0) {
-        body += `Affected events: ${impact.affectedEvents.map((e) => `\`${e}\``).join(', ')}\n\n`;
+        body += `**Affected Events:**\n`;
+        impact.affectedEvents.forEach((event) => {
+          body += `- \`${event}\`\n`;
+        });
+        body += '\n';
       }
+
       if (impact.recommendations.length > 0) {
-        body += `Recommendations:\n`;
+        body += `**Recommendations:**\n`;
         impact.recommendations.forEach((r) => {
           body += `- ${r}\n`;
         });
         body += '\n';
+      }
+
+      if (idx < allDestinationImpacts.length - 1) {
+        body += `---\n\n`;
       }
     });
 
@@ -225,13 +400,15 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
     });
 
     issuesByFile.forEach((issues, file) => {
-      body += `**${file}**\n\n`;
+      body += `**📄 \`${file}\`** — ${issues.length} issue${issues.length > 1 ? 's' : ''}\n\n`;
       issues.forEach((issue) => {
         const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : '💡';
-        body += `- ${icon} Line ${issue.line || 'N/A'}: ${issue.message}\n`;
+        body += `${icon} **${issue.message}**\n\n`;
+        body += `  📍 **Location:** \`${issue.file}\` (Line ${issue.line || 'N/A'})\n`;
         if (issue.fix) {
-          body += `  \`\`\`javascript\n  ${issue.fix}\n  \`\`\`\n`;
+          body += `  🔧 **Fix:**\n  \`\`\`javascript\n  ${issue.fix}\n  \`\`\`\n`;
         }
+        body += '\n';
       });
       body += '\n';
     });
@@ -239,19 +416,101 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
     body += `</details>\n\n`;
   }
 
-  // Recommendations
-  if (current.summary.recommendations.length > 0) {
-    body += `### 💡 Key Recommendations\n\n`;
-    current.summary.recommendations.forEach((rec) => {
-      body += `- ${rec}\n`;
+  // Key Recommendations (always visible if present)
+  if (current.summary.recommendations && current.summary.recommendations.length > 0) {
+    body += `### 🎯 Key Recommendations\n\n`;
+    body += `Priority actions to improve your instrumentation:\n\n`;
+    current.summary.recommendations.forEach((rec, idx) => {
+      body += `${idx + 1}. ${rec}\n`;
     });
     body += '\n';
   }
 
+  // Success message if no issues
+  if (allErrors.length === 0 && allWarnings.length === 0) {
+    body += `### ✅ All Clear!\n\n`;
+    body += `No critical issues or warnings found. Your RudderStack instrumentation looks good! 🎉\n\n`;
+  }
+
+  // Quick summary for sharing (if there are issues)
+  if (allErrors.length > 0 || allWarnings.length > 0) {
+    body += `---\n\n`;
+    body += `<details>\n<summary><b>📋 Summary for Team (Copy & Paste)</b></summary>\n\n`;
+    body += '```\n';
+    body += `RudderStack Instrumentation Review Summary\n`;
+    body += `==========================================\n\n`;
+    if (hasErrors) {
+      body += `🔴 ${allErrors.length} error${allErrors.length > 1 ? 's' : ''} found - Action required\n`;
+    }
+    if (hasWarnings) {
+      body += `🟡 ${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} found - Review recommended\n`;
+    }
+    body += `\n`;
+    body += `Files: ${current.summary.filesAnalyzed} | Events: ${uniqueEvents.size}\n`;
+    if (current.summary.sdkVersion !== 'unknown') {
+      body += `SDK: ${current.summary.sdkVersion} (${current.summary.sdkInstallationType?.toUpperCase() || 'unknown'})\n`;
+    }
+    body += '```\n';
+    body += `</details>\n\n`;
+  }
+
+  // Help section with resources
+  body += `---\n\n`;
+  body += `<details>\n<summary><b>📚 Resources & Help</b></summary>\n\n`;
+  body += `**Documentation:**\n`;
+  body += `- [RudderStack JavaScript SDK Docs](https://www.rudderstack.com/docs/sources/event-streams/sdks/rudderstack-javascript-sdk/)\n`;
+  body += `- [API Reference](https://www.rudderstack.com/docs/sources/event-streams/sdks/rudderstack-javascript-sdk/api-reference/)\n`;
+  body += `- [Migration Guide](https://www.rudderstack.com/docs/sources/event-streams/sdks/rudderstack-javascript-sdk/migration-guide/)\n`;
+  body += `- [Examples](https://github.com/rudderlabs/rudder-sdk-js/tree/develop/examples)\n\n`;
+  body += `**Support:**\n`;
+  body += `- [Community Slack](https://rudderstack.com/join-rudderstack-slack-community/)\n`;
+  body += `- [GitHub Issues](https://github.com/rudderlabs/rudder-sdk-js/issues)\n`;
+  body += `- [Report PR Reviewer Issues](https://github.com/rudderlabs/pr-reviewer/issues)\n\n`;
+  body += `</details>\n\n`;
   body += `---\n`;
-  body += `_🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer) powered by AI_`;
+  body += `<sub>🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer) • Powered by Anthropic Claude • [Report Issues](https://github.com/rudderlabs/pr-reviewer/issues)</sub>`;
 
   return body;
+}
+
+/**
+ * Categorize issue by type based on message content
+ */
+function categorizeIssue(message: string): string {
+  const lower = message.toLowerCase();
+
+  if (lower.includes('missing') || lower.includes('required')) {
+    return '🔸 Missing Parameters';
+  }
+  if (lower.includes('type') || lower.includes('typeof')) {
+    return '🔸 Type Errors';
+  }
+  if (lower.includes('deprecated')) {
+    return '🔸 Deprecated API';
+  }
+  if (lower.includes('tracking plan') || lower.includes('schema')) {
+    return '🔸 Schema Violations';
+  }
+  if (lower.includes('syntax') || lower.includes('invalid')) {
+    return '🔸 Syntax Errors';
+  }
+  if (lower.includes('security') || lower.includes('credential') || lower.includes('token')) {
+    return '🔸 Security Issues';
+  }
+
+  return '🔸 Other Issues';
+}
+
+/**
+ * Get trend indicator for metrics
+ */
+function getTrend(current: number, previous: number): string {
+  if (previous === 0) return '';
+
+  const delta = current - previous;
+  if (delta === 0) return ' →';
+  if (delta > 0) return ` ↗️ (+${delta})`;
+  return ` ↘️ (${delta})`;
 }
 
 /**
@@ -343,11 +602,11 @@ function generateIncrementalReviewBody(current: AIAnalysisResult, previous: AIAn
   body += `**Changes since last analysis:**\n\n`;
 
   if (newEvents.length > 0) {
-    body += `- ✅ **New Events**: ${newEvents.length}\n`;
+    body += `- ✅ **New Events Detected**: ${newEvents.length}\n\n`;
     newEvents.forEach((e) => {
-      body += `  - \`${e.name}\` in \`${e.file}\`\n`;
+      body += `  **\`${e.name}\`**\n`;
+      body += `  📍 \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n\n`;
     });
-    body += '\n';
   }
 
   if (newErrors !== 0) {
@@ -414,29 +673,48 @@ async function prepareInlineComments(
 }
 
 /**
- * Format inline comment body
+ * Format inline comment body with enhanced visuals and clear file path
  */
 function formatInlineComment(issue: {
   severity: string;
   message: string;
+  file: string;
+  line?: number;
+  column?: number;
   impact?: string;
   fix?: string;
   confidence: string;
 }): string {
   const icon = issue.severity === 'error' ? '❌' : '⚠️';
-  let body = `${icon} **${issue.severity.toUpperCase()}**\n\n`;
+  const severityLabel = issue.severity === 'error' ? 'ERROR' : 'WARNING';
+  const confidenceEmoji = issue.confidence === 'high' ? '🎯' : issue.confidence === 'medium' ? '🔍' : '💭';
 
-  body += `${issue.message}\n\n`;
+  let body = `## ${icon} ${severityLabel}\n\n`;
+
+  body += `**${issue.message}**\n\n`;
+
+  // Location table for clarity
+  body += `| | |\n`;
+  body += `|---|---|\n`;
+  body += `| 📍 **File** | \`${issue.file}\` |\n`;
+  body += `| 📏 **Line** | ${issue.line || 'N/A'} |\n`;
+  if (issue.column) {
+    body += `| 📐 **Column** | ${issue.column} |\n`;
+  }
+  body += `| ${confidenceEmoji} **Confidence** | ${issue.confidence} |\n\n`;
 
   if (issue.impact) {
-    body += `**Impact:** ${issue.impact}\n\n`;
+    body += `### 💥 Impact\n\n`;
+    body += `> ${issue.impact}\n\n`;
   }
 
   if (issue.fix) {
-    body += `**Suggested Fix:**\n\`\`\`javascript\n${issue.fix}\n\`\`\`\n\n`;
+    body += `### 🔧 Suggested Fix\n\n`;
+    body += `\`\`\`javascript\n${issue.fix}\n\`\`\`\n\n`;
   }
 
-  body += `_Confidence: ${issue.confidence}_`;
+  body += `---\n`;
+  body += `<sub>Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer) • Powered by Anthropic Claude</sub>`;
 
   return body;
 }
