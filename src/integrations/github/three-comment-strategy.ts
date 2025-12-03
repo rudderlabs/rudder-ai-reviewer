@@ -140,18 +140,9 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
   body += `| ⚠️ Warnings | ${allWarnings.length}${warningTrend} | ${allWarnings.length > 0 ? '🟡 Review' : '✅ None'} |\n`;
   body += `| 💡 Suggestions | ${allSuggestions.length} | ${allSuggestions.length > 0 ? '📝 Optional' : '-'} |\n\n`;
 
-  // Quick action links (if there are issues)
+  // Note about where to find details
   if (allErrors.length > 0 || allWarnings.length > 0 || allSuggestions.length > 0) {
-    body += `<details>\n<summary><b>📑 Quick Navigation</b></summary>\n\n`;
-    body += `Jump to specific sections:\n\n`;
-    const links = [];
-    if (allErrors.length > 0) links.push(`- 🔴 [Critical Errors (${allErrors.length})](#-errors-${allErrors.length})`);
-    if (allWarnings.length > 0) links.push(`- 🟡 [Warnings (${allWarnings.length})](#️-warnings-${allWarnings.length})`);
-    if (allSuggestions.length > 0) links.push(`- 💡 [Suggestions (${allSuggestions.length})](#-suggestions-${allSuggestions.length})`);
-    if (uniqueEvents.size > 0) links.push(`- 🎯 [Events Found (${uniqueEvents.size})](#-events-found-${uniqueEvents.size})`);
-    if (allDestinationImpacts.length > 0) links.push(`- 🎯 [Destination Impacts (${allDestinationImpacts.length})](#-destination-impacts-${allDestinationImpacts.length})`);
-    body += links.join('\n');
-    body += `\n\n</details>\n\n`;
+    body += `> 💬 **Detailed findings are posted as PR review comments below.** This summary shows cumulative stats across all analyses.\n\n`;
   }
 
   // Truncation warning (if files were truncated)
@@ -165,7 +156,7 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
     body += `> **Recommendation**: Consider splitting these files or increasing \`max_tokens_per_request\` for complete analysis.\n\n`;
   }
 
-  // Events section (collapsible with enhanced details)
+  // Events section - summary only
   if (uniqueEvents.size > 0) {
     body += `<details>\n<summary><b>🎯 Events Found (${uniqueEvents.size})</b></summary>\n\n`;
 
@@ -181,62 +172,28 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
     });
 
     if (eventsByStatus.added.length > 0) {
-      body += `#### ✅ Added Events (${eventsByStatus.added.length})\n\n`;
-      eventsByStatus.added.forEach((e) => {
-        body += `- **\`${e.name}\`**\n`;
-        body += `  📍 **Location:** \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n`;
-        if (e.properties && e.properties.length > 0) {
-          body += `  <details><summary>📦 Properties (${e.properties.length})</summary>\n\n`;
-          e.properties.forEach((p) => {
-            const requiredBadge = p.required ? '🔴 Required' : '⚪ Optional';
-            body += `  - \`${p.name}\`: \`${p.type}\` ${requiredBadge}\n`;
-          });
-          body += `  </details>\n`;
-        }
-        if (e.issues && e.issues.length > 0) {
-          body += `  > ⚠️ ${e.issues.join(', ')}\n`;
-        }
-        body += '\n';
-      });
+      body += `**✅ Added (${eventsByStatus.added.length}):**\n`;
+      body += eventsByStatus.added.map((e) => `\`${e.name}\``).join(', ');
+      body += '\n\n';
     }
 
     if (eventsByStatus.modified.length > 0) {
-      body += `#### ✏️ Modified Events (${eventsByStatus.modified.length})\n\n`;
-      eventsByStatus.modified.forEach((e) => {
-        body += `- **\`${e.name}\`**\n`;
-        body += `  📍 **Location:** \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n`;
-        if (e.properties && e.properties.length > 0) {
-          body += `  <details><summary>📦 Properties (${e.properties.length})</summary>\n\n`;
-          e.properties.forEach((p) => {
-            const requiredBadge = p.required ? '🔴 Required' : '⚪ Optional';
-            body += `  - \`${p.name}\`: \`${p.type}\` ${requiredBadge}\n`;
-          });
-          body += `  </details>\n`;
-        }
-        if (e.issues && e.issues.length > 0) {
-          body += `  > ⚠️ ${e.issues.join(', ')}\n`;
-        }
-        body += '\n';
-      });
+      body += `**✏️ Modified (${eventsByStatus.modified.length}):**\n`;
+      body += eventsByStatus.modified.map((e) => `\`${e.name}\``).join(', ');
+      body += '\n\n';
     }
 
     if (eventsByStatus.removed.length > 0) {
-      body += `#### ❌ Removed Events (${eventsByStatus.removed.length})\n\n`;
-      eventsByStatus.removed.forEach((e) => {
-        body += `- ~~**\`${e.name}\`**~~\n`;
-        body += `  📍 **Was in:** \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n\n`;
-      });
+      body += `**❌ Removed (${eventsByStatus.removed.length}):**\n`;
+      body += eventsByStatus.removed.map((e) => `~~\`${e.name}\`~~`).join(', ');
+      body += '\n\n';
     }
 
     body += `</details>\n\n`;
   }
 
-  // Errors section (expanded by default if present)
+  // Issue summary by category (if errors exist)
   if (allErrors.length > 0) {
-    body += `### ❌ Errors (${allErrors.length})\n\n`;
-    body += `> **🚨 Critical issues that must be fixed before merging**\n\n`;
-
-    // Categorize errors by type for better organization
     const errorsByType = new Map<string, typeof allErrors>();
     allErrors.forEach((err) => {
       const type = categorizeIssue(err.message);
@@ -246,174 +203,13 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
       errorsByType.get(type)!.push(err);
     });
 
-    // Show error summary by category
-    if (errorsByType.size > 1) {
-      body += `**By Category:**\n\n`;
+    if (errorsByType.size > 0) {
+      body += `<details>\n<summary><b>🔸 Error Breakdown by Category</b></summary>\n\n`;
       errorsByType.forEach((errors, type) => {
         body += `- ${type}: ${errors.length}\n`;
       });
-      body += '\n';
+      body += `\n</details>\n\n`;
     }
-
-    // Group errors by file for better organization
-    const errorsByFile = new Map<string, typeof allErrors>();
-    allErrors.forEach((err) => {
-      if (!errorsByFile.has(err.file)) {
-        errorsByFile.set(err.file, []);
-      }
-      errorsByFile.get(err.file)!.push(err);
-    });
-
-    errorsByFile.forEach((errors, file) => {
-      body += `<details open>\n<summary><b>📄 \`${file}\`</b> — ${errors.length} error${errors.length > 1 ? 's' : ''}</summary>\n\n`;
-      errors.forEach((err, idx) => {
-        body += `**${idx + 1}. ${err.message}**\n\n`;
-        body += `| Property | Value |\n`;
-        body += `|----------|-------|\n`;
-        body += `| 📍 File | \`${err.file}\` |\n`;
-        body += `| 📏 Line | ${err.line || 'N/A'} |\n`;
-        if (err.column) {
-          body += `| 📐 Column | ${err.column} |\n`;
-        }
-        body += `| 🎯 Confidence | ${err.confidence} |\n\n`;
-        if (err.impact) {
-          body += `**💥 Impact:**\n> ${err.impact}\n\n`;
-        }
-        if (err.fix) {
-          body += `**🔧 Suggested Fix:**\n\`\`\`javascript\n${err.fix}\n\`\`\`\n\n`;
-        }
-        body += `---\n\n`;
-      });
-      body += `</details>\n\n`;
-    });
-  }
-
-  // Warnings section (collapsed)
-  if (allWarnings.length > 0) {
-    body += `<details>\n<summary><b>⚠️ Warnings (${allWarnings.length})</b></summary>\n\n`;
-    body += `Issues that should be addressed:\n\n`;
-
-    const warningsByFile = new Map<string, typeof allWarnings>();
-    allWarnings.forEach((warn) => {
-      if (!warningsByFile.has(warn.file)) {
-        warningsByFile.set(warn.file, []);
-      }
-      warningsByFile.get(warn.file)!.push(warn);
-    });
-
-    warningsByFile.forEach((warnings, file) => {
-      body += `**📄 \`${file}\`** — ${warnings.length} warning${warnings.length > 1 ? 's' : ''}\n\n`;
-      warnings.forEach((warn, idx) => {
-        body += `${idx + 1}. **${warn.message}**\n\n`;
-        body += `   📍 **Location:** \`${warn.file}\` (Line ${warn.line || 'N/A'})\n`;
-        if (warn.column) {
-          body += `   📐 **Column:** ${warn.column}\n`;
-        }
-        if (warn.impact) {
-          body += `   💥 **Impact:** ${warn.impact}\n`;
-        }
-        if (warn.fix) {
-          body += `   🔧 **Fix:** \`${warn.fix}\`\n`;
-        }
-        body += `   🎯 **Confidence:** ${warn.confidence}\n\n`;
-      });
-      body += '\n';
-    });
-
-    body += `</details>\n\n`;
-  }
-
-  // Suggestions (collapsible)
-  if (allSuggestions.length > 0) {
-    body += `<details>\n<summary><b>💡 Suggestions (${allSuggestions.length})</b></summary>\n\n`;
-    body += `Recommendations for improvement:\n\n`;
-
-    const suggestionsByFile = new Map<string, typeof allSuggestions>();
-    allSuggestions.forEach((s) => {
-      if (!suggestionsByFile.has(s.file)) {
-        suggestionsByFile.set(s.file, []);
-      }
-      suggestionsByFile.get(s.file)!.push(s);
-    });
-
-    suggestionsByFile.forEach((suggestions, file) => {
-      body += `**📄 \`${file}\`** — ${suggestions.length} suggestion${suggestions.length > 1 ? 's' : ''}\n\n`;
-      suggestions.forEach((s, idx) => {
-        body += `${idx + 1}. **${s.message}**\n\n`;
-        body += `   📍 **Location:** \`${s.file}\` (Line ${s.line || 'N/A'})\n`;
-        if (s.fix) {
-          body += `   🔧 **Suggestion:**\n   \`\`\`javascript\n   ${s.fix}\n   \`\`\`\n`;
-        }
-        body += `   🎯 **Confidence:** ${s.confidence}\n\n`;
-      });
-      body += '\n';
-    });
-
-    body += `</details>\n\n`;
-  }
-
-  // Destination impacts (collapsible with better formatting)
-  if (allDestinationImpacts.length > 0) {
-    body += `<details>\n<summary><b>🎯 Destination Impacts (${allDestinationImpacts.length})</b></summary>\n\n`;
-    body += `Analysis of how changes affect downstream destinations:\n\n`;
-
-    allDestinationImpacts.forEach((impact, idx) => {
-      body += `#### ${idx + 1}. ${impact.destinationName} (${impact.destinationType})\n\n`;
-
-      body += `> **Impact:** ${impact.impact}\n\n`;
-
-      if (impact.affectedEvents.length > 0) {
-        body += `**Affected Events:**\n`;
-        impact.affectedEvents.forEach((event) => {
-          body += `- \`${event}\`\n`;
-        });
-        body += '\n';
-      }
-
-      if (impact.recommendations.length > 0) {
-        body += `**Recommendations:**\n`;
-        impact.recommendations.forEach((r) => {
-          body += `- ${r}\n`;
-        });
-        body += '\n';
-      }
-
-      if (idx < allDestinationImpacts.length - 1) {
-        body += `---\n\n`;
-      }
-    });
-
-    body += `</details>\n\n`;
-  }
-
-  // Issues in unchanged files (collapsible)
-  if (allUnchangedFileIssues.length > 0) {
-    body += `<details>\n<summary><b>📝 Issues in Unchanged Code (${allUnchangedFileIssues.length})</b></summary>\n\n`;
-    body += `These issues were found in existing code (not changed in this PR):\n\n`;
-
-    const issuesByFile = new Map<string, typeof allUnchangedFileIssues>();
-    allUnchangedFileIssues.forEach((issue) => {
-      if (!issuesByFile.has(issue.file)) {
-        issuesByFile.set(issue.file, []);
-      }
-      issuesByFile.get(issue.file)!.push(issue);
-    });
-
-    issuesByFile.forEach((issues, file) => {
-      body += `**📄 \`${file}\`** — ${issues.length} issue${issues.length > 1 ? 's' : ''}\n\n`;
-      issues.forEach((issue) => {
-        const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : '💡';
-        body += `${icon} **${issue.message}**\n\n`;
-        body += `  📍 **Location:** \`${issue.file}\` (Line ${issue.line || 'N/A'})\n`;
-        if (issue.fix) {
-          body += `  🔧 **Fix:**\n  \`\`\`javascript\n  ${issue.fix}\n  \`\`\`\n`;
-        }
-        body += '\n';
-      });
-      body += '\n';
-    });
-
-    body += `</details>\n\n`;
   }
 
   // Key Recommendations (always visible if present)
@@ -468,7 +264,7 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
   body += `- [Report PR Reviewer Issues](https://github.com/rudderlabs/pr-reviewer/issues)\n\n`;
   body += `</details>\n\n`;
   body += `---\n`;
-  body += `<sub>🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer) • Powered by Anthropic Claude • [Report Issues](https://github.com/rudderlabs/pr-reviewer/issues)</sub>`;
+  body += `<sub>🤖 Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer) • Powered by AI • [Report Issues](https://github.com/rudderlabs/pr-reviewer/issues)</sub>`;
 
   return body;
 }
@@ -579,57 +375,151 @@ export async function postPRReview(
 }
 
 /**
- * Generate incremental review body (delta since last analysis)
+ * Generate incremental review body with FULL detailed analysis
  */
 function generateIncrementalReviewBody(current: AIAnalysisResult, previous: AIAnalysisResult | null): string {
-  let body = `## 🔄 Incremental Analysis\n\n`;
+  let body = `## 📝 Analysis Results\n\n`;
 
-  if (!previous) {
-    body += `This is the first analysis for this PR.\n\n`;
-    body += `- **Events Found**: ${current.events.length}\n`;
-    body += `- **Issues**: ${current.issues.errors.length} errors, ${current.issues.warnings.length} warnings, ${current.issues.suggestions.length} suggestions\n\n`;
-    return body;
+  // Show delta if there's previous analysis
+  if (previous) {
+    const newEvents = current.events.filter(
+      (e) => !previous.events.some((pe) => pe.name === e.name && pe.file === e.file)
+    );
+    const newErrors = current.issues.errors.length - previous.issues.errors.length;
+    const newWarnings = current.issues.warnings.length - previous.issues.warnings.length;
+
+    if (newEvents.length > 0 || newErrors !== 0 || newWarnings !== 0) {
+      body += `**🔄 Changes since last analysis:**\n`;
+      if (newEvents.length > 0) body += `- ✅ New events: ${newEvents.length}\n`;
+      if (newErrors !== 0) body += `- ${newErrors > 0 ? '⬆️' : '⬇️'} Errors: ${newErrors > 0 ? '+' : ''}${newErrors}\n`;
+      if (newWarnings !== 0) body += `- ${newWarnings > 0 ? '⬆️' : '⬇️'} Warnings: ${newWarnings > 0 ? '+' : ''}${newWarnings}\n`;
+      body += '\n---\n\n';
+    }
   }
 
-  // Calculate delta
-  const newEvents = current.events.filter(
-    (e) => !previous.events.some((pe) => pe.name === e.name && pe.file === e.file)
-  );
-  const newErrors = current.issues.errors.length - previous.issues.errors.length;
-  const newWarnings = current.issues.warnings.length - previous.issues.warnings.length;
-  const newSuggestions = current.issues.suggestions.length - previous.issues.suggestions.length;
+  // DETAILED ERRORS SECTION
+  if (current.issues.errors.length > 0) {
+    body += `### ❌ Errors (${current.issues.errors.length})\n\n`;
+    body += `> **🚨 Critical issues that must be fixed**\n\n`;
 
-  body += `**Changes since last analysis:**\n\n`;
+    const errorsByFile = new Map<string, typeof current.issues.errors>();
+    current.issues.errors.forEach((err) => {
+      if (!errorsByFile.has(err.file)) {
+        errorsByFile.set(err.file, []);
+      }
+      errorsByFile.get(err.file)!.push(err);
+    });
 
-  if (newEvents.length > 0) {
-    body += `- ✅ **New Events Detected**: ${newEvents.length}\n\n`;
-    newEvents.forEach((e) => {
-      body += `  **\`${e.name}\`**\n`;
-      body += `  📍 \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n\n`;
+    errorsByFile.forEach((errors, file) => {
+      body += `**📄 \`${file}\`** — ${errors.length} error${errors.length > 1 ? 's' : ''}\n\n`;
+      errors.forEach((err, idx) => {
+        body += `${idx + 1}. **${err.message}**\n\n`;
+        body += `   📍 Line ${err.line || 'N/A'}${err.column ? `, Column ${err.column}` : ''} • 🎯 Confidence: ${err.confidence}\n\n`;
+        if (err.impact) {
+          body += `   **💥 Impact:** ${err.impact}\n\n`;
+        }
+        if (err.fix) {
+          body += `   **🔧 Fix:**\n   \`\`\`javascript\n   ${err.fix}\n   \`\`\`\n\n`;
+        }
+      });
     });
   }
 
-  if (newErrors !== 0) {
-    const icon = newErrors > 0 ? '⬆️' : '⬇️';
-    body += `- ${icon} **Errors**: ${newErrors > 0 ? '+' : ''}${newErrors} (total: ${current.issues.errors.length})\n`;
+  // DETAILED WARNINGS SECTION
+  if (current.issues.warnings.length > 0) {
+    body += `### ⚠️ Warnings (${current.issues.warnings.length})\n\n`;
+    body += `> Issues that should be addressed\n\n`;
+
+    const warningsByFile = new Map<string, typeof current.issues.warnings>();
+    current.issues.warnings.forEach((warn) => {
+      if (!warningsByFile.has(warn.file)) {
+        warningsByFile.set(warn.file, []);
+      }
+      warningsByFile.get(warn.file)!.push(warn);
+    });
+
+    warningsByFile.forEach((warnings, file) => {
+      body += `**📄 \`${file}\`** — ${warnings.length} warning${warnings.length > 1 ? 's' : ''}\n\n`;
+      warnings.forEach((warn, idx) => {
+        body += `${idx + 1}. **${warn.message}**\n\n`;
+        body += `   📍 Line ${warn.line || 'N/A'}${warn.column ? `, Column ${warn.column}` : ''} • 🎯 Confidence: ${warn.confidence}\n\n`;
+        if (warn.impact) {
+          body += `   **💥 Impact:** ${warn.impact}\n\n`;
+        }
+        if (warn.fix) {
+          body += `   **🔧 Fix:** \`${warn.fix}\`\n\n`;
+        }
+      });
+    });
   }
 
-  if (newWarnings !== 0) {
-    const icon = newWarnings > 0 ? '⬆️' : '⬇️';
-    body += `- ${icon} **Warnings**: ${newWarnings > 0 ? '+' : ''}${newWarnings} (total: ${current.issues.warnings.length})\n`;
+  // DETAILED SUGGESTIONS SECTION
+  if (current.issues.suggestions.length > 0) {
+    body += `### 💡 Suggestions (${current.issues.suggestions.length})\n\n`;
+
+    const suggestionsByFile = new Map<string, typeof current.issues.suggestions>();
+    current.issues.suggestions.forEach((s) => {
+      if (!suggestionsByFile.has(s.file)) {
+        suggestionsByFile.set(s.file, []);
+      }
+      suggestionsByFile.get(s.file)!.push(s);
+    });
+
+    suggestionsByFile.forEach((suggestions, file) => {
+      body += `**📄 \`${file}\`** — ${suggestions.length} suggestion${suggestions.length > 1 ? 's' : ''}\n\n`;
+      suggestions.forEach((s, idx) => {
+        body += `${idx + 1}. **${s.message}**\n`;
+        body += `   📍 Line ${s.line || 'N/A'} • 🎯 Confidence: ${s.confidence}\n\n`;
+        if (s.fix) {
+          body += `   \`\`\`javascript\n   ${s.fix}\n   \`\`\`\n\n`;
+        }
+      });
+    });
   }
 
-  if (newSuggestions !== 0) {
-    const icon = newSuggestions > 0 ? '⬆️' : '⬇️';
-    body += `- ${icon} **Suggestions**: ${newSuggestions > 0 ? '+' : ''}${newSuggestions} (total: ${current.issues.suggestions.length})\n`;
+  // EVENTS SECTION (detailed)
+  if (current.events.length > 0) {
+    body += `### 🎯 Events Found (${current.events.length})\n\n`;
+
+    current.events.forEach((e) => {
+      const statusIcon = e.status === 'added' ? '✅' : e.status === 'modified' ? '✏️' : e.status === 'removed' ? '❌' : '📍';
+      body += `${statusIcon} **\`${e.name}\`** (${e.status})\n`;
+      body += `   📍 \`${e.file}\`${e.line ? ` (Line ${e.line})` : ''}\n`;
+      if (e.properties && e.properties.length > 0) {
+        body += `   📦 ${e.properties.length} properties\n`;
+      }
+      if (e.issues && e.issues.length > 0) {
+        body += `   ⚠️ ${e.issues.join(', ')}\n`;
+      }
+      body += '\n';
+    });
   }
 
-  if (newEvents.length === 0 && newErrors === 0 && newWarnings === 0 && newSuggestions === 0) {
-    body += `No significant changes detected.\n`;
+  // DESTINATION IMPACTS
+  if (current.destinationImpacts.length > 0) {
+    body += `### 🎯 Destination Impacts\n\n`;
+    current.destinationImpacts.forEach((impact, idx) => {
+      body += `${idx + 1}. **${impact.destinationName}** (${impact.destinationType})\n`;
+      body += `   ${impact.impact}\n`;
+      if (impact.affectedEvents.length > 0) {
+        body += `   Affected: ${impact.affectedEvents.map((e) => `\`${e}\``).join(', ')}\n`;
+      }
+      body += '\n';
+    });
   }
 
-  body += `\n---\n`;
-  body += `_See the global summary comment for cumulative analysis._`;
+  // UNCHANGED FILE ISSUES
+  if (current.unchangedFileIssues.length > 0) {
+    body += `### 📝 Issues in Unchanged Code (${current.unchangedFileIssues.length})\n\n`;
+    current.unchangedFileIssues.forEach((issue) => {
+      const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : '💡';
+      body += `${icon} **${issue.message}** in \`${issue.file}\` (Line ${issue.line || 'N/A'})\n`;
+    });
+    body += '\n';
+  }
+
+  body += `---\n`;
+  body += `_📊 See the [global summary comment](#) for cumulative analysis across all runs._`;
 
   return body;
 }
@@ -693,15 +583,9 @@ function formatInlineComment(issue: {
 
   body += `**${issue.message}**\n\n`;
 
-  // Location table for clarity
-  body += `| | |\n`;
-  body += `|---|---|\n`;
-  body += `| 📍 **File** | \`${issue.file}\` |\n`;
-  body += `| 📏 **Line** | ${issue.line || 'N/A'} |\n`;
-  if (issue.column) {
-    body += `| 📐 **Column** | ${issue.column} |\n`;
-  }
-  body += `| ${confidenceEmoji} **Confidence** | ${issue.confidence} |\n\n`;
+  // Location info - compact format
+  body += `📍 **Location:** \`${issue.file}\` (Line ${issue.line || 'N/A'}${issue.column ? `, Column ${issue.column}` : ''})\n`;
+  body += `${confidenceEmoji} **Confidence:** ${issue.confidence}\n\n`;
 
   if (issue.impact) {
     body += `### 💥 Impact\n\n`;
@@ -714,7 +598,7 @@ function formatInlineComment(issue: {
   }
 
   body += `---\n`;
-  body += `<sub>Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer) • Powered by Anthropic Claude</sub>`;
+  body += `<sub>Generated by [RudderStack PR Reviewer](https://github.com/rudderlabs/pr-reviewer) • Powered by AI</sub>`;
 
   return body;
 }
