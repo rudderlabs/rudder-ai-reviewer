@@ -5,25 +5,34 @@
 
 import * as core from '@actions/core';
 import { CodeChunk, FileContent, ChunkingResult, TruncatedFileInfo } from './types';
-import { estimateTokens, buildSystemPrompt, buildUserPrompt } from './prompt-builder';
+import { estimateTokens, buildSystemPrompt, buildUserPrompt, RudderStackContext } from './prompt-builder';
 
 /**
  * Create chunks from files based on token limits
  * @param changedFiles Files that were changed in the PR
  * @param unchangedFiles Files that provide context but weren't changed
  * @param maxTokensPerRequest Maximum tokens allowed per request
+ * @param rsContext Optional RudderStack context (destinations)
  * @returns Chunking result with chunks and truncated file info
  */
 export function createChunks(
   changedFiles: FileContent[],
   unchangedFiles: FileContent[],
   maxTokensPerRequest: number,
+  rsContext?: RudderStackContext,
 ): ChunkingResult {
   core.info('=== Starting Chunking Process ===');
 
   // Estimate tokens for context (system prompt + RS data)
   const systemPrompt = buildSystemPrompt();
-  const contextTokens = estimateTokens(systemPrompt);
+  let contextTokens = estimateTokens(systemPrompt);
+
+  // Add RudderStack context tokens if present
+  if (rsContext?.destinations && rsContext.destinations.length > 0) {
+    const rsContextTokens = estimateTokens(JSON.stringify(rsContext.destinations));
+    contextTokens += rsContextTokens;
+    core.info(`RudderStack context: ${rsContext.destinations.length} destination(s), ~${rsContextTokens} tokens`);
+  }
 
 
   core.info(`Context tokens (system prompt + RS data): ~${contextTokens}`);

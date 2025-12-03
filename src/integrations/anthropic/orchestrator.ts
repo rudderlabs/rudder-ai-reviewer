@@ -6,7 +6,7 @@
 import * as core from '@actions/core';
 import { promises as fs } from 'fs';
 import { AnthropicClient, createAnthropicClient } from './client';
-import { buildSystemPrompt, buildUserPrompt } from './prompt-builder';
+import { buildSystemPrompt, buildUserPrompt, RudderStackContext } from './prompt-builder';
 import { createChunks } from './chunker';
 import { AIAnalysisResult, AnthropicConfig, FileContent, TruncatedFileInfo } from './types';
 
@@ -14,6 +14,7 @@ export interface AIOrchestratorInput {
   changedFilePaths: string[];
   unchangedFilePaths: string[];
   config: AnthropicConfig;
+  rsContext?: RudderStackContext; // RudderStack workspace context (destinations, etc.)
 }
 
 export interface AIOrchestrationResult {
@@ -75,7 +76,7 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
 
     // Step 3: Create chunks
     core.info('Creating chunks...');
-    const chunkingResult = createChunks(changedFiles, unchangedFiles, input.config.maxTokens);
+    const chunkingResult = createChunks(changedFiles, unchangedFiles, input.config.maxTokens, input.rsContext);
 
     core.info(`Created ${chunkingResult.chunks.length} chunk(s) for analysis`);
 
@@ -99,7 +100,7 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
       const changedChunkFiles = chunk.files.filter((f) => f.isChanged);
       const unchangedChunkFiles = chunk.files.filter((f) => !f.isChanged);
 
-      const userPrompt = buildUserPrompt(changedChunkFiles, unchangedChunkFiles);
+      const userPrompt = buildUserPrompt(changedChunkFiles, unchangedChunkFiles, input.rsContext);
 
       const response = await client.analyze({
         systemPrompt,
