@@ -1,5 +1,8 @@
 # Example workflow file for using RudderStack PR Reviewer
-# Copy this to your repository's .github/workflows/ directory
+# This workflow demonstrates the action using the npm-valid test app
+#
+# For production use, copy this to your repository's .github/workflows/ directory
+# and remove the root_directory parameter
 
 name: RudderStack PR Review
 
@@ -35,6 +38,10 @@ jobs:
           # Optional: Annotation mode (default: errors_warnings)
           # Options: errors_only, errors_warnings
           annotation_mode: 'errors_warnings'
+
+          # FOR TESTING ONLY: Analyze specific directory instead of PR changes
+          # Remove this in production - it will analyze all files in this directory
+          root_directory: 'testApps/npm-invalid'
 
 # ============================================================================
 # Advanced Configuration (Optional)
