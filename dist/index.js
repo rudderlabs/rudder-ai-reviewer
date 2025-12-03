@@ -78863,8 +78863,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.orchestrateAIBasedAnalysis = orchestrateAIBasedAnalysis;
 const core = __importStar(__nccwpck_require__(37484));
 const orchestrator_1 = __nccwpck_require__(53890);
-const rudderstack_api_1 = __nccwpck_require__(12603);
 const github_1 = __nccwpck_require__(22707);
+const artifact_manager_1 = __nccwpck_require__(76483);
 /**
  * Main AI-based orchestration function
  */
@@ -78907,44 +78907,7 @@ async function orchestrateAIBasedAnalysis(config) {
             (0, github_1.setOutputs)({ status: 'success', errorCount: 0, warningCount: 0, suggestionCount: 0 });
             return;
         }
-        // Step 4: Fetch RudderStack workspace data (tracking plan, destinations)
-        core.info('Fetching RudderStack workspace data...');
-        let trackingPlan;
-        let workspaceConfig;
-        try {
-            const rudderStackClient = (0, rudderstack_api_1.createRudderStackClient)({
-                serviceAccessToken: config.serviceAccessToken,
-                sourceId: config.sourceId,
-            });
-            // Test connection
-            const connected = await rudderStackClient.testConnection();
-            if (connected) {
-                core.info('✓ Connected to RudderStack API');
-                // Fetch tracking plan
-                trackingPlan = await rudderStackClient.getTrackingPlan();
-                if (trackingPlan) {
-                    core.info(`✓ Tracking plan retrieved with ${trackingPlan.events.length} events`);
-                }
-                else {
-                    core.info('No tracking plan found');
-                }
-                // Fetch workspace config
-                workspaceConfig = await rudderStackClient.getWorkspaceConfig();
-                if (workspaceConfig) {
-                    core.info(`✓ Workspace config retrieved with ${workspaceConfig.destinations.length} destinations`);
-                }
-                else {
-                    core.info('No workspace config found');
-                }
-            }
-            else {
-                core.warning('Could not connect to RudderStack API - continuing without workspace data');
-            }
-        }
-        catch (error) {
-            core.warning(`Failed to fetch RudderStack data: ${error}`);
-            // Continue without workspace data
-        }
+        // Step 4: (RudderStack API integration removed - AI analyzes SDK usage directly from code)
         // Step 5: Prepare file paths for AI analysis
         let changedFilePaths;
         if (config.rootDirectory) {
@@ -78962,8 +78925,6 @@ async function orchestrateAIBasedAnalysis(config) {
         const aiResult = await (0, orchestrator_1.orchestrateAIAnalysis)({
             changedFilePaths,
             unchangedFilePaths,
-            trackingPlan: trackingPlan || undefined,
-            workspaceConfig: workspaceConfig || undefined,
             config: {
                 apiKey: config.anthropicApiKey,
                 model: config.aiModel,
@@ -78981,25 +78942,35 @@ async function orchestrateAIBasedAnalysis(config) {
         // Step 7: Merge AI results
         const mergedResult = (0, orchestrator_1.mergeAIResults)(aiResult.results);
         core.info(`Merged results: ${mergedResult.events.length} events, ${mergedResult.issues.errors.length} errors, ${mergedResult.issues.warnings.length} warnings, ${mergedResult.issues.suggestions.length} suggestions`);
-        // Step 8: Retrieve previous analysis (for incremental delta)
-        // TODO: Implement incremental analysis
+        // Step 9: Retrieve previous analysis (for incremental delta)
+        core.info('Checking for previous analysis artifact...');
         let previousResult = null;
-        // Incremental analysis not yet implemented - always null for now
-        // When implemented:
-        // 1. Retrieve artifact: await retrieveAnalysisArtifact(prContext.prNumber)
-        // 2. Parse AIAnalysisResult from artifact
-        // 3. Use for delta calculation in three-comment strategy
-        // Step 9: Post three-comment strategy
+        try {
+            const artifact = await (0, artifact_manager_1.retrieveAnalysisArtifact)(prContext.prNumber);
+            if (artifact && artifact.analysisResult) {
+                previousResult = artifact.analysisResult;
+                core.info(`✓ Using previous analysis from ${artifact.timestamp} for delta calculation`);
+            }
+        }
+        catch (error) {
+            core.debug(`No previous analysis found: ${error}`);
+        }
+        // Step 10: Post three-comment strategy
         core.info('Posting analysis results...');
         // 9a. Global summary comment (cumulative)
         await (0, github_1.postOrUpdateGlobalSummary)(prContext, config.githubToken, mergedResult, previousResult ? [previousResult] : []);
         // 9b. PR review with incremental delta + inline annotations
         await (0, github_1.postPRReview)(prContext, config.githubToken, mergedResult, previousResult, config.annotationMode);
-        // Step 10: Store analysis artifact for future incremental analysis
-        // TODO: Implement artifact storage
-        // When implemented:
-        // await storeAnalysisArtifact(prContext.prNumber, prContext.headSha, mergedResult);
-        // Step 11: Set outputs
+        // Step 11: Store analysis artifact for future incremental analysis
+        core.info('Storing analysis artifact for future runs...');
+        try {
+            await (0, artifact_manager_1.storeAnalysisArtifact)(prContext.prNumber, prContext.headSha, mergedResult);
+        }
+        catch (error) {
+            core.warning(`Failed to store analysis artifact: ${error}`);
+            // Don't fail the action if artifact storage fails
+        }
+        // Step 12: Set outputs
         const errorCount = mergedResult.issues.errors.length;
         const warningCount = mergedResult.issues.warnings.length;
         const suggestionCount = mergedResult.issues.suggestions.length;
@@ -79138,8 +79109,6 @@ async function loadConfig(rootDirectory) {
  */
 function loadWorkflowInputs() {
     return {
-        serviceAccessToken: core.getInput('service_access_token', { required: true }),
-        sourceId: core.getInput('source_id') || undefined,
         githubToken: core.getInput('github_token', { required: true }),
         anthropicApiKey: core.getInput('anthropic_api_key', { required: true }),
         rootDirectory: core.getInput('root_directory') || undefined,
@@ -79204,9 +79173,6 @@ function mergeConfigurations(workflowConfig, fileConfig) {
  */
 function validateConfig(config) {
     const errors = [];
-    if (!config.serviceAccessToken) {
-        errors.push('service_access_token is required');
-    }
     if (!config.githubToken) {
         errors.push('github_token is required');
     }
@@ -79284,22 +79250,13 @@ const prompt_builder_1 = __nccwpck_require__(32162);
  * @param changedFiles Files that were changed in the PR
  * @param unchangedFiles Files that provide context but weren't changed
  * @param maxTokensPerRequest Maximum tokens allowed per request
- * @param trackingPlan Optional tracking plan data
- * @param workspaceConfig Optional workspace config data
  * @returns Array of code chunks ready for AI analysis
  */
-function createChunks(changedFiles, unchangedFiles, maxTokensPerRequest, trackingPlan, workspaceConfig) {
+function createChunks(changedFiles, unchangedFiles, maxTokensPerRequest) {
     core.info('=== Starting Chunking Process ===');
     // Estimate tokens for context (system prompt + RS data)
     const systemPrompt = (0, prompt_builder_1.buildSystemPrompt)();
-    const systemPromptTokens = (0, prompt_builder_1.estimateTokens)(systemPrompt);
-    let contextTokens = systemPromptTokens;
-    if (trackingPlan) {
-        contextTokens += (0, prompt_builder_1.estimateTokens)(JSON.stringify(trackingPlan));
-    }
-    if (workspaceConfig) {
-        contextTokens += (0, prompt_builder_1.estimateTokens)(JSON.stringify(workspaceConfig));
-    }
+    const contextTokens = (0, prompt_builder_1.estimateTokens)(systemPrompt);
     core.info(`Context tokens (system prompt + RS data): ~${contextTokens}`);
     core.info(`Available tokens for code: ~${maxTokensPerRequest - contextTokens}`);
     const availableTokens = maxTokensPerRequest - contextTokens;
@@ -79782,7 +79739,7 @@ async function orchestrateAIAnalysis(input) {
         }
         // Step 3: Create chunks
         core.info('Creating chunks...');
-        const chunks = (0, chunker_1.createChunks)(changedFiles, unchangedFiles, input.config.maxTokens, input.trackingPlan, input.workspaceConfig);
+        const chunks = (0, chunker_1.createChunks)(changedFiles, unchangedFiles, input.config.maxTokens);
         core.info(`Created ${chunks.length} chunk(s) for analysis`);
         // Step 4: Analyze each chunk
         const results = [];
@@ -79794,7 +79751,7 @@ async function orchestrateAIAnalysis(input) {
             const systemPrompt = (0, prompt_builder_1.buildSystemPrompt)();
             const changedChunkFiles = chunk.files.filter((f) => f.isChanged);
             const unchangedChunkFiles = chunk.files.filter((f) => !f.isChanged);
-            const userPrompt = (0, prompt_builder_1.buildUserPrompt)(changedChunkFiles, unchangedChunkFiles, input.trackingPlan, input.workspaceConfig);
+            const userPrompt = (0, prompt_builder_1.buildUserPrompt)(changedChunkFiles, unchangedChunkFiles);
             const response = await client.analyze({
                 systemPrompt,
                 userPrompt,
@@ -80031,6 +79988,8 @@ Return a JSON object in the following structure:
 {
   "summary": {
     "overallAssessment": "High-level assessment of the instrumentation (2-3 sentences)",
+    "sdkVersion": "Detected SDK version (e.g., '3.24.2' from NPM or 'v3' from CDN) or 'unknown'",
+    "sdkInstallationType": "npm|cdn|unknown",
     "filesAnalyzed": <number>,
     "totalIssues": <number>,
     "recommendations": ["recommendation 1", "recommendation 2", ...]
@@ -80094,26 +80053,8 @@ Guidelines:
 /**
  * Build user prompt (task execution)
  */
-function buildUserPrompt(changedFiles, unchangedFiles, trackingPlan, workspaceConfig) {
+function buildUserPrompt(changedFiles, unchangedFiles) {
     let prompt = `Analyze the following code changes for RudderStack SDK instrumentation:\n\n`;
-    // Add RudderStack context if available
-    if (trackingPlan || workspaceConfig) {
-        prompt += `## RudderStack Context\n\n`;
-        if (trackingPlan) {
-            prompt += `### Tracking Plan\n`;
-            prompt += `The workspace has a defined tracking plan with ${trackingPlan.events.length} events:\n\n`;
-            prompt += '```json\n';
-            prompt += JSON.stringify(trackingPlan, null, 2);
-            prompt += '\n```\n\n';
-        }
-        if (workspaceConfig) {
-            prompt += `### Configured Destinations\n`;
-            prompt += `The workspace has ${workspaceConfig.destinations.length} configured destination(s):\n\n`;
-            prompt += '```json\n';
-            prompt += JSON.stringify(workspaceConfig, null, 2);
-            prompt += '\n```\n\n';
-        }
-    }
     // Add changed files
     prompt += `## Changed Files (Primary Focus)\n\n`;
     prompt += `Analyze these ${changedFiles.length} changed file(s) carefully:\n\n`;
@@ -80136,13 +80077,17 @@ function buildUserPrompt(changedFiles, unchangedFiles, trackingPlan, workspaceCo
     }
     // Add analysis requirements
     prompt += `## Analysis Requirements\n\n`;
-    prompt += `1. **Focus on changed files first**: Identify all RudderStack SDK usage (direct and through abstractions)\n`;
-    prompt += `2. **Identify events**: List all events being tracked with their properties\n`;
-    prompt += `3. **Validate against tracking plan**: Check if events match the defined schema${!trackingPlan ? ' (no tracking plan available - focus on general best practices)' : ''}\n`;
-    prompt += `4. **Check destination compatibility**: Analyze if the instrumentation works well with configured destinations${!workspaceConfig ? ' (no destination config available - provide general guidance)' : ''}\n`;
-    prompt += `5. **Detect issues**: Find errors, warnings, and areas for improvement\n`;
-    prompt += `6. **Provide fixes**: For each issue in changed code, provide file path, line number, and specific fix\n`;
-    prompt += `7. **Review unchanged files**: If you find issues in unchanged files, list them separately\n\n`;
+    prompt += `1. **Detect SDK version**: Identify the RudderStack SDK version and installation type (NPM or CDN)\n`;
+    prompt += `   - For NPM: Look for @rudderstack/analytics-js version in package.json or imports\n`;
+    prompt += `   - For CDN: Look for version in script URLs or window.RudderSnippetVersion\n`;
+    prompt += `2. **Focus on changed files first**: Identify all RudderStack SDK usage (direct and through abstractions)\n`;
+    prompt += `3. **Identify events**: List all events being tracked with their properties (including property-level changes)\n`;
+    prompt += `4. **Validate SDK usage**: Check API correctness, method signatures, and best practices\n`;
+    prompt += `5. **Check naming conventions**: Ensure event and property names follow common patterns\n`;
+    prompt += `6. **Detect issues**: Find errors, warnings, and areas for improvement\n`;
+    prompt += `7. **Property-level analysis**: For modified events, identify specific property changes (added/removed/type changed)\n`;
+    prompt += `8. **Provide fixes**: For each issue in changed code, provide file path, line number, and specific fix\n`;
+    prompt += `9. **Review unchanged files**: If you find issues in unchanged files, list them separately\n\n`;
     prompt += `Return your analysis as a JSON object following the structure specified in the system prompt.\n\n`;
     prompt += `CRITICAL: Ensure the JSON is valid:\n`;
     prompt += `- Properly escape all special characters in strings (quotes, backslashes, newlines)\n`;
@@ -81120,361 +81065,6 @@ function formatInlineComment(issue) {
 
 /***/ }),
 
-/***/ 93812:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-/**
- * RudderStack API Client
- * Handles communication with RudderStack workspace API for tracking plans and destinations
- * Uses native fetch API (Node 24+)
- */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.RudderStackAPIClient = void 0;
-exports.createRudderStackClient = createRudderStackClient;
-const core = __importStar(__nccwpck_require__(37484));
-/**
- * RudderStack API Client
- */
-class RudderStackAPIClient {
-    baseURL;
-    headers;
-    timeout;
-    maxRetries;
-    sourceId;
-    constructor(config) {
-        this.baseURL = config.baseURL || 'https://api.rudderstack.com';
-        this.timeout = config.timeout || 30000;
-        this.maxRetries = config.maxRetries || 3;
-        this.sourceId = config.sourceId;
-        this.headers = {
-            Authorization: `Bearer ${config.serviceAccessToken}`,
-            'Content-Type': 'application/json',
-        };
-    }
-    /**
-     * Fetch workspace configuration including destinations
-     */
-    async getWorkspaceConfig() {
-        core.info('Fetching workspace configuration from RudderStack API...');
-        try {
-            const url = new URL('/workspace-config', this.baseURL);
-            if (this.sourceId) {
-                url.searchParams.set('source_id', this.sourceId);
-            }
-            const data = await this.retryRequest(async () => {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-                try {
-                    const res = await fetch(url.toString(), {
-                        method: 'GET',
-                        headers: this.headers,
-                        signal: controller.signal,
-                    });
-                    clearTimeout(timeoutId);
-                    if (!res.ok) {
-                        throw new FetchError(`HTTP ${res.status}: ${res.statusText}`, res.status, await res.text());
-                    }
-                    return res.json();
-                }
-                catch (error) {
-                    clearTimeout(timeoutId);
-                    throw error;
-                }
-            });
-            // Transform API response to our internal format
-            const config = {
-                workspaceId: data.workspaceId || data.workspace_id,
-                sourceId: data.sourceId || data.source_id || this.sourceId || '',
-                destinations: this.transformDestinations(data.destinations || []),
-            };
-            core.info(`Successfully fetched ${config.destinations.length} destinations`);
-            return config;
-        }
-        catch (error) {
-            return this.handleError(error, 'fetch workspace config');
-        }
-    }
-    /**
-     * Fetch tracking plans for the source and get the tracking plan details with events
-     * First lists all tracking plans, then finds the one connected to the source
-     */
-    async getTrackingPlan() {
-        core.info('Fetching tracking plans from RudderStack API...');
-        try {
-            // Step 1: List all tracking plans
-            const listUrl = new URL('/v2/catalog/tracking-plans', this.baseURL);
-            const trackingPlansData = await this.retryRequest(async () => {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-                try {
-                    const res = await fetch(listUrl.toString(), {
-                        method: 'GET',
-                        headers: this.headers,
-                        signal: controller.signal,
-                    });
-                    clearTimeout(timeoutId);
-                    if (!res.ok) {
-                        throw new FetchError(`HTTP ${res.status}: ${res.statusText}`, res.status, await res.text());
-                    }
-                    return res.json();
-                }
-                catch (error) {
-                    clearTimeout(timeoutId);
-                    throw error;
-                }
-            });
-            // Check if there are any tracking plans
-            if (!trackingPlansData || !trackingPlansData.trackingPlans || trackingPlansData.trackingPlans.length === 0) {
-                core.info('No tracking plans found in this workspace');
-                return null;
-            }
-            // If sourceId is provided, find tracking plan connected to this source
-            // Otherwise, use the first available tracking plan
-            let selectedTrackingPlan;
-            if (this.sourceId) {
-                // We'll need to check each tracking plan's connections to find the one for this source
-                // For now, we'll use the first one (TODO: implement source filtering)
-                core.warning('Source-specific tracking plan filtering not yet implemented, using first available');
-                selectedTrackingPlan = trackingPlansData.trackingPlans[0];
-            }
-            else {
-                selectedTrackingPlan = trackingPlansData.trackingPlans[0];
-            }
-            // Step 2: Get the full tracking plan details with events
-            const trackingPlanId = selectedTrackingPlan.id;
-            core.info(`Fetching tracking plan details for ID: ${trackingPlanId}`);
-            const detailUrl = new URL(`/v2/catalog/tracking-plans/${trackingPlanId}`, this.baseURL);
-            const detailsData = await this.retryRequest(async () => {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-                try {
-                    const res = await fetch(detailUrl.toString(), {
-                        method: 'GET',
-                        headers: this.headers,
-                        signal: controller.signal,
-                    });
-                    clearTimeout(timeoutId);
-                    if (!res.ok) {
-                        throw new FetchError(`HTTP ${res.status}: ${res.statusText}`, res.status, await res.text());
-                    }
-                    return res.json();
-                }
-                catch (error) {
-                    clearTimeout(timeoutId);
-                    throw error;
-                }
-            });
-            // Transform API response to our internal format
-            const trackingPlan = {
-                version: detailsData.version?.toString() || '1',
-                events: (detailsData.events || []).map((event) => ({
-                    name: event.name,
-                    description: event.description,
-                    namingConvention: event.namingConvention,
-                    properties: (event.properties || []).map((prop) => ({
-                        name: prop.name,
-                        type: prop.type,
-                        required: prop.required || false,
-                        description: prop.description,
-                        allowedValues: prop.allowedValues,
-                        pattern: prop.pattern,
-                    })),
-                })),
-            };
-            core.info(`Successfully fetched tracking plan with ${trackingPlan.events.length} events`);
-            return trackingPlan;
-        }
-        catch (error) {
-            return this.handleError(error, 'fetch tracking plan');
-        }
-    }
-    /**
-     * Test API credentials
-     */
-    async testConnection() {
-        core.debug('Testing RudderStack API connection...');
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            const res = await fetch(`${this.baseURL}/health`, {
-                method: 'GET',
-                headers: this.headers,
-                signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-            if (res.ok) {
-                core.info('RudderStack API connection successful');
-                return true;
-            }
-            core.warning('Failed to connect to RudderStack API');
-            return false;
-        }
-        catch (error) {
-            core.warning('Failed to connect to RudderStack API');
-            return false;
-        }
-    }
-    /**
-     * Transform destinations from API format to internal format
-     */
-    transformDestinations(destinations) {
-        return destinations.map((dest) => ({
-            id: dest.id,
-            name: dest.name,
-            type: dest.type || dest.destinationType || 'unknown',
-            enabled: dest.enabled !== false,
-            fieldMappings: dest.field_mappings || dest.fieldMappings || dest.config?.fieldMappings,
-        }));
-    }
-    /**
-     * Retry a request with exponential backoff
-     */
-    async retryRequest(requestFn, attempt = 1) {
-        try {
-            return await requestFn();
-        }
-        catch (error) {
-            if (attempt >= this.maxRetries) {
-                throw error;
-            }
-            const isRetryable = this.isRetryableError(error);
-            if (!isRetryable) {
-                throw error;
-            }
-            // Exponential backoff: 1s, 2s, 4s
-            const delay = Math.pow(2, attempt - 1) * 1000;
-            core.debug(`Retrying request after ${delay}ms (attempt ${attempt}/${this.maxRetries})`);
-            await this.sleep(delay);
-            return this.retryRequest(requestFn, attempt + 1);
-        }
-    }
-    /**
-     * Check if error is retryable
-     */
-    isRetryableError(error) {
-        // Network errors (fetch throws TypeError)
-        if (error.name === 'TypeError' || error.name === 'AbortError') {
-            return true;
-        }
-        // HTTP errors
-        if (error instanceof FetchError) {
-            const status = error.status;
-            // Retry on 5xx errors and 429 (rate limit)
-            return status >= 500 || status === 429;
-        }
-        return false;
-    }
-    /**
-     * Handle API errors
-     */
-    handleError(error, operation) {
-        if (error instanceof FetchError) {
-            const status = error.status;
-            if (status === 401 || status === 403) {
-                core.error(`Authentication failed: Invalid or expired RudderStack credentials. Unable to ${operation}.`);
-            }
-            else if (status === 404) {
-                core.warning(`Resource not found while trying to ${operation}. This may be expected.`);
-            }
-            else {
-                try {
-                    const data = JSON.parse(error.responseText);
-                    core.warning(`Failed to ${operation}: ${data.message || error.message}`);
-                }
-                catch {
-                    core.warning(`Failed to ${operation}: ${error.message}`);
-                }
-            }
-        }
-        else {
-            core.warning(`Failed to ${operation}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-        return null;
-    }
-    /**
-     * Sleep utility
-     */
-    sleep(ms) {
-        return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-}
-exports.RudderStackAPIClient = RudderStackAPIClient;
-/**
- * Custom error class for fetch errors
- */
-class FetchError extends Error {
-    status;
-    responseText;
-    constructor(message, status, responseText = '') {
-        super(message);
-        this.status = status;
-        this.responseText = responseText;
-        this.name = 'FetchError';
-    }
-}
-/**
- * Create RudderStack API client instance
- */
-function createRudderStackClient(config) {
-    return new RudderStackAPIClient(config);
-}
-
-
-/***/ }),
-
-/***/ 12603:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-"use strict";
-
-/**
- * RudderStack API Integration
- * Exports all RudderStack API related functionality
- */
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.createRudderStackClient = exports.RudderStackAPIClient = void 0;
-var client_1 = __nccwpck_require__(93812);
-Object.defineProperty(exports, "RudderStackAPIClient", ({ enumerable: true, get: function () { return client_1.RudderStackAPIClient; } }));
-Object.defineProperty(exports, "createRudderStackClient", ({ enumerable: true, get: function () { return client_1.createRudderStackClient; } }));
-
-
-/***/ }),
-
 /***/ 41730:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -81536,7 +81126,6 @@ async function run() {
             return;
         }
         core.info('Configuration:');
-        core.info(`- Source ID: ${config.sourceId || 'not specified'}`);
         core.info(`- AI Model: ${config.aiModel}`);
         core.info(`- Max tokens per request: ${config.maxTokensPerRequest}`);
         core.info(`- Annotation mode: ${config.annotationMode}`);

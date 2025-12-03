@@ -7,12 +7,6 @@ branding:
   color: 'blue'
 
 inputs:
-  service_access_token:
-    description: 'RudderStack service access token for API access (Basic auth)'
-    required: true
-  source_id:
-    description: 'Optional source ID for multi-source workspaces'
-    required: false
   github_token:
     description: 'GitHub token for PR comments and annotations'
     required: true

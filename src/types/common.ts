@@ -17,8 +17,6 @@ export type AnalysisStatus = 'success' | 'partial' | 'failed';
 // ============================================================================
 
 export interface ActionConfig {
-  serviceAccessToken: string;
-  sourceId?: string;
   githubToken: string;
   anthropicApiKey: string;
   rootDirectory?: string;
@@ -44,74 +42,7 @@ export interface FileConfig {
 // ============================================================================
 
 // ============================================================================
-// Tracking Plan
-// ============================================================================
-
-export interface TrackingPlan {
-  events: TrackingPlanEvent[];
-  version?: string;
-}
-
-export interface TrackingPlanEvent {
-  name: string;
-  description?: string;
-  properties: TrackingPlanProperty[];
-  namingConvention?: 'snake_case' | 'camelCase' | 'PascalCase' | 'kebab-case';
-}
-
-export interface TrackingPlanProperty {
-  name: string;
-  type: string;
-  required: boolean;
-  description?: string;
-  allowedValues?: string[];
-  pattern?: string;
-}
-
-// ============================================================================
-// Destination Analysis
-// ============================================================================
-
-export interface DestinationImpact {
-  destinationName: string;
-  destinationType: string; // 'Google Analytics', 'Amplitude', etc.
-  affectedMappings: FieldMapping[];
-  severity: IssueSeverity;
-  description: string;
-}
-
-export interface FieldMapping {
-  sourceProperty: string;
-  destinationField: string;
-  changeType: 'added' | 'removed' | 'type_changed';
-  impact: string;
-}
-
-// ============================================================================
-// AI Analysis - Legacy proxy types removed
-// See integrations/anthropic/types.ts for current AI analysis types
-// ============================================================================
-
-// ============================================================================
-// RudderStack API
-// ============================================================================
-
-export interface WorkspaceConfig {
-  destinations: DestinationConfig[];
-  sourceId: string;
-  workspaceId: string;
-}
-
-export interface DestinationConfig {
-  id: string;
-  name: string;
-  type: string;
-  enabled: boolean;
-  fieldMappings?: Record<string, string>;
-}
-
-// ============================================================================
-// File Scanning - Legacy types removed (no prioritization in AI approach)
+// RudderStack API types removed - AI analyzes SDK usage directly from code
 // ============================================================================
 
 // ============================================================================
@@ -142,8 +73,7 @@ export interface PRAnnotation {
 }
 
 // ============================================================================
-// Incremental Analysis - Legacy format
-// TODO: Update to use AIAnalysisResult from anthropic/types.ts
+// Incremental Analysis
 // ============================================================================
 
 export interface AnalysisArtifact {
@@ -151,5 +81,5 @@ export interface AnalysisArtifact {
   timestamp: string;
   prNumber: number;
   commitSha: string;
-  analysisResult: any; // TODO: Use AIAnalysisResult when incremental analysis is implemented
+  analysisResult: any; // AIAnalysisResult from anthropic/types.ts (any for JSON serialization)
 }

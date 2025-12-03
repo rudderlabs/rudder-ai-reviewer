@@ -11,10 +11,10 @@
 This GitHub Action analyzes your pull requests whenever you modify RudderStack JavaScript SDK (v3) instrumentation code. It provides:
 
 ✅ **API Validation** - Ensures your SDK calls match the official RudderStack API
-✅ **Tracking Plan Compliance** - Validates events and properties against your defined tracking plan
-✅ **Destination Impact Analysis** - Shows how your changes affect connected destinations
-✅ **Data Type Checking** - Catches property type changes that might break integrations
-✅ **AI-Powered Insights** - Get intelligent suggestions for complex tracking scenarios
+✅ **Event Detection** - Identifies all tracking events and their properties
+✅ **Best Practices** - Validates naming conventions and SDK usage patterns
+✅ **Property Analysis** - Detects property-level changes (added/removed/type changes)
+✅ **AI-Powered Analysis** - Intelligent code analysis including custom abstractions and wrappers
 
 ## Why Use It?
 
@@ -42,17 +42,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: rudderlabs/pr-reviewer@v1
         with:
-          service_access_token: ${{ secrets.RUDDERSTACK_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### 2. Add Required Secrets
+### 2. Add Required Secret
 
-Add these as repository secrets:
+Add this as a repository secret:
 
-1. **RUDDERSTACK_TOKEN** - Get your service access token from RudderStack dashboard
-2. **ANTHROPIC_API_KEY** - Get your API key from [Anthropic Console](https://console.anthropic.com/)
-3. That's it! The action will run automatically on pull requests
+- **ANTHROPIC_API_KEY** - Get your API key from [Anthropic Console](https://console.anthropic.com/)
+
+That's it! The action will run automatically on pull requests
 
 ## Configuration
 
@@ -61,11 +60,9 @@ Add these as repository secrets:
 ```yaml
 - uses: rudderlabs/pr-reviewer@v1
   with:
-    service_access_token: ${{ secrets.RUDDERSTACK_TOKEN }}
-    source_id: 'my-source-id'              # Optional: for multi-source workspaces
-    file_patterns: 'src/**/*.{ts,tsx}'      # Optional: custom file patterns
-    exclude_patterns: '**/*.test.ts'        # Optional: exclude patterns
-    output_verbosity: 'detailed'            # Optional: minimal | standard | detailed
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    ai_model: 'claude-sonnet-4-5'          # Optional: AI model (default: claude-sonnet-4-5)
+    max_tokens_per_request: '64000'        # Optional: Max tokens per request
 ```
 
 ### Advanced Configuration File
@@ -153,22 +150,17 @@ Use in subsequent steps:
 
 **What gets sent where:**
 - **To Anthropic:** Changed file contents from your PR (for AI analysis)
-- **To RudderStack:** API requests for tracking plans and destination configs (no code sent)
-- **Stays private:** Everything runs in your GitHub Actions runner, no data stored by us
+- **Stays private:** Everything runs in your GitHub Actions runner, no data stored by this action
 
 ## Troubleshooting
 
 **Action not running?**
 - Ensure you're using `pull_request` trigger
-- Check that `RUDDERSTACK_TOKEN` secret is set
-
-**No tracking plan validation?**
-- Verify your `service_access_token` is valid
-- Ensure you have a tracking plan defined in RudderStack
+- Check that `ANTHROPIC_API_KEY` secret is set
 
 **Files not being analyzed?**
-- Check your `file_patterns` configuration
 - Verify SDK is actually present in changed files
+- Check that files are JavaScript/TypeScript (.js, .jsx, .ts, .tsx)
 
 ## Support
 

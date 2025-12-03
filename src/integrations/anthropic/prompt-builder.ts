@@ -3,7 +3,6 @@
  * Constructs system and user prompts for Anthropic API
  */
 
-import { TrackingPlan, WorkspaceConfig } from '../../types/common';
 import { FileContent } from './types';
 
 /**
@@ -48,6 +47,8 @@ Return a JSON object in the following structure:
 {
   "summary": {
     "overallAssessment": "High-level assessment of the instrumentation (2-3 sentences)",
+    "sdkVersion": "Detected SDK version (e.g., '3.24.2' from NPM or 'v3' from CDN) or 'unknown'",
+    "sdkInstallationType": "npm|cdn|unknown",
     "filesAnalyzed": <number>,
     "totalIssues": <number>,
     "recommendations": ["recommendation 1", "recommendation 2", ...]
@@ -115,31 +116,8 @@ Guidelines:
 export function buildUserPrompt(
   changedFiles: FileContent[],
   unchangedFiles: FileContent[],
-  trackingPlan?: TrackingPlan,
-  workspaceConfig?: WorkspaceConfig
 ): string {
   let prompt = `Analyze the following code changes for RudderStack SDK instrumentation:\n\n`;
-
-  // Add RudderStack context if available
-  if (trackingPlan || workspaceConfig) {
-    prompt += `## RudderStack Context\n\n`;
-
-    if (trackingPlan) {
-      prompt += `### Tracking Plan\n`;
-      prompt += `The workspace has a defined tracking plan with ${trackingPlan.events.length} events:\n\n`;
-      prompt += '```json\n';
-      prompt += JSON.stringify(trackingPlan, null, 2);
-      prompt += '\n```\n\n';
-    }
-
-    if (workspaceConfig) {
-      prompt += `### Configured Destinations\n`;
-      prompt += `The workspace has ${workspaceConfig.destinations.length} configured destination(s):\n\n`;
-      prompt += '```json\n';
-      prompt += JSON.stringify(workspaceConfig, null, 2);
-      prompt += '\n```\n\n';
-    }
-  }
 
   // Add changed files
   prompt += `## Changed Files (Primary Focus)\n\n`;
@@ -167,13 +145,17 @@ export function buildUserPrompt(
 
   // Add analysis requirements
   prompt += `## Analysis Requirements\n\n`;
-  prompt += `1. **Focus on changed files first**: Identify all RudderStack SDK usage (direct and through abstractions)\n`;
-  prompt += `2. **Identify events**: List all events being tracked with their properties\n`;
-  prompt += `3. **Validate against tracking plan**: Check if events match the defined schema${!trackingPlan ? ' (no tracking plan available - focus on general best practices)' : ''}\n`;
-  prompt += `4. **Check destination compatibility**: Analyze if the instrumentation works well with configured destinations${!workspaceConfig ? ' (no destination config available - provide general guidance)' : ''}\n`;
-  prompt += `5. **Detect issues**: Find errors, warnings, and areas for improvement\n`;
-  prompt += `6. **Provide fixes**: For each issue in changed code, provide file path, line number, and specific fix\n`;
-  prompt += `7. **Review unchanged files**: If you find issues in unchanged files, list them separately\n\n`;
+  prompt += `1. **Detect SDK version**: Identify the RudderStack SDK version and installation type (NPM or CDN)\n`;
+  prompt += `   - For NPM: Look for @rudderstack/analytics-js version in package.json or imports\n`;
+  prompt += `   - For CDN: Look for version in script URLs or window.RudderSnippetVersion\n`;
+  prompt += `2. **Focus on changed files first**: Identify all RudderStack SDK usage (direct and through abstractions)\n`;
+  prompt += `3. **Identify events**: List all events being tracked with their properties (including property-level changes)\n`;
+  prompt += `4. **Validate SDK usage**: Check API correctness, method signatures, and best practices\n`;
+  prompt += `5. **Check naming conventions**: Ensure event and property names follow common patterns\n`;
+  prompt += `6. **Detect issues**: Find errors, warnings, and areas for improvement\n`;
+  prompt += `7. **Property-level analysis**: For modified events, identify specific property changes (added/removed/type changed)\n`;
+  prompt += `8. **Provide fixes**: For each issue in changed code, provide file path, line number, and specific fix\n`;
+  prompt += `9. **Review unchanged files**: If you find issues in unchanged files, list them separately\n\n`;
 
   prompt += `Return your analysis as a JSON object following the structure specified in the system prompt.\n\n`;
   prompt += `CRITICAL: Ensure the JSON is valid:\n`;
