@@ -26,7 +26,6 @@ async function run(): Promise<void> {
 
     core.info('Configuration:');
     core.info(`- Source ID: ${config.sourceId || 'not specified'}`);
-    core.info(`- Output verbosity: ${config.outputVerbosity}`);
     core.info(`- AI Model: ${config.aiModel}`);
     core.info(`- Max tokens per request: ${config.maxTokensPerRequest}`);
     core.info(`- Annotation mode: ${config.annotationMode}`);
