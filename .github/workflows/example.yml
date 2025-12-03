@@ -1,0 +1,55 @@
+# Example workflow file for using RudderStack PR Reviewer
+# This workflow demonstrates the action using the npm-valid test app
+#
+# For production use, copy this to your repository's .github/workflows/ directory
+# and remove the root_directory parameter
+
+name: RudderStack PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    name: Analyze RudderStack SDK Changes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run RudderStack PR Reviewer
+        uses: ./
+        with:
+          # Required: Anthropic API key for AI analysis
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Optional: GitHub token (defaults to github.token)
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Optional: AI model to use (default: claude-sonnet-4-5)
+          # Other options: claude-opus-4, claude-sonnet-3-5, etc.
+          ai_model: 'claude-sonnet-4-5'
+
+          # Optional: Max tokens per request (default: 64000)
+          max_tokens_per_request: '64000'
+
+          # Optional: Annotation mode (default: errors_warnings)
+          # Options: errors_only, errors_warnings
+          annotation_mode: 'errors_warnings'
+
+          # FOR TESTING ONLY: Analyze specific directory instead of PR changes
+          # Remove this in production - it will analyze all files in this directory
+          root_directory: 'testApps/npm-invalid'
+
+# ============================================================================
+# Advanced Configuration (Optional)
+# ============================================================================
+
+# You can also create a .rudderstack-pr-reviewer.yml config file in your repo:
+#
+# ai:
+#   model: 'claude-sonnet-4-5'
+#   max_tokens_per_request: 64000
+# annotation_mode: 'errors_warnings'
