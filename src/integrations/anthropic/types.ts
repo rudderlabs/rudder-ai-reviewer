@@ -45,6 +45,8 @@ export interface AIAnalysisResult {
 
 export interface AISummary {
   overallAssessment: string;
+  sdkVersion?: string;
+  sdkInstallationType?: string;
   filesAnalyzed: number;
   totalIssues: number;
   recommendations: string[];
