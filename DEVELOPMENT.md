@@ -10,11 +10,20 @@ This document contains technical details for developers working on the RudderSta
 - [Implementation Details](#implementation-details)
 - [Testing Strategy](#testing-strategy)
 - [Build & Release](#build--release)
-- [Design Decisions](#design-decisions)
+- [Extending the Action](#extending-the-action)
 
 ## Architecture Overview
 
-The PR Reviewer action uses a modular, feature-based architecture designed for extensibility across multiple SDK languages.
+For a comprehensive high-level overview, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+The PR Reviewer uses an **AI-first architecture** powered by Anthropic's Claude models. It analyzes RudderStack SDK instrumentation by sending source code directly to the AI model for analysis.
+
+### Core Philosophy
+
+- **AI-First**: No static AST parsing, no complex regex patterns
+- **Zero External Dependencies**: No RudderStack API integration required
+- **Direct Analysis**: Source code → AI model → PR comments
+- **Simple & Maintainable**: Minimal abstraction layers
 
 ### High-Level Data Flow
 
@@ -25,17 +34,20 @@ PR Event Triggered
   ↓
 2. Retrieve Previous Artifact (for incremental analysis)
   ↓
-3. Scan & Prioritize Files (detect RudderStack usage)
+3. Identify Changed Files (via GitHub API)
   ↓
-4. Static Analysis (TypeScript + Babel AST parsing)
+4. Read File Contents (all changed files)
   ↓
-5. Post Initial PR Comment (with static results)
+5. Smart Chunking (if token limit exceeded)
   ↓
-6. Async: Fetch Workspace Data (tracking plans + destinations)
+6. Send to Anthropic API (batched analysis)
   ↓
-7. Async: AI Analysis (complex patterns, send metadata only)
+7. Parse AI Response (structured JSON + markdown)
   ↓
-8. Update PR Comment (with workspace + AI results)
+8. Generate Three-Comment Output:
+   - Global Summary (cumulative state)
+   - PR Review Body (incremental delta)
+   - Inline Annotations (errors + warnings)
   ↓
 9. Save Analysis Artifact (for next incremental run)
 ```
@@ -44,58 +56,25 @@ PR Event Triggered
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      GitHub Action                           │
-│                         (main.ts)                            │
+│                    GitHub Action (main.ts)                   │
 └───────────────────────────┬─────────────────────────────────┘
                             │
         ┌───────────────────┴────────────────────┐
-        │      Core Orchestrator                 │
-        │  - Config loading                      │
+        │      AI Orchestrator                   │
         │  - Workflow coordination               │
+        │  - Artifact management                 │
         │  - Error handling                      │
         └───────────────────┬────────────────────┘
                             │
         ┌───────────────────┴────────────────────┐
         │                                        │
 ┌───────▼─────────┐                  ┌──────────▼─────────┐
-│   File Scanner  │                  │   Artifact Manager │
-│  - Pattern match│                  │  - Load previous   │
-│  - Prioritize   │                  │  - Save current    │
-└────────┬────────┘                  └────────────────────┘
-         │
-         │
-┌────────▼──────────────────────────────────────────────────┐
-│              Language Analyzers (Pluggable)               │
-│  ┌──────────────────┐    ┌─────────────┐                 │
-│  │ JavaScript       │    │   Swift     │  (Future)       │
-│  │ Analyzer         │    │   Analyzer  │                 │
-│  │                  │    │             │                 │
-│  │ - TS Parser      │    │             │                 │
-│  │ - Babel Parser   │    │             │                 │
-│  │ - SDK Detector   │    │             │                 │
-│  │ - Framework Det. │    │             │                 │
-│  │ - API Validator  │    │             │                 │
-│  │ - Change Detect  │    │             │                 │
-│  └──────────────────┘    └─────────────┘                 │
-└───────────────────────────────────────────────────────────┘
-         │                        │                  │
-┌────────▼────────┐  ┌────────────▼──────┐  ┌──────▼──────────┐
-│ RudderStack API │  │   AI Proxy        │  │ GitHub API      │
-│                 │  │                   │  │                 │
-│ - Workspace     │  │ - Batch requests  │  │ - PR comments   │
-│ - Tracking Plan │  │ - Rate limiting   │  │ - Annotations   │
-│ - Destinations  │  │ - Privacy layer   │  │ - Checks        │
-└─────────────────┘  └───────────────────┘  └─────────────────┘
-         │                        │                  │
-         └────────────────────────┴──────────────────┘
-                                  │
-                       ┌──────────▼──────────┐
-                       │   Report Generator  │
-                       │                     │
-                       │  - Comment format   │
-                       │  - Annotations      │
-                       │  - Collapsible UI   │
-                       └─────────────────────┘
+│   GitHub Client │                  │  Anthropic Client  │
+│  - PR context   │                  │  - Chunking        │
+│  - Comments     │                  │  - Prompts         │
+│  - Annotations  │                  │  - Streaming       │
+│  - Artifacts    │                  │  - Parsing         │
+└─────────────────┘                  └────────────────────┘
 ```
 
 ## Project Structure
@@ -103,71 +82,51 @@ PR Event Triggered
 ```
 pr-reviewer/
 ├── src/
-│   ├── analyzers/
-│   │   ├── base-analyzer.ts          # Abstract base class for all analyzers
-│   │   ├── javascript/
-│   │   │   ├── index.ts               # Main JavaScript analyzer
-│   │   │   ├── parsers/
-│   │   │   │   ├── typescript-parser.ts  # TS Compiler API wrapper
-│   │   │   │   └── babel-parser.ts       # Babel parser wrapper
-│   │   │   ├── detectors/
-│   │   │   │   ├── framework-detector.ts # React, Next, Vue, Angular, etc.
-│   │   │   │   ├── sdk-detector.ts       # Detect SDK usage & version
-│   │   │   │   └── version-detector.ts   # NPM vs CDN version
-│   │   │   ├── validators/
-│   │   │   │   ├── api-validator.ts      # Validate SDK API calls
-│   │   │   │   └── type-validator.ts     # Type checking for params
-│   │   │   └── change-detector.ts        # Diff analysis
-│   │   ├── swift/                     # Future: iOS SDK analysis
-│   │   └── kotlin/                    # Future: Android SDK analysis
+│   ├── core/
+│   │   ├── ai-orchestrator.ts       # Main workflow orchestration
+│   │   └── config-loader.ts         # Load & merge configs
 │   │
 │   ├── integrations/
-│   │   ├── rudderstack-api/
-│   │   │   ├── client.ts              # RudderStack API client
-│   │   │   ├── types.ts               # API response types
-│   │   │   └── retry.ts               # Retry logic with backoff
-│   │   ├── ai-proxy/
-│   │   │   ├── client.ts              # AI proxy client
-│   │   │   ├── payload-builder.ts     # Build privacy-safe payloads
-│   │   │   └── types.ts               # Request/response types
+│   │   ├── anthropic/
+│   │   │   ├── client.ts            # Anthropic API client
+│   │   │   ├── orchestrator.ts      # AI analysis coordination
+│   │   │   ├── chunker.ts           # Token-based chunking
+│   │   │   ├── prompt-builder.ts    # System + user prompts
+│   │   │   ├── response-parser.ts   # Parse AI responses
+│   │   │   └── types.ts             # Anthropic types
 │   │   └── github/
-│   │       ├── pr-client.ts           # PR comments & annotations
-│   │       ├── artifact-manager.ts    # Artifact save/load
-│   │       └── types.ts               # GitHub API types
-│   │
-│   ├── reporters/
-│   │   ├── comment-generator.ts       # Generate PR comment markdown
-│   │   ├── annotation-generator.ts    # Generate inline annotations
-│   │   └── formatter.ts               # Format issues & insights
-│   │
-│   ├── core/
-│   │   ├── orchestrator.ts            # Main workflow orchestration
-│   │   ├── file-scanner.ts            # Find & filter files
-│   │   ├── file-prioritizer.ts        # Score & prioritize files
-│   │   └── config-loader.ts           # Load & merge configs
+│   │       ├── context.ts           # PR context extraction
+│   │       ├── comments.ts          # Three-comment strategy
+│   │       ├── annotations.ts       # Inline annotations
+│   │       ├── artifact-manager.ts  # Artifact save/load
+│   │       └── types.ts             # GitHub API types
 │   │
 │   ├── types/
-│   │   └── common.ts                  # Shared type definitions
+│   │   └── common.ts                # Shared type definitions
 │   │
-│   ├── utils/
-│   │   └── helpers.ts                 # Common utilities
-│   │
-│   └── main.ts                        # Entry point
+│   └── main.ts                      # Entry point
 │
-├── dist/                              # Build output (generated)
+├── testApps/                        # Test applications
+│   ├── npm-valid/                   # Valid NPM SDK usage
+│   ├── npm-invalid/                 # Invalid NPM SDK usage
+│   ├── cdn-valid/                   # Valid CDN SDK usage
+│   └── cdn-invalid/                 # Invalid CDN SDK usage
+│
+├── dist/                            # Build output (generated)
 ├── .github/
 │   └── workflows/
-│       └── test.yml                   # CI workflow
-├── action.yml                         # GitHub Action metadata
+│       ├── test.yml                 # CI workflow
+│       └── example.yml              # Example workflow
+├── action.yml                       # GitHub Action metadata
 ├── package.json
 ├── tsconfig.json
-├── vitest.config.ts
 ├── eslint.config.mjs
 ├── .prettierrc.json
 ├── .gitignore
-├── README.md                          # User documentation
-├── CLAUDE.md                          # Design decisions & context
-└── DEVELOPMENT.md                     # This file
+├── README.md                        # User documentation
+├── ARCHITECTURE.md                  # High-level architecture
+├── CLAUDE.md                        # Design decisions & context
+└── DEVELOPMENT.md                   # This file
 ```
 
 ## Development Setup
@@ -175,8 +134,9 @@ pr-reviewer/
 ### Prerequisites
 
 - Node.js 24.x or later
-- npm or yarn
+- npm
 - Git
+- Anthropic API key (for testing)
 
 ### Initial Setup
 
@@ -191,9 +151,6 @@ npm install
 # Run type checking
 npm run typecheck
 
-# Run tests
-npm test
-
 # Build action
 npm run build
 ```
@@ -201,351 +158,603 @@ npm run build
 ### Development Workflow
 
 ```bash
-# Watch mode for TypeScript compilation
-npm run dev
+# Type check (recommended during development)
+npm run typecheck
 
-# Run tests in watch mode
-npm run test:watch
+# Build for production
+npm run build
 
 # Lint code
 npm run lint
 
 # Format code
 npm run format
-
-# Build for production
-npm run build
 ```
+
+### Testing Locally
+
+The action is designed to run in GitHub Actions environment. To test locally:
+
+1. Create a test repository with RudderStack instrumentation
+2. Open a PR with changes
+3. Manually run the action workflow
+
+**Note**: There are currently no unit/integration tests. Testing is manual via `testApps/` directories.
 
 ## Implementation Details
 
-### Static Analysis Engine
+### Configuration System
 
-#### TypeScript Parser
+Configuration is loaded from two sources (workflow inputs override config file):
 
-Uses `@typescript-eslint/typescript-estree` for TypeScript/TSX files:
-- Full type information available
-- Tracks variable declarations and flow
-- Infers types from usage when explicit types missing
+1. **Workflow Inputs** (`action.yml` → `config-loader.ts`)
+   - `github_token` (required)
+   - `anthropic_api_key` (required)
+   - `root_directory` (optional)
+   - `config_path` (optional)
+   - `review_unchanged_files` (optional)
+   - `ai_model` (optional)
+   - `max_tokens_per_request` (optional)
+   - `annotation_mode` (optional)
 
-#### Babel Parser
+2. **Config File** (`.rudderstack-pr-reviewer.yml`)
+   - Currently minimal (mostly placeholders)
+   - Future: Custom rules, ignore patterns, etc.
 
-Uses `@babel/parser` for JavaScript/JSX files:
-- Faster than TS parser
-- Handles modern syntax (ES2022+)
-- Sufficient for API validation without types
+### AI Analysis Flow
 
-#### Hybrid Strategy
+#### 1. Prompt Engineering (`prompt-builder.ts`)
 
+**System Prompt** (role definition):
 ```typescript
-if (file.endsWith('.ts') || file.endsWith('.tsx')) {
-  // Use TypeScript Compiler API
-  ast = parseWithTypeScript(content);
-  types = extractTypes(ast);
-} else {
-  // Use Babel
-  ast = parseWithBabel(content);
-}
+You are an expert at analyzing RudderStack JavaScript SDK v3 instrumentation.
+
+Your responsibilities:
+- Identify all RudderStack SDK usage (direct calls and custom abstractions)
+- Validate SDK API correctness and best practices
+- Detect instrumentation issues, anti-patterns, and improvements
+- Provide actionable, specific recommendations
 ```
 
-### SDK Detection
-
-#### NPM Detection
-1. Check for `@rudderstack/analytics-js` in lock files
-2. Parse version from:
-   - `package-lock.json` → `packages.@rudderstack/analytics-js.version`
-   - `yarn.lock` → `@rudderstack/analytics-js@version`
-   - `pnpm-lock.yaml` → `@rudderstack/analytics-js: version`
-
-#### CDN Detection
-1. Search for script tags or dynamic imports with CDN URLs
-2. Parse version from URL path: `cdn.rudderlabs.com/v{X}/rudder-analytics.min.js`
-3. Support custom CDN hosts (path structure remains same)
-
-### Framework Detection
-
-Priority order:
-1. Explicit config (`framework` input)
-2. package.json detection
-3. File pattern heuristics
-4. Fallback to framework-agnostic
-
+**User Prompt** (task execution):
 ```typescript
-// package.json checks
-if (hasPackage('next')) return 'nextjs';
-if (hasPackage('react')) return 'react';
-if (hasPackage('vue')) return 'vue';
-if (hasPackage('@angular/core')) return 'angular';
+Analyze the following code changes for RudderStack SDK instrumentation:
 
-// File pattern checks
-if (hasFiles('next.config.*')) return 'nextjs';
-if (hasFiles('**/*.vue')) return 'vue';
+## Code Changes
+[File paths and contents]
+
+## Analysis Requirements
+1. Detect SDK version and installation type (NPM or CDN)
+2. Focus on changed files first
+3. Identify all events being tracked
+4. Validate SDK usage against best practices
+5. Detect issues (errors, warnings, suggestions)
+6. For issues in changed code, provide file path and line numbers
+7. Property-level analysis: identify specific property changes
 ```
 
-### Change Detection
+#### 2. Chunking Strategy (`chunker.ts`)
 
-Compare baseline vs current:
-- **Events**: Track all `rudderanalytics.track()` calls
-- **Properties**: Extract property objects, compare keys & types
-- **Identify calls**: Detect changes to user traits
-- **Page calls**: Track page view instrumentation changes
+If total tokens exceed `max_tokens_per_request`:
 
-### Tracking Plan Validation
+1. **Try**: All files in one batch (default)
+2. **Fallback 1**: Split changed vs unchanged files
+3. **Fallback 2**: Split by individual files
 
-1. Fetch tracking plan from RudderStack API
-2. For each detected event:
-   - Check event name exists in plan
-   - Validate naming convention (snake_case, camelCase, etc.)
-   - Verify required properties present
-   - Check property types match
-   - Validate against business rules (conditional requirements, allowed values)
+Token estimation: **1 token ≈ 4 characters**
 
-### Destination Impact Analysis
+#### 3. API Communication (`client.ts`)
 
-1. Fetch workspace destinations
-2. For each destination, get field mappings
-3. For each detected change:
-   - Find affected mappings
-   - Assess impact type (breaking, warning, info)
-   - Generate destination-specific message
+- Uses Anthropic SDK (`@anthropic-ai/sdk`)
+- Streaming API with message handling
+- Error handling with clear messages (no retries)
+- Configurable model (default: `claude-sonnet-4-5`)
 
-### AI Analysis Privacy Layer
+#### 4. Response Parsing (`response-parser.ts`)
 
-**Never send:**
-- Source code snippets
-- Variable names
-- String literals
-- Property keys or values
-- Function names
-- Comments
-
-**Safe to send:**
+AI returns structured JSON:
 ```typescript
 {
-  analysis_type: "dynamic_event_inference",
-  ast_structure: {
-    node_type: "CallExpression",
-    callee: "rudderanalytics.track",
-    arguments: [
-      { type: "TemplateLiteral", has_expressions: true },
-      { type: "ObjectExpression", property_count: 3 }
-    ]
-  },
-  context: {
-    in_loop: true,
-    conditional: false
-  }
+  summary: {
+    overallAssessment: string;
+    sdkVersion: string;
+    sdkInstallationType: "npm" | "cdn" | "unknown";
+    filesAnalyzed: number;
+    totalIssues: number;
+    recommendations: string[];
+  };
+  events: Array<{
+    eventName: string;
+    location: { file: string; line: number };
+    properties: Array<{ key: string; type: string; required: boolean }>;
+  }>;
+  issues: {
+    errors: Issue[];
+    warnings: Issue[];
+    suggestions: Issue[];
+  };
+  destination_impacts: Array<{
+    destination: string;
+    impact: string;
+    description: string;
+  }>;
+  unchanged_file_issues: Issue[];
 }
 ```
 
-### File Prioritization Algorithm
+### Three-Comment Strategy
 
-```typescript
-score = (rudderStackChangeWeight * changeCount) +
-        (fileStatusWeight * statusScore) +
-        (sizeWeight * (1 / fileSize)) +
-        (typeWeight * typeScore)
+#### 1. Global Summary Comment (`comments.ts`)
 
-// Weights
-rudderStackChangeWeight = 10  // Highest priority
-fileStatusWeight = 5          // Changed > New > Unchanged
-sizeWeight = 2                // Prefer smaller files
-typeWeight = 1                // .tsx > .ts > .jsx > .js
+- **Behavior**: Single comment, updated in place (full replacement)
+- **Content**: Cumulative analysis of entire PR
+  - High-level summary
+  - All events found
+  - Total issue counts
+  - Suggestions
+  - Destination impacts
+- **Sections**: Collapsible markdown for organization
+
+#### 2. PR Review Body (`comments.ts`)
+
+- **Behavior**: New review posted with each analysis run
+- **Content**: Incremental changes since last analysis
+  - Delta changes only
+  - New events found
+  - New issues identified
+- **Attachment**: Includes inline annotations
+
+#### 3. Inline Annotations (`annotations.ts`)
+
+- **Scope**: Errors + Warnings only (not suggestions)
+- **Location**: Changed lines only (GitHub API limitation)
+- **Format**: Actionable recommendations with confidence levels
+
+Example annotation:
+```
+❌ Invalid SDK method signature
+
+Issue: Missing required properties parameter
+Impact: Event will be tracked without context
+
+Fix: rudderanalytics.track('button_clicked', { button_id: 'signup' })
+
+Confidence: High
 ```
 
 ### Incremental Analysis
 
-Store in artifact:
+Uses GitHub Actions Artifacts (90-day retention):
+
 ```typescript
+// Store analysis
 {
   version: "1.0",
-  timestamp: "2025-10-06T10:00:00Z",
+  timestamp: "2025-12-03T10:00:00Z",
   prNumber: 123,
   commitSha: "abc123",
-  analysisResult: {
-    // Previous full analysis
-  }
+  analysisResult: { /* full AI response */ }
+}
+
+// On next run:
+// 1. Retrieve previous artifact
+// 2. Compare events/issues
+// 3. Calculate delta
+// 4. Update global summary (cumulative)
+// 5. Post review body (delta only)
+```
+
+### Error Handling
+
+**Strategy**: Fail fast with clear error messages
+
+- No retries on AI API failures
+- Post comment explaining what failed and why
+- Set action outputs to 'failed' status
+- Exit with error code
+
+Example error comment:
+```markdown
+## ❌ Analysis Failed
+
+The RudderStack PR Reviewer encountered an error:
+
+**Error**: Anthropic API request failed (401 Unauthorized)
+
+**Possible causes**:
+- Invalid or expired ANTHROPIC_API_KEY
+- API key lacks necessary permissions
+
+**Next steps**:
+1. Verify your API key in repository secrets
+2. Check Anthropic dashboard for key status
+```
+
+### SDK Version Detection
+
+**AI-powered detection** from code:
+
+1. **NPM installations**: Parse `package.json` or import statements
+2. **CDN installations**: Extract version from script URLs
+
+AI includes in response:
+```typescript
+{
+  sdkVersion: "3.24.2",           // Exact version (NPM) or major version (CDN)
+  sdkInstallationType: "npm"      // "npm" | "cdn" | "unknown"
 }
 ```
 
-Compare against current:
-- Only analyze changed files
-- Delta detection for event/property changes
-- Merge results for comprehensive view
+### Property-Level Analysis
+
+AI identifies specific property changes:
+
+```typescript
+{
+  eventName: "page_viewed",
+  changeType: "modified",
+  propertyChanges: [
+    {
+      property: "referrer",
+      changeType: "added",
+      type: "string"
+    },
+    {
+      property: "timestamp",
+      changeType: "type_changed",
+      oldType: "number",
+      newType: "string"
+    }
+  ]
+}
+```
 
 ## Testing Strategy
 
-### Unit Tests
+### Current State
 
-Test individual components in isolation:
-- Parsers (TypeScript, Babel)
-- Detectors (SDK, framework, version)
-- Validators (API, types)
-- Change detection logic
-- File prioritization
-- Privacy layer (ensure no leaks)
+**No automated tests** - Testing is manual via:
+- `testApps/` sample applications
+- Real PR workflows
+- Manual verification of comments/annotations
 
-```typescript
-// Example
-describe('sdk-detector', () => {
-  it('should detect NPM installation from package-lock.json', () => {
-    const result = detectSDK(mockFiles);
-    expect(result.type).toBe('npm');
-    expect(result.version).toBe('3.0.0');
-  });
-});
-```
+### Future Testing
 
-### Integration Tests (Future)
+**Phase 1: Unit Tests**
+- Prompt builder (ensure prompts are correct)
+- Response parser (validate JSON parsing)
+- Chunker (verify token estimation and splitting)
+- Configuration loader (test input merging)
 
-Test component interactions:
-- Mock RudderStack API responses
-- Mock AI proxy responses
-- Test full analysis flow
+**Phase 2: Integration Tests**
+- Mock Anthropic API responses
+- Mock GitHub API interactions
+- Test full orchestration flow
 - Verify comment generation
 
-### E2E Tests (Future)
-
-Test in real GitHub environment:
+**Phase 3: E2E Tests**
 - Create test repository
 - Open PRs with known changes
-- Verify action behavior
-- Check comment accuracy
+- Run action workflow
+- Verify output accuracy
+
+### Manual Testing Workflow
+
+```bash
+# 1. Make changes to testApps/npm-valid/index.js
+# 2. Commit and push to feature branch
+# 3. Open PR on GitHub
+# 4. Trigger action workflow
+# 5. Verify:
+#    - Global summary comment
+#    - PR review body
+#    - Inline annotations
+#    - Action outputs
+```
 
 ## Build & Release
 
 ### Build Process
 
 ```bash
-# Build TypeScript
-tsc
+# Type check
+npm run typecheck
 
-# Package with ncc (bundles into single file)
-ncc build src/main.ts -o dist
+# Build with ncc (bundles into single file)
+npm run build
 
-# Creates dist/index.js with all dependencies
+# Creates dist/index.js (~4.8MB with all dependencies)
 ```
+
+The build uses `@vercel/ncc` to bundle TypeScript source and all dependencies into a single `dist/index.js` file. This makes the action fast to load in GitHub Actions.
 
 ### Release Process
 
-1. Update version in package.json
-2. Update CHANGELOG.md
-3. Commit changes
-4. Create git tag: `git tag v1.0.0`
-5. Push tag: `git push origin v1.0.0`
-6. GitHub Actions builds and publishes
-7. Update major version tag: `git tag -fa v1 -m "Update v1"`
+1. **Update version** in `package.json`
+   ```bash
+   npm version patch  # or minor, major
+   ```
+
+2. **Update CHANGELOG.md** (if exists)
+   ```markdown
+   ## [1.2.3] - 2025-12-03
+   ### Added
+   - New feature X
+   ### Fixed
+   - Bug Y
+   ```
+
+3. **Commit changes**
+   ```bash
+   git add package.json CHANGELOG.md
+   git commit -m "chore: bump version to 1.2.3"
+   ```
+
+4. **Create and push tag**
+   ```bash
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+5. **Update major version tag** (for auto-update users)
+   ```bash
+   git tag -fa v1 -m "Update v1 to v1.2.3"
+   git push origin v1 --force
+   ```
 
 ### Versioning Strategy
 
-- **Semantic versions**: `v1.2.3` (pinnable)
-- **Major version tags**: `v1` (auto-updates to latest v1.x)
+- **Semantic versions**: `v1.2.3` (pinnable, recommended for production)
+- **Major version tags**: `v1` (auto-updates to latest v1.x, useful for testing)
 
-Users can choose:
+Users choose update strategy:
 ```yaml
-uses: rudderlabs/pr-reviewer@v1       # Auto-update
-uses: rudderlabs/pr-reviewer@v1.2.3   # Pinned
+# Auto-update to latest v1.x
+uses: rudderlabs/pr-reviewer@v1
+
+# Pinned to specific version
+uses: rudderlabs/pr-reviewer@v1.2.3
 ```
 
-## Design Decisions
+## Extending the Action
 
-For complete design decisions and brainstorming notes, see [CLAUDE.md](CLAUDE.md).
+### Adding New AI Models
 
-### Key Architectural Choices
+To support additional Anthropic models:
 
-**1. Hybrid AST Parsing**
-- TypeScript for .ts/.tsx (full type info)
-- Babel for .js/.jsx (faster, lighter)
-- Rationale: Best tool for each job, extensible design
+1. Update `action.yml` input description:
+   ```yaml
+   ai_model:
+     description: 'AI model: claude-sonnet-4-5, claude-opus-4, claude-sonnet-3-5, etc.'
+   ```
 
-**2. Feature-Based Structure**
-- Easy to add language analyzers (Swift, Kotlin)
-- Clear module boundaries
-- Plugin-like architecture
+2. Update `types/common.ts` (if needed):
+   ```typescript
+   export interface ActionConfig {
+     aiModel: string;  // Already flexible - any model name works
+   }
+   ```
 
-**3. Static + AI Hybrid**
-- Static analysis primary (fast, private)
-- AI for complex cases only (metadata only)
-- Progressive results (static first, AI follows)
+3. Test with new model:
+   ```yaml
+   - uses: rudderlabs/pr-reviewer@v1
+     with:
+       ai_model: 'claude-opus-4'
+   ```
 
-**4. Privacy-First AI Integration**
-- Never send source code
-- AST metadata only
-- RudderStack proxy for control
+### Adding New Configuration Options
 
-**5. Graceful Degradation**
-- Continue on API failures
-- Partial analysis when limits hit
-- Always provide value
+1. **Add to `action.yml`**:
+   ```yaml
+   inputs:
+     my_new_option:
+       description: 'Description here'
+       required: false
+       default: 'default_value'
+   ```
 
-### Performance Limits
+2. **Update `types/common.ts`**:
+   ```typescript
+   export interface ActionConfig {
+     // ... existing fields
+     myNewOption: string;
+   }
+   ```
 
-| Limit | Value | Rationale |
-|-------|-------|-----------|
-| Max files | 100 | Balance coverage vs performance |
-| Max file size | 2MB | Avoid parsing huge generated files |
-| Max lines/file | 10,000 | Reasonable code file size |
-| Max total lines | 100,000 | ~100-200 average files |
-| Static timeout | 5 min | Fast feedback loop |
-| AI timeout | 10 min | Longer for external calls |
-| Total timeout | 20 min | GH Actions default limit |
-| Max AI requests | 30 | Cost control |
+3. **Load in `config-loader.ts`**:
+   ```typescript
+   function loadWorkflowInputs(): ActionConfig {
+     return {
+       // ... existing fields
+       myNewOption: core.getInput('my_new_option') || 'default_value',
+     };
+   }
+   ```
 
-### Error Taxonomy
+4. **Use in `ai-orchestrator.ts`** or other components
 
-| Type | Symbol | Use Case |
-|------|--------|----------|
-| Error ❌ | Must fix | API violations, type errors, tracking plan violations |
-| Warning ⚠️ | Should fix | Deprecated APIs, naming conventions, destination impacts |
-| Suggestion 💡 | Nice to have | Best practices, optimizations, tips |
+### Customizing AI Prompts
+
+Edit `prompt-builder.ts`:
+
+```typescript
+// System prompt (role definition)
+export function buildSystemPrompt(): string {
+  return `You are an expert at analyzing RudderStack JavaScript SDK v3 instrumentation.
+
+Your responsibilities:
+- [Add new responsibility here]
+...`;
+}
+
+// User prompt (task execution)
+export function buildUserPrompt(...): string {
+  let prompt = `Analyze the following code changes...\n\n`;
+
+  // Add new analysis requirements
+  prompt += `X. **New requirement**: Description\n`;
+
+  return prompt;
+}
+```
+
+### Changing Comment Format
+
+Edit `comments.ts`:
+
+```typescript
+// Global summary comment
+function buildGlobalSummary(result: AIAnalysisResult): string {
+  let comment = `## 🔍 RudderStack Instrumentation Review\n\n`;
+
+  // Add new sections
+  comment += `### 🆕 New Section\n`;
+  comment += `Content here...\n\n`;
+
+  return comment;
+}
+```
+
+### Adding Support for Other Languages
+
+While current implementation focuses on JavaScript, the architecture can be extended:
+
+1. **Create language-specific subdirectory**:
+   ```
+   src/integrations/anthropic/
+   ├── languages/
+   │   ├── javascript.ts  (current logic)
+   │   ├── swift.ts       (new)
+   │   └── kotlin.ts      (new)
+   ```
+
+2. **Implement language-specific prompt builder**:
+   ```typescript
+   export function buildSwiftAnalysisPrompt(...): string {
+     // Swift-specific analysis requirements
+   }
+   ```
+
+3. **Update orchestrator** to detect language and route appropriately
+
+### Modifying Chunking Strategy
+
+Edit `chunker.ts`:
+
+```typescript
+export function createChunks(...): AnalysisChunk[] {
+  // Current strategy:
+  // 1. Try all files
+  // 2. Fallback: changed vs unchanged
+  // 3. Fallback: file-based
+
+  // Add new strategy (e.g., context-aware):
+  if (totalTokens > maxTokens) {
+    return createContextAwareChunks(changedFiles, unchangedFiles);
+  }
+
+  // ...existing logic
+}
+```
+
+## Performance Characteristics
+
+| Metric | Typical Value | Notes |
+|--------|---------------|-------|
+| **Cold start** | 10-15s | Action initialization |
+| **File reading** | 1-3s | For 10-20 files |
+| **AI analysis** | 30-90s | Depends on file count and complexity |
+| **Comment posting** | 2-5s | GitHub API calls |
+| **Total runtime** | 1-2 min | For typical PR (10-20 changed files) |
+
+### Token Usage
+
+- **Typical PR**: 10,000-30,000 tokens
+- **Large PR**: 50,000-100,000 tokens (may chunk)
+- **Cost per analysis**: $0.10-$0.50 (Claude Sonnet 4.5 pricing)
+
+### GitHub API Rate Limits
+
+- **Comments**: 100/hour per repository
+- **Annotations**: 50 per check run
+- **Artifacts**: 500MB storage, 90-day retention
 
 ## Contributing
 
 ### Code Style
 
-- Use Prettier for formatting (runs on save)
+- Use Prettier for formatting
 - Follow ESLint rules
-- Write JSDoc comments for public APIs
+- Write clear, descriptive comments
 - Use TypeScript strict mode
 
 ### Commit Messages
 
 Follow conventional commits:
 ```
-feat: add framework detection
-fix: handle missing tracking plan gracefully
+feat: add property-level analysis
+fix: handle missing file gracefully
 docs: update API examples
-refactor: extract retry logic
-test: add parser unit tests
+refactor: simplify chunking logic
+chore: bump dependencies
 ```
 
 ### Pull Request Process
 
-1. Create feature branch
-2. Implement changes with tests
-3. Run `npm run format && npm run lint && npm test`
-4. Open PR with clear description
-5. Address review feedback
-6. Squash and merge
+1. Create feature branch from `develop`
+2. Implement changes
+3. Run `npm run typecheck && npm run lint && npm run format`
+4. Test manually with test apps
+5. Open PR with clear description
+6. Address review feedback
+7. Squash and merge to `develop`
 
 ## FAQ
 
-**Q: Why not use a general-purpose linter?**
-A: Need SDK-specific validation (tracking plans, destinations, RudderStack API specifics).
-
-**Q: Why GitHub Actions vs standalone CLI?**
-A: Actions integrate natively with PR workflow, provide PR comments/annotations automatically.
+**Q: Why AI-first instead of static analysis?**
+A: AI handles complex patterns (custom wrappers, abstractions, dynamic events) that would require massive rule sets with static analysis.
 
 **Q: Can this run locally?**
-A: Not currently, but could add CLI mode in future.
+A: Not currently - requires GitHub Actions environment for PR context and comments. Could add CLI mode in future.
 
 **Q: What about other RudderStack SDKs?**
-A: Architecture designed for extension. Swift/Kotlin analyzers can be added following same pattern.
+A: Architecture can be extended to support Swift/Kotlin/Python SDKs by updating prompts and file detection.
+
+**Q: How much does it cost?**
+A: Depends on PR size. Typical cost: $0.10-$0.50 per analysis with Claude Sonnet 4.5.
+
+**Q: Why no automated tests?**
+A: MVP focused on core functionality. Testing infrastructure is planned for future phases.
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue**: Action fails with "Invalid API key"
+- **Solution**: Verify `ANTHROPIC_API_KEY` is set in repository secrets
+
+**Issue**: AI analysis times out
+- **Solution**: Reduce `max_tokens_per_request` to force more aggressive chunking
+
+**Issue**: Annotations not appearing on changed lines
+- **Solution**: GitHub API limitation - annotations only work on lines changed in PR diff
+
+**Issue**: Global summary comment not updating
+- **Solution**: Check action permissions - needs `pull-requests: write` permission
+
+### Debug Mode
+
+Enable verbose logging:
+```yaml
+- uses: rudderlabs/pr-reviewer@v1
+  env:
+    ACTIONS_STEP_DEBUG: true
+```
 
 ## References
 
+- [High-Level Architecture](ARCHITECTURE.md)
+- [Design Decisions](CLAUDE.md)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [TypeScript Compiler API](https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API)
-- [Babel Parser](https://babeljs.io/docs/en/babel-parser)
+- [Anthropic API Documentation](https://docs.anthropic.com/)
 - [RudderStack JS SDK](https://github.com/rudderlabs/rudder-sdk-js)
-- [Design Decisions (CLAUDE.md)](CLAUDE.md)

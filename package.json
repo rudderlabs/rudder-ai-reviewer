@@ -1,7 +1,7 @@
 {
   "name": "@rudderstack/pr-reviewer",
-  "version": "0.1.0",
-  "description": "GitHub Action to analyze RudderStack SDK instrumentation changes in pull requests",
+  "version": "1.0.0",
+  "description": "AI-powered GitHub Action to analyze RudderStack JavaScript SDK instrumentation in pull requests",
   "main": "dist/index.js",
   "scripts": {
     "build": "ncc build src/main.ts -o dist && npm run clean:declarations",
@@ -24,14 +24,26 @@
   },
   "keywords": [
     "github-action",
+    "github-actions",
     "rudderstack",
     "analytics",
     "code-review",
     "instrumentation",
-    "tracking"
+    "tracking",
+    "ai",
+    "pr-review",
+    "sdk",
+    "javascript",
+    "typescript",
+    "event-tracking",
+    "data-quality"
   ],
   "author": "RudderStack",
   "license": "Elastic-2.0",
+  "homepage": "https://github.com/rudderlabs/pr-reviewer#readme",
+  "bugs": {
+    "url": "https://github.com/rudderlabs/pr-reviewer/issues"
+  },
   "dependencies": {
     "@actions/artifact": "4.0.0",
     "@actions/core": "1.11.1",

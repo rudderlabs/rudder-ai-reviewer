@@ -8,7 +8,7 @@ import { promises as fs } from 'fs';
 import { AnthropicClient, createAnthropicClient } from './client';
 import { buildSystemPrompt, buildUserPrompt } from './prompt-builder';
 import { createChunks } from './chunker';
-import { AIAnalysisResult, AnthropicConfig, FileContent } from './types';
+import { AIAnalysisResult, AnthropicConfig, FileContent, TruncatedFileInfo } from './types';
 
 export interface AIOrchestratorInput {
   changedFilePaths: string[];
@@ -22,6 +22,7 @@ export interface AIOrchestrationResult {
   totalChunks: number;
   totalInputTokens: number;
   totalOutputTokens: number;
+  truncatedFiles: TruncatedFileInfo[];
   error?: string;
 }
 
@@ -46,6 +47,7 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
         totalChunks: 0,
         totalInputTokens: 0,
         totalOutputTokens: 0,
+        truncatedFiles: [],
         error: 'Failed to connect to Anthropic API',
       };
     }
@@ -67,23 +69,31 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
         totalChunks: 0,
         totalInputTokens: 0,
         totalOutputTokens: 0,
+        truncatedFiles: [],
       };
     }
 
     // Step 3: Create chunks
     core.info('Creating chunks...');
-    const chunks = createChunks(changedFiles, unchangedFiles, input.config.maxTokens);
+    const chunkingResult = createChunks(changedFiles, unchangedFiles, input.config.maxTokens);
 
-    core.info(`Created ${chunks.length} chunk(s) for analysis`);
+    core.info(`Created ${chunkingResult.chunks.length} chunk(s) for analysis`);
+
+    if (chunkingResult.truncatedFiles.length > 0) {
+      core.warning(`${chunkingResult.truncatedFiles.length} file(s) were truncated due to size limits`);
+      chunkingResult.truncatedFiles.forEach((tf) => {
+        core.warning(`  - ${tf.path}: ${tf.originalTokens} → ${tf.truncatedTokens} tokens`);
+      });
+    }
 
     // Step 4: Analyze each chunk
     const results: AIAnalysisResult[] = [];
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      core.info(`Analyzing chunk ${i + 1}/${chunks.length} (${chunk.id}, ${chunk.files.length} files, ~${chunk.estimatedTokens} tokens)`);
+    for (let i = 0; i < chunkingResult.chunks.length; i++) {
+      const chunk = chunkingResult.chunks[i];
+      core.info(`Analyzing chunk ${i + 1}/${chunkingResult.chunks.length} (${chunk.id}, ${chunk.files.length} files, ~${chunk.estimatedTokens} tokens)`);
 
       const systemPrompt = buildSystemPrompt();
       const changedChunkFiles = chunk.files.filter((f) => f.isChanged);
@@ -102,9 +112,10 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
         return {
           status: 'failed',
           results,
-          totalChunks: chunks.length,
+          totalChunks: chunkingResult.chunks.length,
           totalInputTokens,
           totalOutputTokens,
+          truncatedFiles: chunkingResult.truncatedFiles,
           error: `Analysis failed on chunk ${chunk.id}: ${response.error}`,
         };
       }
@@ -130,9 +141,10 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
         return {
           status: 'failed',
           results,
-          totalChunks: chunks.length,
+          totalChunks: chunkingResult.chunks.length,
           totalInputTokens,
           totalOutputTokens,
+          truncatedFiles: chunkingResult.truncatedFiles,
           error: `Failed to parse AI response for chunk ${chunk.id}`,
         };
       }
@@ -145,9 +157,10 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
     return {
       status: 'success',
       results,
-      totalChunks: chunks.length,
+      totalChunks: chunkingResult.chunks.length,
       totalInputTokens,
       totalOutputTokens,
+      truncatedFiles: chunkingResult.truncatedFiles,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -159,6 +172,7 @@ export async function orchestrateAIAnalysis(input: AIOrchestratorInput): Promise
       totalChunks: 0,
       totalInputTokens: 0,
       totalOutputTokens: 0,
+      truncatedFiles: [],
       error: errorMessage,
     };
   }

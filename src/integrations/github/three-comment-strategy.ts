@@ -8,7 +8,7 @@
 import * as github from '@actions/github';
 import * as core from '@actions/core';
 import { PRContext } from '../../types/common';
-import { AIAnalysisResult } from '../anthropic/types';
+import { AIAnalysisResult, TruncatedFileInfo } from '../anthropic/types';
 import { getPRDiff, isLineChanged } from './diff-parser';
 
 const GLOBAL_SUMMARY_IDENTIFIER = '<!-- rudderstack-global-summary -->';
@@ -21,7 +21,8 @@ export async function postOrUpdateGlobalSummary(
   prContext: PRContext,
   token: string,
   analysisResult: AIAnalysisResult,
-  analysisHistory: AIAnalysisResult[]
+  analysisHistory: AIAnalysisResult[],
+  truncatedFiles: TruncatedFileInfo[] = []
 ): Promise<void> {
   core.info('Posting/updating global summary comment...');
 
@@ -29,7 +30,7 @@ export async function postOrUpdateGlobalSummary(
     const octokit = github.getOctokit(token);
 
     // Generate cumulative summary
-    const summaryBody = generateGlobalSummary(analysisResult, analysisHistory);
+    const summaryBody = generateGlobalSummary(analysisResult, analysisHistory, truncatedFiles);
     const fullBody = `${GLOBAL_SUMMARY_IDENTIFIER}\n${summaryBody}`;
 
     // Find existing comment
@@ -71,7 +72,7 @@ export async function postOrUpdateGlobalSummary(
 /**
  * Generate global summary comment body
  */
-function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisResult[]): string {
+function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisResult[], truncatedFiles: TruncatedFileInfo[] = []): string {
   const allResults = [...history, current];
 
   // Merge all results for cumulative view
@@ -102,6 +103,17 @@ function generateGlobalSummary(current: AIAnalysisResult, history: AIAnalysisRes
   body += `  - ❌ Errors: ${allErrors.length}\n`;
   body += `  - ⚠️ Warnings: ${allWarnings.length}\n`;
   body += `  - 💡 Suggestions: ${allSuggestions.length}\n\n`;
+
+  // Truncation warning (if files were truncated)
+  if (truncatedFiles.length > 0) {
+    body += `> **⚠️ Note**: ${truncatedFiles.length} file(s) were too large and had to be partially analyzed:\n`;
+    truncatedFiles.forEach((tf) => {
+      const percentAnalyzed = Math.round((tf.truncatedTokens / tf.originalTokens) * 100);
+      body += `> - \`${tf.path}\` (~${percentAnalyzed}% analyzed)\n`;
+    });
+    body += `>\n`;
+    body += `> **Recommendation**: Consider splitting these files or increasing \`max_tokens_per_request\` for complete analysis.\n\n`;
+  }
 
   // Events section (collapsible)
   if (uniqueEvents.size > 0) {
