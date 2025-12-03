@@ -206,40 +206,74 @@ Configuration is loaded from two sources (workflow inputs override config file):
 #### 1. Prompt Engineering (`prompt-builder.ts`)
 
 **System Prompt** (role definition):
-```typescript
-You are an expert at analyzing RudderStack JavaScript SDK v3 instrumentation.
 
-Your responsibilities:
-- Identify all RudderStack SDK usage (direct calls and custom abstractions)
-- Validate SDK API correctness and best practices
-- Detect instrumentation issues, anti-patterns, and improvements
-- Provide actionable, specific recommendations
-```
+Provides comprehensive context for the AI including:
+- **Expertise definition**: RudderStack SDK v3 expert with knowledge of frameworks and analytics platforms
+- **SDK API Reference**: Complete method signatures with TypeScript types for all core methods (load, identify, track, page, group, alias, ready, reset)
+- **Common patterns**: Custom abstractions users create (hooks, utilities, service classes, event builders)
+- **Reference docs**: Links to official docs, GitHub repo, NPM package, migration guide, and framework examples
+- **Severity classification**: Clear guidelines for errors (MUST fix), warnings (SHOULD fix), and suggestions (NICE to have)
+- **Confidence scoring**: High (strong evidence), medium (likely correct), low (uncertain)
+- **Change detection strategy**: How to determine if events are added/modified/removed/existing
+- **Common issues checklist**: API usage errors, type safety issues, best practice violations, framework-specific problems, abstraction problems
 
 **User Prompt** (task execution):
+
+Dynamically constructed based on context:
 ```typescript
-Analyze the following code changes for RudderStack SDK instrumentation:
+# Analysis Task: Pull Request Instrumentation Review
 
-## Code Changes
-[File paths and contents]
+[Context explanation of changed vs unchanged files]
 
-## Analysis Requirements
-1. Detect SDK version and installation type (NPM or CDN)
-2. Focus on changed files first
-3. Identify all events being tracked
-4. Validate SDK usage against best practices
-5. Detect issues (errors, warnings, suggestions)
-6. For issues in changed code, provide file path and line numbers
-7. Property-level analysis: identify specific property changes
+## RudderStack Context: Connected Destinations (optional)
+[JSON of destinations if available]
+
+## Changed Files (PRIMARY FOCUS)
+[File contents with syntax highlighting]
+
+## Unchanged Files (CONTEXT ONLY)
+[File contents for reference]
+
+## Analysis Checklist:
+1. SDK Detection
+2. Event Discovery (with property-level changes)
+3. SDK Validation
+4. Abstraction Analysis
+5. Naming Conventions
+6. Destination Impact (if destinations provided)
+7. Best Practices
+8. Issue Identification
 ```
+
+Key features:
+- **Conditional sections**: RudderStack context only included if destinations are configured
+- **Visual hierarchy**: Emoji indicators, clear section headers
+- **Concrete examples**: JSON structure with actual values, not just schema
+- **Step-by-step checklist**: 8 specific analysis steps the AI should perform
+- **Clear output requirements**: JSON-only response without markdown formatting
 
 #### 2. Chunking Strategy (`chunker.ts`)
 
-If total tokens exceed `max_tokens_per_request`:
+Token budget calculation accounts for:
+- System prompt tokens
+- RudderStack context tokens (destinations JSON if provided)
+- Available tokens for code = `max_tokens_per_request` - context tokens
 
-1. **Try**: All files in one batch (default)
-2. **Fallback 1**: Split changed vs unchanged files
-3. **Fallback 2**: Split by individual files
+If total code tokens exceed available tokens, apply hybrid fallback strategy:
+
+1. **Strategy 1: Smart Grouping** - Group files by directory/feature
+   - Keeps related files together for better context
+   - Fails if any group is too large
+
+2. **Strategy 2: Changed vs Unchanged Split**
+   - Prioritize changed files in separate chunks
+   - Add unchanged files if space permits
+   - Fails if changed files alone exceed limit
+
+3. **Strategy 3: File-Based Chunking** (ultimate fallback)
+   - Split files individually across multiple chunks
+   - Truncate oversized files with warning
+   - Always succeeds
 
 Token estimation: **1 token ≈ 4 characters**
 
@@ -582,21 +616,47 @@ Edit `prompt-builder.ts`:
 export function buildSystemPrompt(): string {
   return `You are an expert at analyzing RudderStack JavaScript SDK v3 instrumentation.
 
-Your responsibilities:
-- [Add new responsibility here]
+# Your Expertise
+- [Add new expertise area]
+
+# RudderStack SDK v3 API Reference
+[Update method signatures if SDK changes]
+
+## Common Issues to Check For
+[Add new issue categories or specific checks]
 ...`;
 }
 
 // User prompt (task execution)
-export function buildUserPrompt(...): string {
-  let prompt = `Analyze the following code changes...\n\n`;
+export function buildUserPrompt(
+  changedFiles: FileContent[],
+  unchangedFiles: FileContent[],
+  rsContext?: RudderStackContext
+): string {
+  let prompt = `# Analysis Task: Pull Request Instrumentation Review\n\n`;
 
-  // Add new analysis requirements
-  prompt += `X. **New requirement**: Description\n`;
+  // Add RudderStack context if available
+  if (rsContext?.destinations && rsContext.destinations.length > 0) {
+    prompt += `## RudderStack Context: Connected Destinations\n\n`;
+    prompt += JSON.stringify(rsContext.destinations, null, 2);
+  }
+
+  // Add files...
+  // Add analysis checklist with new requirements
+  prompt += `## X. New Analysis Step\n`;
+  prompt += `Description of what to check...\n`;
 
   return prompt;
 }
 ```
+
+**Key considerations when modifying prompts:**
+- System prompt sets the AI's expertise and guidelines (stable)
+- User prompt provides task-specific context (dynamic per PR)
+- Include concrete examples in JSON output structure
+- Use conditional sections based on available context
+- Keep instructions clear and actionable
+- Test changes with real PR scenarios
 
 ### Changing Comment Format
 
