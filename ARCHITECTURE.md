@@ -13,7 +13,6 @@ This document provides a high-level overview of the RudderStack PR Reviewer GitH
 - [Overview](#overview)
 - [Core Architecture](#core-architecture)
 - [Data Flow](#data-flow)
-- [Directory Structure](#directory-structure)
 - [Key Components](#key-components)
 - [Configuration](#configuration)
 - [Extension Points](#extension-points)
@@ -160,51 +159,6 @@ The RudderStack PR Reviewer is a **GitHub Action** that analyzes pull requests f
 
 ---
 
-## Directory Structure
-
-```
-/Volumes/Workspace/Repositories/pr-reviewer/
-├── src/
-│   ├── main.ts                          # Entry point
-│   │
-│   ├── core/
-│   │   ├── ai-orchestrator.ts           # Main orchestration
-│   │   └── config-loader.ts             # Config loading + merging
-│   │
-│   ├── integrations/
-│   │   ├── anthropic/                   # AI Analysis
-│   │   │   ├── orchestrator.ts          # AI orchestration
-│   │   │   ├── client.ts                # Anthropic API client
-│   │   │   ├── prompt-builder.ts        # Prompt engineering
-│   │   │   ├── chunker.ts               # Token limit handling
-│   │   │   ├── types.ts                 # AI-specific types
-│   │   │   └── index.ts                 # Exports
-│   │   │
-│   │   └── github/                      # GitHub Integration
-│   │       ├── enhanced-pr-client.ts    # PR context + operations
-│   │       ├── three-comment-strategy.ts# Comment posting logic
-│   │       ├── diff-parser.ts           # Parse GitHub diffs
-│   │       ├── artifact-manager.ts      # Incremental analysis
-│   │       └── index.ts                 # Exports
-│   │
-│   └── types/
-│       └── common.ts                    # Shared type definitions
-│
-├── action.yml                           # GitHub Action metadata
-├── package.json                         # Dependencies
-├── tsconfig.json                        # TypeScript config
-├── README.md                            # User documentation
-├── ARCHITECTURE.md                      # This file
-├── DEVELOPMENT.md                       # Developer guide
-└── dist/
-    └── index.js                         # Compiled bundle (5MB)
-```
-
-**Total Files:** 15 TypeScript files
-**Bundle Size:** ~4.8MB (single file)
-
----
-
 ## Key Components
 
 ### 1. Configuration System
@@ -252,13 +206,33 @@ interface ActionConfig {
 - Ultimate fallback: Split by file
 
 #### c. Prompt Builder (`prompt-builder.ts`)
-- **System Prompt:** Defines AI role and capabilities
-- **User Prompt:** Provides files and analysis requirements
-- Includes:
-  - Changed files (primary focus)
-  - Unchanged files (context)
-  - Analysis requirements (9 steps)
-  - JSON output schema
+
+**System Prompt (Role Definition):**
+- Defines AI as RudderStack SDK v3 expert
+- Complete API reference with TypeScript signatures for all methods
+- Common abstraction patterns to recognize (hooks, utilities, services)
+- Reference documentation links
+- Severity classification guidelines (errors vs warnings vs suggestions)
+- Confidence scoring criteria (high/medium/low)
+- Change detection strategy
+- Common issues checklist (API errors, type safety, best practices, framework-specific, abstractions)
+
+**User Prompt (Task Execution):**
+- Dynamically constructed based on available context
+- RudderStack context (destinations) if provided
+- Changed files (primary focus)
+- Unchanged files (context only)
+- 8-step analysis checklist:
+  1. SDK Detection (version and installation type)
+  2. Event Discovery (with property-level changes)
+  3. SDK Validation (API correctness)
+  4. Abstraction Analysis (custom wrappers)
+  5. Naming Conventions
+  6. Destination Impact (if destinations provided)
+  7. Best Practices
+  8. Issue Identification
+- Concrete JSON output examples
+- Clear output requirements (JSON-only, no markdown)
 
 #### d. Client (`client.ts`)
 - Anthropic API wrapper
@@ -271,20 +245,40 @@ interface ActionConfig {
 interface AIAnalysisResult {
   summary: {
     overallAssessment: string;
-    sdkVersion: string;
-    sdkInstallationType: 'npm' | 'cdn' | 'unknown';
+    sdkVersion?: string;              // Detected SDK version
+    sdkInstallationType?: string;     // 'npm' | 'cdn' | 'unknown'
     filesAnalyzed: number;
     totalIssues: number;
     recommendations: string[];
   };
-  events: Event[];
+  events: Event[];                    // All events with properties
   issues: {
-    errors: Issue[];
-    warnings: Issue[];
-    suggestions: Issue[];
+    errors: Issue[];                  // Critical issues (MUST fix)
+    warnings: Issue[];                // Issues that SHOULD be fixed
+    suggestions: Issue[];             // NICE to have improvements
   };
-  destinationImpacts: DestinationImpact[];
-  unchangedFileIssues: Issue[];
+  destinationImpacts: DestinationImpact[];  // Impact on connected destinations
+  unchangedFileIssues: Issue[];       // Issues in unchanged code
+}
+
+interface Event {
+  name: string;
+  file: string;
+  line?: number;
+  status: 'added' | 'modified' | 'removed' | 'existing';
+  properties?: EventProperty[];       // Property details with types
+  issues?: string[];                  // Event-specific issues
+}
+
+interface Issue {
+  severity: 'error' | 'warning' | 'suggestion';
+  message: string;
+  file: string;
+  line?: number;
+  column?: number;
+  impact?: string;                    // Explanation of impact
+  fix?: string;                       // Code fix suggestion
+  confidence: 'high' | 'medium' | 'low';
 }
 ```
 
@@ -297,21 +291,33 @@ interface AIAnalysisResult {
 #### a. Three-Comment Strategy (`three-comment-strategy.ts`)
 
 **Strategy Overview:**
-1. **Global Summary Comment** (cumulative)
-   - Single comment, updates in place
-   - Shows complete analysis state
-   - Collapsible sections
-   - Includes previous results for comparison
+1. **Global Summary Comment** (cumulative, high-level)
+   - Single comment, updates in place with full replacement
+   - Shows cumulative analysis state across all runs
+   - **High-level only**: Status badges, metrics table, event lists (names only), error categorization
+   - **Visual indicators**: 🔴 Action Required / 🟡 Review / 🟢 All Clear
+   - **Trend tracking**: Shows delta from previous analysis (↗️ ↘️ →)
+   - Collapsible sections for events and error breakdown
+   - Resources & help links
+   - Copy-friendly summary for team sharing
 
-2. **PR Review Body** (incremental delta)
-   - New review on each run
-   - Shows changes since last analysis
-   - Summary of new events/issues
+2. **PR Review Body** (incremental, detailed)
+   - New review posted with each analysis run
+   - Shows delta since last analysis at top
+   - **Contains ALL detailed findings**:
+     - Full error descriptions with file grouping, impacts, and fixes
+     - Full warning descriptions with file grouping, impacts, and fixes
+     - Full suggestion descriptions with fixes
+     - Detailed event listings with properties and locations
+     - Destination impact analysis with affected events
+     - Issues found in unchanged code
+   - Purpose: One-stop shop for all analysis details per run
 
 3. **Inline Annotations**
    - Attached to PR review
-   - Errors + warnings only
+   - Errors + warnings only (configurable)
    - Changed lines only (GitHub API limitation)
+   - Enhanced format with location table and confidence indicators
 
 #### b. Enhanced PR Client (`enhanced-pr-client.ts`)
 - Gets PR context (owner, repo, number, SHAs)
@@ -443,35 +449,45 @@ interface AIClient {
 
 ### Why AI-First?
 
-**Problem:** Static analysis couldn't handle:
+**Problem:** Traditional code analysis approaches struggle with:
 - Custom abstractions (wrappers, utilities, hooks)
-- Dynamic event names
-- Complex control flow
-- Framework-specific patterns
+- Dynamic event names (template literals, computed values)
+- Complex control flow across multiple files
+- Framework-specific patterns (React hooks, Angular services, etc.)
+- Understanding developer intent vs just syntax
 
-**Solution:** AI can:
+**Solution:** AI-powered analysis can:
 - Understand intent across abstraction layers
-- Infer event names from context
-- Handle any framework
+- Infer event names from context and variable flow
+- Handle any framework without specific configuration
 - Provide natural language explanations
+- Recognize patterns that developers actually use in practice
+- Suggest context-aware fixes with code examples
 
-**Trade-off:** Requires external API (Anthropic), but much more accurate.
+**Trade-off:** Requires external AI API (Anthropic), but significantly more accurate and flexible than rule-based approaches.
 
 ---
 
 ### Why Three-Comment Strategy?
 
-**Problem:** How to show both cumulative state and incremental changes?
+**Problem:** How to show both cumulative state and incremental changes without overwhelming users?
 
 **Solution:**
-1. **Global Summary:** Full picture of current state
-2. **PR Review:** What changed this commit
-3. **Inline Annotations:** Specific line-level issues
+1. **Global Summary:** High-level cumulative view (status, metrics, trends)
+2. **PR Review:** Detailed analysis results for each run (all errors, warnings, suggestions)
+3. **Inline Annotations:** Specific line-level issues in code context
+
+**Design Principle:** Summary vs Details Separation
+- Global summary = "What's the overall status?" (scannable, at-a-glance)
+- PR review = "What are the specific issues?" (detailed, actionable)
+- Inline annotations = "What's wrong with this line?" (contextual, specific)
 
 **Benefits:**
-- Reviewers see both "what's new" and "what's the full state"
-- History preserved in comment thread
-- Inline annotations provide context
+- Reviewers can quickly scan status without scrolling through details
+- Details are available per-analysis in review comments
+- History preserved in comment thread (each review is a snapshot)
+- Professional UX matching tools like CodeRabbit, SonarCloud
+- Inline annotations provide code context
 
 ---
 
@@ -495,45 +511,6 @@ interface AIClient {
 **Solution:** Store previous results, calculate delta
 
 **Implementation:** GitHub Artifacts (90-day retention, free)
-
----
-
-## Performance Characteristics
-
-### Token Usage
-
-**Average PR:**
-- 5 changed files
-- ~500 lines per file
-- ~15K tokens input
-- ~5K tokens output
-- **Cost:** ~$0.15 per analysis
-
-**Large PR:**
-- 20 changed files
-- ~10K lines total
-- ~60K tokens input (might chunk)
-- ~15K tokens output
-- **Cost:** ~$0.50 per analysis
-
-### Timing
-
-**Typical:**
-- File reading: <1s
-- AI analysis: 10-30s
-- Comment posting: <2s
-- **Total:** 15-35 seconds
-
-**Large PR (chunked):**
-- 2-3 chunks × 20s each
-- **Total:** 40-60 seconds
-
-### Limits
-
-- Max files: Unlimited (chunks automatically)
-- Max file size: No hard limit (but affects tokens)
-- Max PR size: Unlimited (chunks automatically)
-- Max tokens per request: Configurable (default 64K)
 
 ---
 
