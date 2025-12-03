@@ -63,111 +63,9 @@ export interface PerformanceLimits {
 }
 
 // ============================================================================
-// Analysis Results
+// Legacy types removed - AI-based analysis uses different structure
+// See AIAnalysisResult in integrations/anthropic/types.ts for new format
 // ============================================================================
-
-export interface Issue {
-  id: string;
-  severity: IssueSeverity;
-  message: string;
-  file: string;
-  line?: number;
-  column?: number;
-  impact?: string;
-  fix?: string;
-  confidence?: ConfidenceLevel;
-  source: 'static' | 'ai' | 'tracking-plan' | 'destination';
-}
-
-export interface AnalysisResult {
-  status: AnalysisStatus;
-  issues: Issue[];
-  changes: ChangesSummary;
-  filesAnalyzed: FileAnalysisInfo[];
-  destinationImpacts?: DestinationImpact[];
-  aiInsights?: AIInsight[];
-  errors?: string[];
-}
-
-export interface FileAnalysisInfo {
-  path: string;
-  analyzed: boolean;
-  reason?: string; // Why it was skipped (e.g., "file too large", "no SDK usage")
-  sdkDetected: boolean;
-  framework?: string;
-}
-
-// ============================================================================
-// Changes Detection
-// ============================================================================
-
-export interface ChangesSummary {
-  eventsAdded: EventChange[];
-  eventsModified: EventChange[];
-  eventsRemoved: EventChange[];
-  propertyChanges: PropertyChange[];
-}
-
-export interface EventChange {
-  eventName: string;
-  file: string;
-  line?: number;
-  properties?: PropertyInfo[];
-}
-
-export interface PropertyChange {
-  eventName: string;
-  propertyName: string;
-  changeType: 'added' | 'removed' | 'type_changed' | 'structure_changed';
-  oldType?: string;
-  newType?: string;
-  file: string;
-  line?: number;
-}
-
-export interface PropertyInfo {
-  name: string;
-  type: string;
-  required?: boolean;
-}
-
-// ============================================================================
-// SDK Detection
-// ============================================================================
-
-export interface SDKUsage {
-  type: 'npm' | 'cdn';
-  version?: string;
-  detected: boolean;
-  locations: SDKCallLocation[];
-}
-
-export interface SDKCallLocation {
-  file: string;
-  line: number;
-  column: number;
-  method: string; // 'track', 'identify', 'page', 'load', etc.
-  callType: 'valid' | 'invalid' | 'uncertain';
-}
-
-// ============================================================================
-// Framework Detection
-// ============================================================================
-
-export type SupportedFramework =
-  | 'react'
-  | 'nextjs'
-  | 'vue'
-  | 'angular'
-  | 'vanilla'
-  | 'unknown';
-
-export interface FrameworkInfo {
-  framework: SupportedFramework;
-  confidence: ConfidenceLevel;
-  version?: string;
-  detectedFrom: string; // e.g., "package.json", "file patterns"
-}
 
 // ============================================================================
 // Tracking Plan
@@ -214,48 +112,9 @@ export interface FieldMapping {
 }
 
 // ============================================================================
-// AI Analysis
+// AI Analysis - Legacy proxy types removed
+// See integrations/anthropic/types.ts for current AI analysis types
 // ============================================================================
-
-export interface AIAnalysisRequest {
-  id: string;
-  analysisType: 'dynamic_event_inference' | 'complex_pattern' | 'intent_analysis';
-  issue: string;
-  astStructure: Record<string, unknown>;
-  context: Record<string, unknown>;
-}
-
-export interface AIAnalysisResponse {
-  id: string;
-  status: 'success' | 'failed' | 'throttled';
-  confidence: ConfidenceLevel;
-  findings?: {
-    inferredPattern?: string;
-    recommendations?: string[];
-    impactAssessment?: string;
-  };
-  error?: string;
-}
-
-export interface AIInsight {
-  file: string;
-  line?: number;
-  insight: string;
-  confidence: ConfidenceLevel;
-  recommendations?: string[];
-}
-
-export interface AIProxyBatchRequest {
-  analysis_requests: AIAnalysisRequest[];
-}
-
-export interface AIProxyBatchResponse {
-  results: AIAnalysisResponse[];
-  rate_limit?: {
-    remaining: number;
-    reset_at: string;
-  };
-}
 
 // ============================================================================
 // RudderStack API
@@ -276,26 +135,8 @@ export interface DestinationConfig {
 }
 
 // ============================================================================
-// File Scanning & Prioritization
+// File Scanning - Legacy types removed (no prioritization in AI approach)
 // ============================================================================
-
-export interface FileScore {
-  path: string;
-  score: number;
-  reasons: {
-    rudderStackChangeCount: number;
-    fileStatus: 'changed' | 'new' | 'unchanged';
-    fileSizeBytes: number;
-    fileType: string;
-  };
-}
-
-export interface ScanResult {
-  files: string[];
-  prioritizedFiles: FileScore[];
-  totalFiles: number;
-  skippedFiles: number;
-}
 
 // ============================================================================
 // GitHub Integration
@@ -325,7 +166,8 @@ export interface PRAnnotation {
 }
 
 // ============================================================================
-// Incremental Analysis
+// Incremental Analysis - Legacy format
+// TODO: Update to use AIAnalysisResult from anthropic/types.ts
 // ============================================================================
 
 export interface AnalysisArtifact {
@@ -333,20 +175,5 @@ export interface AnalysisArtifact {
   timestamp: string;
   prNumber: number;
   commitSha: string;
-  analysisResult: AnalysisResult;
-}
-
-// ============================================================================
-// Output Generation
-// ============================================================================
-
-export interface ReportSections {
-  summary: string;
-  filesAnalyzed: string;
-  errors?: string;
-  warnings?: string;
-  suggestions?: string;
-  destinationImpacts?: string;
-  changesDetected?: string;
-  aiAnalysis?: string;
+  analysisResult: any; // TODO: Use AIAnalysisResult when incremental analysis is implemented
 }

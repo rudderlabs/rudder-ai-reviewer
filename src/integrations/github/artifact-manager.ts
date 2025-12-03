@@ -7,7 +7,8 @@ import artifactClient from '@actions/artifact';
 import * as core from '@actions/core';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { AnalysisArtifact, AnalysisResult } from '../../types/common';
+import { AnalysisArtifact } from '../../types/common';
+import { AIAnalysisResult } from '../anthropic/types';
 
 const ARTIFACT_NAME = 'rudderstack-pr-analysis';
 const ARTIFACT_FILE = 'analysis-result.json';
@@ -18,7 +19,7 @@ const ARTIFACT_FILE = 'analysis-result.json';
 export async function storeAnalysisArtifact(
   prNumber: number,
   commitSha: string,
-  result: AnalysisResult
+  result: AIAnalysisResult
 ): Promise<boolean> {
   try {
     core.info('Storing analysis result as artifact...');
