@@ -23,9 +23,6 @@ export interface ActionConfig {
   anthropicApiKey: string;
   rootDirectory?: string;
   configPath: string;
-  filePatterns?: string[];
-  excludePatterns?: string[];
-  outputVerbosity: 'minimal' | 'standard' | 'detailed';
   reviewUnchangedFiles: boolean;
   aiModel: string; // Allow any Anthropic model name
   maxTokensPerRequest: number;
@@ -33,33 +30,12 @@ export interface ActionConfig {
 }
 
 export interface FileConfig {
-  file_patterns?: {
-    include?: string[];
-    exclude?: string[];
-  };
-  output_format?: {
-    verbosity?: 'minimal' | 'standard' | 'detailed';
-  };
-  limits?: {
-    max_files?: number;
-    max_file_size_mb?: number;
-  };
   ai?: {
     model?: string; // Allow any Anthropic model name
     max_tokens_per_request?: number;
   };
   annotation_mode?: 'errors_only' | 'errors_warnings';
-}
-
-export interface PerformanceLimits {
-  maxFiles: number;
-  maxFileSizeMB: number;
-  maxLinesPerFile: number;
-  maxTotalLines: number;
-  staticAnalysisTimeoutMs: number;
-  aiAnalysisTimeoutMs: number;
-  totalTimeoutMs: number;
-  maxAIRequests: number;
+  // Future: Add file patterns, limits, etc. when needed
 }
 
 // ============================================================================
