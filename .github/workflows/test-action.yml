@@ -17,4 +17,6 @@ jobs:
         uses: ./
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          review-level: 'moderate'
+          source-id: test-source-id
+          service-access-token: test-service-access-token
+          root-directory: .
