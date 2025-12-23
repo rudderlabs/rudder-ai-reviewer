@@ -1,0 +1,36 @@
+name: 'RudderStack PR Reviewer'
+description: 'Analyzes RudderStack SDK instrumentation changes in pull requests'
+author: 'RudderStack'
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  github_token:
+    description: 'GitHub token for API access'
+    required: true
+
+  source_id:
+    description: 'ID of the rudderstack source'
+    required: true
+
+  service_access_token:
+    description: 'Service access token for the rudderstack workspace'
+    required: true
+
+  root_directory:
+    description: 'Root directory of the project'
+    required: false
+    default: '.'
+
+
+outputs:
+  status:
+    description: 'Status of the review (success, failed, warning)'
+  message:
+    description: 'Summary message from the review'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
