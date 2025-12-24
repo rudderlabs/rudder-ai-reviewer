@@ -26,20 +26,12 @@ describe('JavaScriptSDKDetector', () => {
       const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
       const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
-      const detector = new JavaScriptSDKDetector(
-        packageReader,
-        lockFileParser,
-        cdnScanner,
-        DEFAULT_JS_CONFIG
-      );
+      const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
       const result = await detector.detect('/repo');
 
       expect(result.installationType).toBe('npm');
-      expect(result.npmVersion).toBe('3.0.4');
-      expect(result.cdnVersion).toBeUndefined();
-      expect(result.details).toContain('✅ NPM: Found @rudderstack/analytics-js@3.0.0');
-      expect(result.details).toContain('   Exact version from lock file: 3.0.4');
+      expect(result.version).toBe('3.0.4');
     });
 
     test('detects NPM installation without lock file', async () => {
@@ -54,17 +46,12 @@ describe('JavaScriptSDKDetector', () => {
       const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
       const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
-      const detector = new JavaScriptSDKDetector(
-        packageReader,
-        lockFileParser,
-        cdnScanner,
-        DEFAULT_JS_CONFIG
-      );
+      const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
       const result = await detector.detect('/repo');
 
       expect(result.installationType).toBe('npm');
-      expect(result.npmVersion).toBe('2.5.0');
+      expect(result.version).toBe('2.5.0');
     });
   });
 
@@ -85,20 +72,12 @@ describe('JavaScriptSDKDetector', () => {
       const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
       const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
-      const detector = new JavaScriptSDKDetector(
-        packageReader,
-        lockFileParser,
-        cdnScanner,
-        DEFAULT_JS_CONFIG
-      );
+      const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
       const result = await detector.detect('/repo');
 
       expect(result.installationType).toBe('cdn');
-      expect(result.cdnVersion).toBe('3');
-      expect(result.npmVersion).toBeUndefined();
-      expect(result.details).toContain('✅ CDN: Found RudderStack CDN snippet');
-      expect(result.details).toContain('   CDN version: 3');
+      expect(result.version).toBe('3');
     });
   });
 
@@ -129,19 +108,12 @@ describe('JavaScriptSDKDetector', () => {
       const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
       const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
-      const detector = new JavaScriptSDKDetector(
-        packageReader,
-        lockFileParser,
-        cdnScanner,
-        DEFAULT_JS_CONFIG
-      );
+      const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
       const result = await detector.detect('/repo');
 
       expect(result.installationType).toBe('both');
-      expect(result.npmVersion).toBe('3.0.4');
-      expect(result.cdnVersion).toBe('3');
-      expect(result.details).toContain('ℹ️  Both NPM and CDN installations detected');
+      expect(result.version).toBe('3.0.4'); // Prefer NPM version
     });
   });
 
@@ -159,19 +131,12 @@ describe('JavaScriptSDKDetector', () => {
       const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
       const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
-      const detector = new JavaScriptSDKDetector(
-        packageReader,
-        lockFileParser,
-        cdnScanner,
-        DEFAULT_JS_CONFIG
-      );
+      const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
       const result = await detector.detect('/repo');
 
       expect(result.installationType).toBe('none');
-      expect(result.npmVersion).toBeUndefined();
-      expect(result.cdnVersion).toBeUndefined();
-      expect(result.details).toContain('❌ No RudderStack SDK installation detected');
+      expect(result.version).toBeUndefined();
     });
   });
 });

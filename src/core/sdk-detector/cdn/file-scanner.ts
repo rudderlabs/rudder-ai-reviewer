@@ -6,14 +6,11 @@ import type { FileSystem } from '@custom-types/file.type';
 import * as path from 'path';
 import type { CDNConfig } from '../config';
 import { extractVersionNumber } from '../npm/version-utils';
-import type { SDKLocation } from '../types';
-import { VariableExtractor, type VariableInfo } from './variable-extractor';
+import { VariableExtractor } from './variable-extractor';
 
 export interface CDNResult {
   found: boolean;
   version?: string;
-  files: string[];
-  locations: SDKLocation[];
 }
 
 const HTML_SCRIPT_TAG_REGEX = /<script[^>]*>([\s\S]*?)<\/script>/gi;
@@ -32,8 +29,6 @@ export class CDNScanner {
    * Scan common file paths for CDN usage
    */
   async scan(repoPath: string): Promise<CDNResult> {
-    const files: string[] = [];
-    const locations: SDKLocation[] = [];
     let version: string | undefined;
 
     for (const file of this.config.searchPaths) {
@@ -41,22 +36,15 @@ export class CDNScanner {
       const result = await this.scanFile(filePath, file);
 
       if (result.found) {
-        files.push(file);
-
         if (result.version && !version) {
           version = result.version;
         }
-
-        locations.push(...result.locations);
+        // Found CDN usage, we can return early
+        return { found: true, version };
       }
     }
 
-    return {
-      found: files.length > 0,
-      version,
-      files,
-      locations,
-    };
+    return { found: false };
   }
 
   /**
@@ -65,9 +53,9 @@ export class CDNScanner {
   private async scanFile(
     filePath: string,
     filename: string
-  ): Promise<{ found: boolean; version?: string; locations: SDKLocation[] }> {
+  ): Promise<{ found: boolean; version?: string }> {
     if (!this.fs.exists(filePath)) {
-      return { found: false, locations: [] };
+      return { found: false };
     }
 
     try {
@@ -75,17 +63,17 @@ export class CDNScanner {
       const jsCode = this.extractJavaScriptCode(content, filename);
 
       if (!jsCode) {
-        return { found: false, locations: [] };
+        return { found: false };
       }
 
       const variables = this.variableExtractor.extract(jsCode);
       if (!variables) {
-        return { found: false, locations: [] };
+        return { found: false };
       }
 
       const found = this.variableExtractor.isCDNDetected(variables);
       if (!found) {
-        return { found: false, locations: [] };
+        return { found: false };
       }
 
       // Extract version
@@ -95,14 +83,11 @@ export class CDNScanner {
         version = extractVersionNumber(sdkVersion);
       }
 
-      // Build locations
-      const locations = this.buildLocations(variables, filename);
-
-      return { found, version, locations };
+      return { found, version };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Failed to scan file ${filename}: ${errorMessage}`);
-      return { found: false, locations: [] };
+      return { found: false };
     }
   }
 
@@ -130,22 +115,5 @@ export class CDNScanner {
     }
 
     return null;
-  }
-
-  /**
-   * Build SDK locations from variable info
-   */
-  private buildLocations(variables: Map<string, VariableInfo>, filename: string): SDKLocation[] {
-    const locations: SDKLocation[] = [];
-
-    if (variables.has(this.config.variableNames.baseUrl)) {
-      const info = variables.get(this.config.variableNames.baseUrl)!;
-      locations.push({ file: filename, line: info.line, type: 'cdn', snippet: info.snippet });
-    } else if (variables.has(this.config.variableNames.version)) {
-      const info = variables.get(this.config.variableNames.version)!;
-      locations.push({ file: filename, line: info.line, type: 'cdn', snippet: info.snippet });
-    }
-
-    return locations;
   }
 }

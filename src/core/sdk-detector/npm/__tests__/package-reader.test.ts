@@ -19,10 +19,7 @@ describe('PackageReader', () => {
 
     const result = reader.read('/repo');
 
-    expect(result).not.toBeNull();
-    expect(result?.version).toBe('3.0.0');
-    expect(result?.locations).toHaveLength(1);
-    expect(result?.locations[0].type).toBe('npm');
+    expect(result).toBe('3.0.0');
   });
 
   test('reads package with SDK in devDependencies', () => {
@@ -37,8 +34,7 @@ describe('PackageReader', () => {
 
     const result = reader.read('/repo');
 
-    expect(result).not.toBeNull();
-    expect(result?.version).toBe('2.5.0');
+    expect(result).toBe('2.5.0');
   });
 
   test('returns null when package.json does not exist', () => {

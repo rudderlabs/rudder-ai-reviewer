@@ -31,8 +31,6 @@ describe('CDNScanner', () => {
 
       expect(result.found).toBe(true);
       expect(result.version).toBe('3');
-      expect(result.files).toContain('src/app/layout.tsx');
-      expect(result.locations.length).toBeGreaterThan(0);
     });
 
     test('detects CDN usage in HTML file', async () => {
@@ -55,7 +53,6 @@ describe('CDNScanner', () => {
 
       expect(result.found).toBe(true);
       expect(result.version).toBe('3.0.0');
-      expect(result.files).toContain('index.html');
     });
 
     test('returns not found when no CDN usage', async () => {
@@ -75,8 +72,7 @@ describe('CDNScanner', () => {
       const result = await scanner.scan('/repo');
 
       expect(result.found).toBe(false);
-      expect(result.files).toEqual([]);
-      expect(result.locations).toEqual([]);
+      expect(result.version).toBeUndefined();
     });
 
     test('returns not found when search files do not exist', async () => {
@@ -86,10 +82,10 @@ describe('CDNScanner', () => {
       const result = await scanner.scan('/repo');
 
       expect(result.found).toBe(false);
-      expect(result.files).toEqual([]);
+      expect(result.version).toBeUndefined();
     });
 
-    test('scans multiple files and finds first match', async () => {
+    test('scans multiple files and returns on first match', async () => {
       const fs = createMockFileSystem({
         '/repo/index.html': '<html><body>No SDK</body></html>',
         '/repo/public/index.html': `
@@ -105,8 +101,7 @@ describe('CDNScanner', () => {
       const result = await scanner.scan('/repo');
 
       expect(result.found).toBe(true);
-      expect(result.files).toContain('public/index.html');
-      expect(result.files).not.toContain('index.html');
+      expect(result.version).toBe('3');
     });
   });
 });

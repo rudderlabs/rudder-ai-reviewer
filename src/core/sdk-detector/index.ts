@@ -21,7 +21,7 @@ export async function detectSDK(repoPath: string): Promise<SDKDetectionResult> {
   const lockFileParser = new LockFileParser(fs, config.npm);
   const cdnScanner = new CDNScanner(fs, config.cdn);
 
-  const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner, config);
+  const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
   return detector.detect(repoPath);
 }
