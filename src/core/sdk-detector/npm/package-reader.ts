@@ -4,7 +4,7 @@
 
 import type { FileSystem } from '@custom-types/file.type';
 import type { NPMConfig } from '../config';
-import { cleanSemverPrefix } from './version-utils';
+import { cleanSemverPrefix } from '@core/shared/npm/version-utils';
 
 export class PackageReader {
   constructor(
