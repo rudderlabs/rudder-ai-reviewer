@@ -60,7 +60,8 @@ export class VariableExtractor {
     const hasVersion = variables.has(this.config.variableNames.version);
     const hasFileName =
       variables.has(this.config.variableNames.fileName) &&
-      variables.get(this.config.variableNames.fileName)?.value.includes(this.config.fileName)===true;
+      variables.get(this.config.variableNames.fileName)?.value.includes(this.config.fileName) ===
+        true;
 
     return hasBaseUrl && hasVersion && hasFileName;
   }

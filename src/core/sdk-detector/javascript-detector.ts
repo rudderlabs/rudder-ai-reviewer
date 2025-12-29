@@ -25,7 +25,7 @@ export class JavaScriptSDKDetector {
     private readonly cdnScanner: CDNScanner
   ) {}
 
-  async detect(repoPath: string): Promise<SDKDetectionResult> {
+  async detect(repoPath: string): Promise<SDKDetectionResult | null> {
     const [npmResult, cdnResult] = await Promise.all([
       this.detectNPM(repoPath),
       this.detectCDN(repoPath),
@@ -56,23 +56,21 @@ export class JavaScriptSDKDetector {
   private buildResult(
     npmResult: NPMDetectionResult,
     cdnResult: CDNDetectionResult
-  ): SDKDetectionResult {
+  ): SDKDetectionResult | null {
     const hasNPM = npmResult.found;
     const hasCDN = cdnResult.found;
 
     let installationType: SDKInstallationType;
-    if (hasNPM && hasCDN) {
-      installationType = 'both';
-    } else if (hasNPM) {
+    let version: string | undefined;
+    if (hasNPM) {
       installationType = 'npm';
+      version = npmResult.exactVersion;
     } else if (hasCDN) {
       installationType = 'cdn';
+      version = cdnResult.version;
     } else {
-      installationType = 'none';
+      return null;
     }
-
-    // Prefer NPM exact version, fallback to CDN version
-    const version = npmResult.exactVersion || cdnResult.version;
 
     return {
       installationType,

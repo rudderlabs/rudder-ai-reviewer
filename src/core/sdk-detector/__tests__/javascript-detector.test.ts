@@ -30,8 +30,8 @@ describe('JavaScriptSDKDetector', () => {
 
       const result = await detector.detect('/repo');
 
-      expect(result.installationType).toBe('npm');
-      expect(result.version).toBe('3.0.4');
+      expect(result?.installationType).toBe('npm');
+      expect(result?.version).toBe('3.0.4');
     });
 
     test('detects NPM installation without lock file', async () => {
@@ -50,8 +50,8 @@ describe('JavaScriptSDKDetector', () => {
 
       const result = await detector.detect('/repo');
 
-      expect(result.installationType).toBe('npm');
-      expect(result.version).toBe('2.5.0');
+      expect(result?.installationType).toBe('npm');
+      expect(result?.version).toBe('2.5.0');
     });
   });
 
@@ -76,8 +76,8 @@ describe('JavaScriptSDKDetector', () => {
 
       const result = await detector.detect('/repo');
 
-      expect(result.installationType).toBe('cdn');
-      expect(result.version).toBe('3');
+      expect(result?.installationType).toBe('cdn');
+      expect(result?.version).toBe('3');
     });
   });
 
@@ -112,8 +112,9 @@ describe('JavaScriptSDKDetector', () => {
 
       const result = await detector.detect('/repo');
 
-      expect(result.installationType).toBe('both');
-      expect(result.version).toBe('3.0.4'); // Prefer NPM version
+      // Should prefer NPM version
+      expect(result?.installationType).toBe('npm');
+      expect(result?.version).toBe('3.0.4');
     });
   });
 
@@ -135,8 +136,7 @@ describe('JavaScriptSDKDetector', () => {
 
       const result = await detector.detect('/repo');
 
-      expect(result.installationType).toBe('none');
-      expect(result.version).toBeUndefined();
+      expect(result).toBeNull();
     });
   });
 });
