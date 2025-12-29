@@ -1,14 +1,9 @@
-/**
- * Tests for comment formatter
- */
-
 import type { ReviewResponse } from '@custom-types/review.types';
 import { formatReviewComment } from '../comment-formatter';
 
 describe('comment-formatter', () => {
   describe('formatReviewComment', () => {
     it('should format complete review with all sections', () => {
-      // Arrange
       const review: ReviewResponse = {
         reviewId: 'rev_123',
         sdk: {
@@ -73,11 +68,8 @@ describe('comment-formatter', () => {
         confidence: 'high',
       };
 
-      // Act
       const result = formatReviewComment(review);
 
-
-      // Assert
       expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
       expect(result).toContain('🔴 RudderStack PR Review');
       expect(result).toContain('📦 **rudderstack-javascript-sdk** v3.0.0 (NPM)');
@@ -96,7 +88,6 @@ describe('comment-formatter', () => {
     });
 
     it('should handle review with no issues', () => {
-      // Arrange
       const review: ReviewResponse = {
         reviewId: 'rev_456',
         sdk: {
@@ -122,10 +113,8 @@ describe('comment-formatter', () => {
         confidence: 'high',
       };
 
-      // Act
       const result = formatReviewComment(review);
 
-      // Assert
       expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
       expect(result).toContain('🟢 RudderStack PR Review');
       expect(result).toContain('🌐 **rudderstack-javascript-sdk** v3.0.0 (CDN)');
@@ -136,7 +125,6 @@ describe('comment-formatter', () => {
     });
 
     it('should handle review with warnings but no errors', () => {
-      // Arrange
       const review: ReviewResponse = {
         reviewId: 'rev_789',
         sdk: {
@@ -174,10 +162,8 @@ describe('comment-formatter', () => {
         confidence: 'medium',
       };
 
-      // Act
       const result = formatReviewComment(review);
 
-      // Assert
       expect(result).toContain('🟡 RudderStack PR Review');
       expect(result).toContain('<summary><b>⚠️ Warnings (1)</b></summary>');
       expect(result).toContain('Consider batching events');
@@ -185,7 +171,6 @@ describe('comment-formatter', () => {
     });
 
     it('should format multiple issues grouped by file', () => {
-      // Arrange
       const review: ReviewResponse = {
         reviewId: 'rev_multi',
         sdk: {
@@ -245,10 +230,8 @@ describe('comment-formatter', () => {
         confidence: 'high',
       };
 
-      // Act
       const result = formatReviewComment(review);
 
-      // Assert
       expect(result).toContain('### ❌ Errors (3)');
       expect(result).toContain('**📄 `src/analytics.ts`**');
       expect(result).toContain('**📄 `src/tracker.ts`**');
@@ -258,7 +241,6 @@ describe('comment-formatter', () => {
     });
 
     it('should format events with properties', () => {
-      // Arrange
       const review: ReviewResponse = {
         reviewId: 'rev_events',
         sdk: {
@@ -308,10 +290,8 @@ describe('comment-formatter', () => {
         confidence: 'high',
       };
 
-      // Act
       const result = formatReviewComment(review);
 
-      // Assert
       expect(result).toContain('🎯 Events Detected (3)');
       expect(result).toContain('✅ added');
       expect(result).toContain('✏️ modified');
@@ -323,7 +303,6 @@ describe('comment-formatter', () => {
     });
 
     it('should handle missing optional fields gracefully', () => {
-      // Arrange
       const review: ReviewResponse = {
         reviewId: 'rev_minimal',
         sdk: {
@@ -361,10 +340,8 @@ describe('comment-formatter', () => {
         confidence: 'low',
       };
 
-      // Act
       const result = formatReviewComment(review);
 
-      // Assert
       expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
       expect(result).toContain('💡 Suggestions (1)');
       expect(result).toContain('Consider adding documentation');
