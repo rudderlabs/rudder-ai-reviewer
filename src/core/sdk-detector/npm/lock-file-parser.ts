@@ -1,8 +1,10 @@
-/**
- * Parse lock files to get exact installed SDK versions
- */
-
 import type { FileSystem } from '@custom-types/file.type';
+import type { DepGraph } from '@snyk/dep-graph';
+import {
+  parseNpmLockV2Project,
+  parsePnpmProject,
+  parseYarnLockV1Project,
+} from 'snyk-nodejs-lockfile-parser';
 import type { NPMConfig } from '../config';
 
 export class LockFileParser {
@@ -15,20 +17,34 @@ export class LockFileParser {
    * Get exact version from any available lock file
    * Tries package-lock.json, yarn.lock, and pnpm-lock.yaml in order
    */
-  getVersion(repoPath: string): string | null {
-    return (
-      this.parseNPMLock(repoPath) || this.parseYarnLock(repoPath) || this.parsePNPMLock(repoPath)
-    );
+  async getVersion(repoPath: string): Promise<string | null> {
+    const npmVersion = await this.parseNPMLock(repoPath);
+    if (npmVersion) return npmVersion;
+
+    const yarnVersion = await this.parseYarnLock(repoPath);
+    if (yarnVersion) return yarnVersion;
+
+    return this.parsePNPMLock(repoPath);
   }
 
-  private parseNPMLock(repoPath: string): string | null {
+  private async parseNPMLock(repoPath: string): Promise<string | null> {
     const lockPath = this.fs.join(repoPath, this.config.lockFiles.npm);
-    if (!this.fs.exists(lockPath)) return null;
+    const pkgJsonPath = this.fs.join(repoPath, 'package.json');
+
+    if (!this.fs.exists(lockPath) || !this.fs.exists(pkgJsonPath)) return null;
 
     try {
-      const content = this.fs.read(lockPath);
-      const packageLock = JSON.parse(content);
-      return packageLock.packages?.[`node_modules/${this.config.packageName}`]?.version || null;
+      const pkgJsonContent = this.fs.read(pkgJsonPath);
+      const lockContent = this.fs.read(lockPath);
+
+      const depGraph = await parseNpmLockV2Project(pkgJsonContent, lockContent, {
+        includeDevDeps: false,
+        includeOptionalDeps: true,
+        strictOutOfSync: false,
+        pruneCycles: false,
+      });
+
+      return this.extractVersionFromDepGraph(depGraph);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Failed to parse ${this.config.lockFiles.npm}: ${errorMessage}`);
@@ -36,17 +52,25 @@ export class LockFileParser {
     }
   }
 
-  private parseYarnLock(repoPath: string): string | null {
+  private async parseYarnLock(repoPath: string): Promise<string | null> {
     const lockPath = this.fs.join(repoPath, this.config.lockFiles.yarn);
-    if (!this.fs.exists(lockPath)) return null;
+    const pkgJsonPath = this.fs.join(repoPath, 'package.json');
+
+    if (!this.fs.exists(lockPath) || !this.fs.exists(pkgJsonPath)) return null;
 
     try {
-      const content = this.fs.read(lockPath);
-      const pattern = new RegExp(
-        `${this.config.packageName.replace(/\//g, '\\/')}@.*:\\s+version\\s+"([^"]+)"`
-      );
-      const match = content.match(pattern);
-      return match?.[1] || null;
+      const pkgJsonContent = this.fs.read(pkgJsonPath);
+      const lockContent = this.fs.read(lockPath);
+
+      const depGraph = await parseYarnLockV1Project(pkgJsonContent, lockContent, {
+        includeDevDeps: false,
+        includeOptionalDeps: true,
+        includePeerDeps: false,
+        strictOutOfSync: false,
+        pruneLevel: 'none',
+      });
+
+      return this.extractVersionFromDepGraph(depGraph);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Failed to parse ${this.config.lockFiles.yarn}: ${errorMessage}`);
@@ -54,21 +78,34 @@ export class LockFileParser {
     }
   }
 
-  private parsePNPMLock(repoPath: string): string | null {
+  private async parsePNPMLock(repoPath: string): Promise<string | null> {
     const lockPath = this.fs.join(repoPath, this.config.lockFiles.pnpm);
-    if (!this.fs.exists(lockPath)) return null;
+    const pkgJsonPath = this.fs.join(repoPath, 'package.json');
+
+    if (!this.fs.exists(lockPath) || !this.fs.exists(pkgJsonPath)) return null;
 
     try {
-      const content = this.fs.read(lockPath);
-      const pattern = new RegExp(
-        `${this.config.packageName.replace(/\//g, '\\/')}:\\s+(\\d+\\.\\d+\\.\\d+)`
-      );
-      const match = content.match(pattern);
-      return match?.[1] || null;
+      const pkgJsonContent = this.fs.read(pkgJsonPath);
+      const lockContent = this.fs.read(lockPath);
+
+      const depGraph = await parsePnpmProject(pkgJsonContent, lockContent, {
+        includeDevDeps: false,
+        includeOptionalDeps: true,
+        strictOutOfSync: false,
+        pruneWithinTopLevelDeps: false,
+      });
+
+      return this.extractVersionFromDepGraph(depGraph);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Failed to parse ${this.config.lockFiles.pnpm}: ${errorMessage}`);
       return null;
     }
+  }
+
+  private extractVersionFromDepGraph(depGraph: DepGraph): string | null {
+    const packages = depGraph.getDepPkgs();
+    const targetPkg = packages.find(pkg => pkg.name === this.config.packageName);
+    return targetPkg?.version || null;
   }
 }

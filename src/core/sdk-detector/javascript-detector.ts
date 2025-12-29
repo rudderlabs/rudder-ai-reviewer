@@ -40,7 +40,7 @@ export class JavaScriptSDKDetector {
       return { found: false };
     }
 
-    const exactVersion = this.lockFileParser.getVersion(repoPath);
+    const exactVersion = await this.lockFileParser.getVersion(repoPath);
 
     return {
       found: true,
