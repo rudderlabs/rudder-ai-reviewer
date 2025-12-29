@@ -1,0 +1,57 @@
+name: 'RudderStack PR Reviewer'
+description: 'Analyzes RudderStack SDK instrumentation changes in pull requests'
+author: 'RudderStack'
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+
+  source-id:
+    description: 'ID of the rudderstack source'
+    required: true
+
+  service-access-token:
+    description: 'Service access token for the rudderstack workspace'
+    required: true
+
+  root-directory:
+    description: 'Root directory of the project'
+    required: false
+    default: '.'
+
+
+outputs:
+  status:
+    description: 'Status of the review (success, failed, warning)'
+  message:
+    description: 'Summary message from the review'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: '24'
+
+    - name: Install dependencies
+      run: npm ci --prefix ${{ github.action_path }}
+      shell: bash
+
+    - name: Build action
+      run: npm run build --prefix ${{ github.action_path }}
+      shell: bash
+
+    - name: Run action
+      run: node ${{ github.action_path }}/dist/index.js
+      shell: bash
+      env:
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_SOURCE_ID: ${{ inputs.source-id }}
+        INPUT_SERVICE_ACCESS_TOKEN: ${{ inputs.service-access-token }}
+        INPUT_ROOT_DIRECTORY: ${{ inputs.root-directory }}

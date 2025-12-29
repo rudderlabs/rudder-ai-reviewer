@@ -1,0 +1,24 @@
+name: Test Action
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  test-action:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test Action
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          source-id: test-source-id
+          service-access-token: test-service-access-token
+          root-directory: .
