@@ -8,8 +8,8 @@ import { cleanSemverPrefix } from './version-utils';
 
 export class PackageReader {
   constructor(
-    private fs: FileSystem,
-    private config: NPMConfig
+    private readonly fs: FileSystem,
+    private readonly config: NPMConfig
   ) {}
 
   read(repoPath: string): string | null {
@@ -23,7 +23,7 @@ export class PackageReader {
       const content = this.fs.read(packagePath);
       const packageJson = JSON.parse(content);
 
-      const allDeps = {
+      const allDeps: Record<string, string> = {
         ...packageJson.dependencies,
         ...packageJson.devDependencies,
       };
