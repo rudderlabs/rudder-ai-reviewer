@@ -13,7 +13,8 @@ export interface CDNResult {
   version?: string;
 }
 
-const HTML_SCRIPT_TAG_REGEX = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+const HTML_SCRIPT_TAG_REGEX =
+  /<\s*script[^>]*>([\s\S]*?)<\s*\/\s*script[^>]*>/gi;
 
 export class CDNScanner {
   private readonly variableExtractor: VariableExtractor;
