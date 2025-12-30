@@ -2,6 +2,12 @@ import type { ReviewResponse } from '@custom-types/review.types';
 import { formatReviewComment } from '../comment-formatter';
 
 describe('comment-formatter', () => {
+  const mockGitHubContext = {
+    owner: 'test-owner',
+    repo: 'test-repo',
+    commitSha: 'abc123def456',
+  };
+
   describe('formatReviewComment', () => {
     it('should format complete review with all sections', () => {
       const review: ReviewResponse = {
@@ -43,7 +49,6 @@ describe('comment-formatter', () => {
             suggestedFix: "track('event_name', { ...properties });",
             relatedEvents: ['purchase_completed'],
             affectedDestinations: ['Google Analytics', 'Amplitude'],
-            confidence: 'high',
           },
           {
             id: 'RS_JS_002',
@@ -54,7 +59,6 @@ describe('comment-formatter', () => {
             line: 15,
             impact: 'Inconsistent naming convention',
             relatedEvents: [],
-            confidence: 'medium',
           },
         ],
         stats: {
@@ -65,15 +69,15 @@ describe('comment-formatter', () => {
           eventsModified: 0,
           eventsDeleted: 0,
         },
-        confidence: 'high',
       };
 
-      const result = formatReviewComment(review);
+      const result = formatReviewComment(review, mockGitHubContext);
+      console.log(result);
 
       expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
       expect(result).toContain('🔴 RudderStack PR Review');
       expect(result).toContain('📦 **rudderstack-javascript-sdk** v3.0.0 (NPM)');
-      expect(result).toContain('### 📊 Summary');
+      expect(result).toContain('### Summary');
       expect(result).toContain('Found some issues that need attention before merging.');
       expect(result).toContain('Fix missing event names');
       expect(result).toContain('Add proper error handling');
@@ -81,10 +85,10 @@ describe('comment-formatter', () => {
       expect(result).toContain('Missing event name in track() call');
       expect(result).toContain('<details>');
       expect(result).toContain('<summary><b>⚠️ Warnings (1)</b></summary>');
-      expect(result).toContain('🎯 Events Detected (1)');
+      expect(result).toContain('Events Detected (1)');
       expect(result).toContain('purchase_completed');
       expect(result).toContain('Review ID: `rev_123`');
-      expect(result).toContain('🎯 High');
+      expect(result).not.toContain('Confidence');
     });
 
     it('should handle review with no issues', () => {
@@ -110,10 +114,9 @@ describe('comment-formatter', () => {
           eventsAdded: 0,
           eventsModified: 0,
         },
-        confidence: 'high',
       };
 
-      const result = formatReviewComment(review);
+      const result = formatReviewComment(review, mockGitHubContext);
 
       expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
       expect(result).toContain('🟢 RudderStack PR Review');
@@ -121,7 +124,7 @@ describe('comment-formatter', () => {
       expect(result).toContain('Great work! No issues found.');
       expect(result).not.toContain('### ❌ Errors');
       expect(result).not.toContain('### ⚠️ Warnings');
-      expect(result).not.toContain('🎯 Events Detected');
+      expect(result).not.toContain('Events Detected');
     });
 
     it('should handle review with warnings but no errors', () => {
@@ -149,7 +152,6 @@ describe('comment-formatter', () => {
             line: 10,
             impact: 'May impact performance',
             relatedEvents: [],
-            confidence: 'medium',
           },
         ],
         stats: {
@@ -159,10 +161,9 @@ describe('comment-formatter', () => {
           eventsAdded: 0,
           eventsModified: 0,
         },
-        confidence: 'medium',
       };
 
-      const result = formatReviewComment(review);
+      const result = formatReviewComment(review, mockGitHubContext);
 
       expect(result).toContain('🟡 RudderStack PR Review');
       expect(result).toContain('<summary><b>⚠️ Warnings (1)</b></summary>');
@@ -195,7 +196,6 @@ describe('comment-formatter', () => {
             line: 10,
             impact: 'Event data incomplete',
             relatedEvents: [],
-            confidence: 'high',
           },
           {
             id: 'RS_JS_005',
@@ -206,7 +206,6 @@ describe('comment-formatter', () => {
             line: 20,
             impact: 'Event will be rejected',
             relatedEvents: [],
-            confidence: 'high',
           },
           {
             id: 'RS_JS_006',
@@ -217,7 +216,6 @@ describe('comment-formatter', () => {
             line: 5,
             impact: 'Errors will be silent',
             relatedEvents: [],
-            confidence: 'high',
           },
         ],
         stats: {
@@ -227,14 +225,13 @@ describe('comment-formatter', () => {
           eventsAdded: 0,
           eventsModified: 0,
         },
-        confidence: 'high',
       };
 
-      const result = formatReviewComment(review);
+      const result = formatReviewComment(review, mockGitHubContext);
 
       expect(result).toContain('### ❌ Errors (3)');
-      expect(result).toContain('**📄 `src/analytics.ts`**');
-      expect(result).toContain('**📄 `src/tracker.ts`**');
+      expect(result).toContain('#### `src/analytics.ts`');
+      expect(result).toContain('#### `src/tracker.ts`');
       expect(result).toContain('Missing required property');
       expect(result).toContain('Invalid event name format');
       expect(result).toContain('Missing error handler');
@@ -287,12 +284,11 @@ describe('comment-formatter', () => {
           eventsModified: 1,
           eventsDeleted: 1,
         },
-        confidence: 'high',
       };
 
-      const result = formatReviewComment(review);
+      const result = formatReviewComment(review, mockGitHubContext);
 
-      expect(result).toContain('🎯 Events Detected (3)');
+      expect(result).toContain('Events Detected (3)');
       expect(result).toContain('✅ added');
       expect(result).toContain('✏️ modified');
       expect(result).toContain('🗑️ deleted');
@@ -327,7 +323,6 @@ describe('comment-formatter', () => {
             line: 15,
             impact: 'Code may be harder to understand',
             relatedEvents: [],
-            confidence: 'low',
           },
         ],
         stats: {
@@ -337,17 +332,75 @@ describe('comment-formatter', () => {
           eventsAdded: 0,
           eventsModified: 0,
         },
-        confidence: 'low',
       };
 
-      const result = formatReviewComment(review);
+      const result = formatReviewComment(review, mockGitHubContext);
 
       expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
       expect(result).toContain('💡 Suggestions (1)');
       expect(result).toContain('Consider adding documentation');
-      expect(result).not.toContain('**🔧 Suggested Fix:**');
-      expect(result).not.toContain('**🔗 Related Events:**');
-      expect(result).not.toContain('**🎯 Key Recommendations:**');
+      expect(result).not.toContain('**Suggested Fix:**');
+      expect(result).not.toContain('Related Events:');
+      expect(result).not.toContain('**Key Recommendations:**');
+    });
+
+    it('should generate clickable GitHub links when context is provided', () => {
+      const review: ReviewResponse = {
+        reviewId: 'rev_links',
+        sdk: {
+          name: 'rudderstack-javascript-sdk',
+          version: '3.0.0',
+          installationType: 'npm',
+        },
+        summary: {
+          overallAssessment: 'Testing GitHub links.',
+          filesAnalyzed: 1,
+          totalIssues: 1,
+          verdict: 'comment',
+        },
+        events: [
+          {
+            name: 'test_event',
+            status: 'added',
+            file: 'src/test.ts',
+            line: 42,
+          },
+        ],
+        issues: [
+          {
+            id: 'RS_JS_008',
+            severity: 'error',
+            category: 'event_tracking',
+            message: 'Test issue with link',
+            file: 'src/analytics.ts',
+            line: 23,
+            column: 5,
+            impact: 'Test impact',
+            relatedEvents: [],
+          },
+        ],
+        stats: {
+          errors: 1,
+          warnings: 0,
+          suggestions: 0,
+          eventsAdded: 1,
+          eventsModified: 0,
+        },
+      };
+
+      const githubContext = {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        commitSha: 'abc123def456',
+      };
+
+      const result = formatReviewComment(review, githubContext);
+
+      // Check that issue location is clickable with full file path
+      expect(result).toContain('Location: [src/analytics.ts:23:5](https://github.com/test-owner/test-repo/blob/abc123def456/src/analytics.ts#L23)');
+
+      // Check that event location is clickable
+      expect(result).toContain('[`src/test.ts:42`](https://github.com/test-owner/test-repo/blob/abc123def456/src/test.ts#L42)');
     });
   });
 });

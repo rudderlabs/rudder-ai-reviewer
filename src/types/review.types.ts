@@ -32,7 +32,6 @@ export interface ReviewResponse {
   events: EventDetection[];
   issues: ReviewIssue[];
   stats: ReviewStats;
-  confidence: ConfidenceLevel;
 }
 
 export interface SDKInfo {
@@ -75,7 +74,6 @@ export interface ReviewIssue {
   suggestedFix?: string;
   relatedEvents: string[];
   affectedDestinations?: string[];
-  confidence: ConfidenceLevel;
 }
 
 export interface ReviewStats {

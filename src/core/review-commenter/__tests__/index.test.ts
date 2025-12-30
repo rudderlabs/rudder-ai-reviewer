@@ -47,7 +47,6 @@ describe('review-commenter', () => {
         line: 10,
         impact: 'Minor impact',
         relatedEvents: [],
-        confidence: 'high',
       },
     ],
     stats: {
@@ -57,7 +56,6 @@ describe('review-commenter', () => {
       eventsAdded: 0,
       eventsModified: 0,
     },
-    confidence: 'high',
   };
 
   beforeEach(() => {
@@ -69,6 +67,14 @@ describe('review-commenter', () => {
       // Arrange
       const mockOctokit = {};
       const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockResolvedValue({
+          number: 123,
+          title: 'Test PR',
+          head_sha: 'abc123def456',
+          base_sha: 'base456',
+          head_ref: 'feature',
+          base_ref: 'main',
+        }),
         findComment: jest.fn().mockResolvedValue(null),
         createComment: jest.fn().mockResolvedValue(123),
       };
@@ -84,7 +90,12 @@ describe('review-commenter', () => {
       // Assert
       expect(getOctokit).toHaveBeenCalledWith('test-token');
       expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
-      expect(formatReviewComment).toHaveBeenCalledWith(mockReview);
+      expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockContext);
+      expect(formatReviewComment).toHaveBeenCalledWith(mockReview, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        commitSha: 'abc123def456',
+      });
       expect(mockGitHubClient.findComment).toHaveBeenCalledWith(mockContext, COMMENT_MARKER);
       expect(mockGitHubClient.createComment).toHaveBeenCalledWith(mockContext, formattedComment);
     });
@@ -94,6 +105,14 @@ describe('review-commenter', () => {
       const mockOctokit = {};
       const existingCommentId = 456;
       const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockResolvedValue({
+          number: 123,
+          title: 'Test PR',
+          head_sha: 'abc123def456',
+          base_sha: 'base456',
+          head_ref: 'feature',
+          base_ref: 'main',
+        }),
         findComment: jest.fn().mockResolvedValue(existingCommentId),
         updateComment: jest.fn().mockResolvedValue(undefined),
       };
@@ -109,7 +128,12 @@ describe('review-commenter', () => {
       // Assert
       expect(getOctokit).toHaveBeenCalledWith('test-token');
       expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
-      expect(formatReviewComment).toHaveBeenCalledWith(mockReview);
+      expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockContext);
+      expect(formatReviewComment).toHaveBeenCalledWith(mockReview, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        commitSha: 'abc123def456',
+      });
       expect(mockGitHubClient.findComment).toHaveBeenCalledWith(mockContext, COMMENT_MARKER);
       expect(mockGitHubClient.updateComment).toHaveBeenCalledWith(
         mockContext,
@@ -122,6 +146,14 @@ describe('review-commenter', () => {
       // Arrange
       const mockOctokit = {};
       const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockResolvedValue({
+          number: 123,
+          title: 'Test PR',
+          head_sha: 'abc123def456',
+          base_sha: 'base456',
+          head_ref: 'feature',
+          base_ref: 'main',
+        }),
         findComment: jest.fn(),
         createComment: jest.fn(),
       };
@@ -142,6 +174,14 @@ describe('review-commenter', () => {
       // Arrange
       const mockOctokit = {};
       const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockResolvedValue({
+          number: 123,
+          title: 'Test PR',
+          head_sha: 'abc123def456',
+          base_sha: 'base456',
+          head_ref: 'feature',
+          base_ref: 'main',
+        }),
         findComment: jest.fn().mockRejectedValue(new Error('API error')),
       };
       const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
@@ -160,6 +200,14 @@ describe('review-commenter', () => {
       // Arrange
       const mockOctokit = {};
       const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockResolvedValue({
+          number: 123,
+          title: 'Test PR',
+          head_sha: 'abc123def456',
+          base_sha: 'base456',
+          head_ref: 'feature',
+          base_ref: 'main',
+        }),
         findComment: jest.fn().mockResolvedValue(null),
         createComment: jest.fn().mockRejectedValue(new Error('Rate limit exceeded')),
       };
@@ -180,6 +228,14 @@ describe('review-commenter', () => {
       const mockOctokit = {};
       const existingCommentId = 456;
       const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockResolvedValue({
+          number: 123,
+          title: 'Test PR',
+          head_sha: 'abc123def456',
+          base_sha: 'base456',
+          head_ref: 'feature',
+          base_ref: 'main',
+        }),
         findComment: jest.fn().mockResolvedValue(existingCommentId),
         updateComment: jest.fn().mockRejectedValue(new Error('Comment not found')),
       };
@@ -192,6 +248,22 @@ describe('review-commenter', () => {
       // Act & Assert
       await expect(postReviewComment('test-token', mockContext, mockReview)).rejects.toThrow(
         'Failed to post review comment: Comment not found'
+      );
+    });
+
+    it('should propagate getPRMetadata errors', async () => {
+      // Arrange
+      const mockOctokit = {};
+      const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockRejectedValue(new Error('Failed to fetch PR')),
+      };
+
+      (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
+      (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
+
+      // Act & Assert
+      await expect(postReviewComment('test-token', mockContext, mockReview)).rejects.toThrow(
+        'Failed to post review comment: Failed to fetch PR'
       );
     });
   });

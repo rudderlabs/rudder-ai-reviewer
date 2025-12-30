@@ -1,27 +1,47 @@
 import type {
-  ConfidenceLevel,
   EventDetection,
   EventStatus,
   IssueSeverity,
   ReviewIssue,
   ReviewResponse,
   ReviewStats,
-  ReviewSummary,
   SDKInfo,
 } from '@custom-types/review.types';
 import { COMMENT_MARKER } from '@utils/constants';
 
-export function formatReviewComment(review: ReviewResponse): string {
+export interface GitHubContext {
+  owner: string;
+  repo: string;
+  commitSha: string;
+}
+
+export function formatReviewComment(
+  review: ReviewResponse,
+  githubContext: GitHubContext
+): string {
   const sections: string[] = [
     COMMENT_MARKER,
     formatHeader(review),
     formatSummarySection(review),
-    formatIssuesSection(review),
-    formatEventsSection(review),
+    formatIssuesSection(review, githubContext),
+    formatEventsSection(review, githubContext),
     formatFooter(review),
   ].filter(section => section.length > 0);
 
   return sections.join('\n\n');
+}
+
+/**
+ * Builds a GitHub permalink URL to a specific line in a file
+ */
+function buildGitHubLineUrl(
+  file: string,
+  line: number,
+  _column: number | undefined,
+  context: GitHubContext
+): string {
+  const lineAnchor = `L${line}`;
+  return `https://github.com/${context.owner}/${context.repo}/blob/${context.commitSha}/${file}#${lineAnchor}`;
 }
 
 /**
@@ -35,15 +55,14 @@ function formatHeader(review: ReviewResponse): string {
 }
 
 /**
- * Summary section with assessment, stats, and recommendations
+ * Summary section with assessment and recommendations
  */
 function formatSummarySection(review: ReviewResponse): string {
-  let section = `### 📊 Summary\n\n`;
-  section += `${review.summary.overallAssessment}\n\n`;
-  section += formatStatsTable(review.stats, review.summary);
+  let section = `### Summary\n\n`;
+  section += `${review.summary.overallAssessment}`;
 
   if (review.summary.keyRecommendations && review.summary.keyRecommendations.length > 0) {
-    section += `\n\n**🎯 Key Recommendations:**\n\n`;
+    section += `\n\n**Key Recommendations:**\n\n`;
     review.summary.keyRecommendations.forEach((rec, idx) => {
       section += `${idx + 1}. ${rec}\n`;
     });
@@ -55,7 +74,7 @@ function formatSummarySection(review: ReviewResponse): string {
 /**
  * Issues section grouped by severity (collapsible)
  */
-function formatIssuesSection(review: ReviewResponse): string {
+function formatIssuesSection(review: ReviewResponse, githubContext: GitHubContext): string {
   if (review.issues.length === 0) {
     return '';
   }
@@ -65,22 +84,22 @@ function formatIssuesSection(review: ReviewResponse): string {
 
   // Errors (always expanded if present)
   if (issuesBySeverity.error && issuesBySeverity.error.length > 0) {
-    section += formatIssueGroup('error', issuesBySeverity.error, false);
+    section += formatIssueGroup('error', issuesBySeverity.error, false, githubContext);
   }
 
   // Warnings (collapsible)
   if (issuesBySeverity.warning && issuesBySeverity.warning.length > 0) {
-    section += formatIssueGroup('warning', issuesBySeverity.warning, true);
+    section += formatIssueGroup('warning', issuesBySeverity.warning, true, githubContext);
   }
 
   // Suggestions (collapsible)
   if (issuesBySeverity.suggestion && issuesBySeverity.suggestion.length > 0) {
-    section += formatIssueGroup('suggestion', issuesBySeverity.suggestion, true);
+    section += formatIssueGroup('suggestion', issuesBySeverity.suggestion, true, githubContext);
   }
 
   // Info (collapsible)
   if (issuesBySeverity.info && issuesBySeverity.info.length > 0) {
-    section += formatIssueGroup('info', issuesBySeverity.info, true);
+    section += formatIssueGroup('info', issuesBySeverity.info, true, githubContext);
   }
 
   return section;
@@ -89,7 +108,7 @@ function formatIssuesSection(review: ReviewResponse): string {
 /**
  * Events section as collapsible table
  */
-function formatEventsSection(review: ReviewResponse): string {
+function formatEventsSection(review: ReviewResponse, githubContext: GitHubContext): string {
   if (review.events.length === 0) {
     return '';
   }
@@ -97,22 +116,18 @@ function formatEventsSection(review: ReviewResponse): string {
   const eventsByStatus = groupEventsByStatus(review.events);
 
   let section = `<details>\n`;
-  section += `<summary><b>🎯 Events Detected (${review.events.length})</b></summary>\n\n`;
-  section += formatEventsTable(eventsByStatus);
+  section += `<summary><b>Events Detected (${review.events.length})</b></summary>\n\n`;
+  section += formatEventsTable(eventsByStatus, githubContext);
   section += `\n</details>`;
 
   return section;
 }
 
 /**
- * Footer with metadata and help links
+ * Footer with metadata
  */
 function formatFooter(review: ReviewResponse): string {
-  return (
-    `---\n` +
-    `<sub>🤖 Review ID: \`${review.reviewId}\` • ` +
-    `Confidence: ${formatConfidence(review.confidence)}</sub>`
-  );
+  return `---\n<sub>Review ID: \`${review.reviewId}\`</sub>`;
 }
 
 /**
@@ -132,21 +147,6 @@ function formatSDKBadge(sdk: SDKInfo): string {
   return `${installIcon} **${sdk.name}** v${sdk.version} (${sdk.installationType.toUpperCase()})`;
 }
 
-/**
- * Formats stats table
- */
-function formatStatsTable(stats: ReviewStats, summary: ReviewSummary): string {
-  return (
-    `| Metric | Count |\n` +
-    `|--------|-------|\n` +
-    `| 📁 Files Analyzed | ${summary.filesAnalyzed} |\n` +
-    `| ❌ Errors | ${stats.errors} |\n` +
-    `| ⚠️  Warnings | ${stats.warnings} |\n` +
-    `| 💡 Suggestions | ${stats.suggestions} |\n` +
-    `| ✅ Events Added | ${stats.eventsAdded} |\n` +
-    `| ✏️  Events Modified | ${stats.eventsModified} |`
-  );
-}
 
 /**
  * Groups issues by severity
@@ -170,7 +170,8 @@ function groupIssuesBySeverity(issues: ReviewIssue[]): Record<IssueSeverity, Rev
 function formatIssueGroup(
   severity: IssueSeverity,
   issues: ReviewIssue[],
-  collapsible: boolean
+  collapsible: boolean,
+  githubContext: GitHubContext
 ): string {
   const icon = getSeverityIcon(severity);
   const label = severity.charAt(0).toUpperCase() + severity.slice(1) + 's';
@@ -187,9 +188,9 @@ function formatIssueGroup(
   const issuesByFile = groupIssuesByFile(issues);
 
   Object.entries(issuesByFile).forEach(([file, fileIssues]) => {
-    section += `**📄 \`${file}\`**\n\n`;
+    section += `#### \`${file}\`\n\n`;
     fileIssues.forEach((issue, idx) => {
-      section += formatIssueItem(issue, idx + 1);
+      section += formatIssueItem(issue, idx + 1, githubContext);
     });
   });
 
@@ -203,29 +204,33 @@ function formatIssueGroup(
 /**
  * Formats a single issue item
  */
-function formatIssueItem(issue: ReviewIssue, index: number): string {
-  let item = `${index}. **${issue.message}** \`[${issue.id}]\`\n\n`;
-  item += `   📍 Line ${issue.line}${issue.column ? `:${issue.column}` : ''} • `;
-  item += `🎯 ${formatConfidence(issue.confidence)} • `;
-  item += `📦 ${formatCategory(issue.category)}\n\n`;
+function formatIssueItem(
+  issue: ReviewIssue,
+  index: number,
+  githubContext: GitHubContext
+): string {
+  let item = `${index}. **${issue.message}**\n`;
+
+  // Make line number clickable with GitHub permalink, showing full path
+  const url = buildGitHubLineUrl(issue.file, issue.line, issue.column, githubContext);
+  const locationText = `${issue.file}:${issue.line}${issue.column ? `:${issue.column}` : ''}`;
+  item += `   - Location: [${locationText}](${url})\n`;
 
   if (issue.impact) {
-    item += `   **💥 Impact:** ${issue.impact}\n\n`;
+    item += `   - Impact: ${issue.impact}\n`;
+  }
+
+  if (issue.affectedDestinations && issue.affectedDestinations.length > 0) {
+    item += `   - Affected Destinations: ${issue.affectedDestinations.join(', ')}\n`;
   }
 
   if (issue.suggestedFix) {
     const fileExtension = getFileExtension(issue.file);
-    item += `   **🔧 Suggested Fix:**\n`;
-    item += `   \`\`\`${fileExtension}\n   ${issue.suggestedFix}\n   \`\`\`\n\n`;
+    item += `\n   **Suggested Fix:**\n`;
+    item += `   \`\`\`${fileExtension}\n   ${issue.suggestedFix}\n   \`\`\`\n`;
   }
 
-  if (issue.relatedEvents.length > 0) {
-    item += `   **🔗 Related Events:** ${issue.relatedEvents.map(e => `\`${e}\``).join(', ')}\n\n`;
-  }
-
-  if (issue.affectedDestinations && issue.affectedDestinations.length > 0) {
-    item += `   **📤 Affected Destinations:** ${issue.affectedDestinations.join(', ')}\n\n`;
-  }
+  item += `\n`;
 
   return item;
 }
@@ -237,9 +242,12 @@ function getFileExtension(file: string): string {
 /**
  * Formats events table
  */
-function formatEventsTable(eventsByStatus: Record<string, EventDetection[]>): string {
-  let table = `| Status | Event | File | Line | Properties |\n`;
-  table += `|--------|-------|------|------|------------|\n`;
+function formatEventsTable(
+  eventsByStatus: Record<string, EventDetection[]>,
+  githubContext: GitHubContext
+): string {
+  let table = `| Status | Event | Location | Properties |\n`;
+  table += `|--------|-------|----------|------------|\n`;
 
   const statusOrder: EventStatus[] = ['added', 'modified', 'deleted', 'unchanged'];
 
@@ -249,7 +257,11 @@ function formatEventsTable(eventsByStatus: Record<string, EventDetection[]>): st
       const icon = getEventStatusIcon(status);
       const propCount = event.properties?.length || 0;
       const propDetails = propCount > 0 ? `${propCount} props` : '-';
-      table += `| ${icon} ${status} | \`${event.name}\` | \`${event.file}\` | ${event.line} | ${propDetails} |\n`;
+
+      // Make location clickable with GitHub permalink
+      const location = `[\`${event.file}:${event.line}\`](${buildGitHubLineUrl(event.file, event.line, undefined, githubContext)})`;
+
+      table += `| ${icon} ${status} | \`${event.name}\` | ${location} | ${propDetails} |\n`;
     });
   });
 
@@ -282,27 +294,6 @@ function getEventStatusIcon(status: EventStatus): string {
   return icons[status] || '•';
 }
 
-/**
- * Formats confidence level
- */
-function formatConfidence(confidence: ConfidenceLevel): string {
-  const emojis: Record<ConfidenceLevel, string> = {
-    high: '🎯 High',
-    medium: '🔍 Medium',
-    low: '💭 Low',
-  };
-  return emojis[confidence] || confidence;
-}
-
-/**
- * Formats category label
- */
-function formatCategory(category: string): string {
-  return category
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
 
 /**
  * Groups issues by file
