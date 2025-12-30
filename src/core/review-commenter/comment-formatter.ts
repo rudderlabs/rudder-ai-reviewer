@@ -15,10 +15,7 @@ export interface GitHubContext {
   commitSha: string;
 }
 
-export function formatReviewComment(
-  review: ReviewResponse,
-  githubContext: GitHubContext
-): string {
+export function formatReviewComment(review: ReviewResponse, githubContext: GitHubContext): string {
   const sections: string[] = [
     COMMENT_MARKER,
     formatHeader(review),
@@ -147,7 +144,6 @@ function formatSDKBadge(sdk: SDKInfo): string {
   return `${installIcon} **${sdk.name}** v${sdk.version} (${sdk.installationType.toUpperCase()})`;
 }
 
-
 /**
  * Groups issues by severity
  */
@@ -204,11 +200,7 @@ function formatIssueGroup(
 /**
  * Formats a single issue item
  */
-function formatIssueItem(
-  issue: ReviewIssue,
-  index: number,
-  githubContext: GitHubContext
-): string {
+function formatIssueItem(issue: ReviewIssue, index: number, githubContext: GitHubContext): string {
   let item = `${index}. **${issue.message}**\n`;
 
   // Make line number clickable with GitHub permalink, showing full path
@@ -293,7 +285,6 @@ function getEventStatusIcon(status: EventStatus): string {
   };
   return icons[status] || '•';
 }
-
 
 /**
  * Groups issues by file

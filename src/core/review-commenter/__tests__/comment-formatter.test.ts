@@ -397,10 +397,14 @@ describe('comment-formatter', () => {
       const result = formatReviewComment(review, githubContext);
 
       // Check that issue location is clickable with full file path
-      expect(result).toContain('Location: [src/analytics.ts:23:5](https://github.com/test-owner/test-repo/blob/abc123def456/src/analytics.ts#L23)');
+      expect(result).toContain(
+        'Location: [src/analytics.ts:23:5](https://github.com/test-owner/test-repo/blob/abc123def456/src/analytics.ts#L23)'
+      );
 
       // Check that event location is clickable
-      expect(result).toContain('[`src/test.ts:42`](https://github.com/test-owner/test-repo/blob/abc123def456/src/test.ts#L42)');
+      expect(result).toContain(
+        '[`src/test.ts:42`](https://github.com/test-owner/test-repo/blob/abc123def456/src/test.ts#L42)'
+      );
     });
   });
 });
