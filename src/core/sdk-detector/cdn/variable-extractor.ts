@@ -12,7 +12,7 @@ export interface VariableInfo {
 }
 
 export class VariableExtractor {
-  constructor(private config: CDNConfig) {}
+  constructor(private readonly config: CDNConfig) {}
 
   /**
    * Extract CDN configuration variables from JavaScript code using regex
@@ -60,9 +60,10 @@ export class VariableExtractor {
     const hasVersion = variables.has(this.config.variableNames.version);
     const hasFileName =
       variables.has(this.config.variableNames.fileName) &&
-      variables.get(this.config.variableNames.fileName)?.value.includes(this.config.fileName);
+      variables.get(this.config.variableNames.fileName)?.value.includes(this.config.fileName) ===
+        true;
 
-    return hasBaseUrl && hasVersion && hasFileName === true;
+    return hasBaseUrl && hasVersion && hasFileName;
   }
 
   /**

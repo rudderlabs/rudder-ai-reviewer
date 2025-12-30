@@ -13,7 +13,7 @@ import type { SDKDetectionResult } from './types';
  * @param repoPath - Absolute path to the repository root
  * @returns Detection result with installation type, versions, and locations
  */
-export async function detectSDK(repoPath: string): Promise<SDKDetectionResult> {
+export async function detectSDK(repoPath: string): Promise<SDKDetectionResult | null> {
   const fs = new NodeFileSystem();
   const config = DEFAULT_JS_CONFIG;
 

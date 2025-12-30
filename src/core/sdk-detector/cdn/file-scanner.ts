@@ -13,14 +13,14 @@ export interface CDNResult {
   version?: string;
 }
 
-const HTML_SCRIPT_TAG_REGEX = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+const HTML_SCRIPT_TAG_REGEX = /<\s*script[^>]*>([\s\S]*?)<\s*\/\s*script[^>]*>/gi;
 
 export class CDNScanner {
-  private variableExtractor: VariableExtractor;
+  private readonly variableExtractor: VariableExtractor;
 
   constructor(
-    private fs: FileSystem,
-    private config: CDNConfig
+    private readonly fs: FileSystem,
+    private readonly config: CDNConfig
   ) {
     this.variableExtractor = new VariableExtractor(config);
   }

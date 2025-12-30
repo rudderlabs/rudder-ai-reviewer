@@ -2,7 +2,7 @@
  * Type definitions for SDK detection
  */
 
-export type SDKInstallationType = 'npm' | 'cdn' | 'both' | 'none';
+export type SDKInstallationType = 'npm' | 'cdn';
 
 export interface SDKDetectionResult {
   installationType: SDKInstallationType;
