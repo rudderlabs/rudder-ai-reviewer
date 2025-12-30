@@ -1,3 +1,4 @@
+import type { NPMConfig } from '@core/framework-detector/config';
 import type { FileSystem } from '@custom-types/file.type';
 import type { DepGraph } from '@snyk/dep-graph';
 import {
@@ -5,7 +6,6 @@ import {
   parsePnpmProject,
   parseYarnLockV1Project,
 } from 'snyk-nodejs-lockfile-parser';
-import type { NPMConfig } from '../config';
 
 export class LockFileParser {
   constructor(
@@ -13,21 +13,17 @@ export class LockFileParser {
     private readonly config: NPMConfig
   ) {}
 
-  /**
-   * Get exact version from any available lock file
-   * Tries package-lock.json, yarn.lock, and pnpm-lock.yaml in order
-   */
-  async getVersion(repoPath: string): Promise<string | null> {
-    const npmVersion = await this.parseNPMLock(repoPath);
+  async getVersion(repoPath: string, packageName: string): Promise<string | null> {
+    const npmVersion = await this.parseNPMLock(repoPath, packageName);
     if (npmVersion) return npmVersion;
 
-    const yarnVersion = await this.parseYarnLock(repoPath);
+    const yarnVersion = await this.parseYarnLock(repoPath, packageName);
     if (yarnVersion) return yarnVersion;
 
-    return this.parsePNPMLock(repoPath);
+    return this.parsePNPMLock(repoPath, packageName);
   }
 
-  private async parseNPMLock(repoPath: string): Promise<string | null> {
+  private async parseNPMLock(repoPath: string, packageName: string): Promise<string | null> {
     const lockPath = this.fs.join(repoPath, this.config.lockFiles.npm);
     const pkgJsonPath = this.fs.join(repoPath, 'package.json');
 
@@ -44,7 +40,7 @@ export class LockFileParser {
         pruneCycles: false,
       });
 
-      return this.extractVersionFromDepGraph(depGraph);
+      return this.extractVersionFromDepGraph(depGraph, packageName);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Failed to parse ${this.config.lockFiles.npm}: ${errorMessage}`);
@@ -52,7 +48,7 @@ export class LockFileParser {
     }
   }
 
-  private async parseYarnLock(repoPath: string): Promise<string | null> {
+  private async parseYarnLock(repoPath: string, packageName: string): Promise<string | null> {
     const lockPath = this.fs.join(repoPath, this.config.lockFiles.yarn);
     const pkgJsonPath = this.fs.join(repoPath, 'package.json');
 
@@ -70,7 +66,7 @@ export class LockFileParser {
         pruneLevel: 'none',
       });
 
-      return this.extractVersionFromDepGraph(depGraph);
+      return this.extractVersionFromDepGraph(depGraph, packageName);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Failed to parse ${this.config.lockFiles.yarn}: ${errorMessage}`);
@@ -78,7 +74,7 @@ export class LockFileParser {
     }
   }
 
-  private async parsePNPMLock(repoPath: string): Promise<string | null> {
+  private async parsePNPMLock(repoPath: string, packageName: string): Promise<string | null> {
     const lockPath = this.fs.join(repoPath, this.config.lockFiles.pnpm);
     const pkgJsonPath = this.fs.join(repoPath, 'package.json');
 
@@ -95,7 +91,7 @@ export class LockFileParser {
         pruneWithinTopLevelDeps: false,
       });
 
-      return this.extractVersionFromDepGraph(depGraph);
+      return this.extractVersionFromDepGraph(depGraph, packageName);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Failed to parse ${this.config.lockFiles.pnpm}: ${errorMessage}`);
@@ -103,9 +99,9 @@ export class LockFileParser {
     }
   }
 
-  private extractVersionFromDepGraph(depGraph: DepGraph): string | null {
+  private extractVersionFromDepGraph(depGraph: DepGraph, packageName: string): string | null {
     const packages = depGraph.getDepPkgs();
-    const targetPkg = packages.find(pkg => pkg.name === this.config.packageName);
+    const targetPkg = packages.find(pkg => pkg.name === packageName);
     return targetPkg?.version || null;
   }
 }

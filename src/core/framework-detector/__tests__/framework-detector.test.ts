@@ -1,4 +1,4 @@
-import { LockFileParser } from '@core/shared/npm/lock-file-parser';
+import { LockFileParser } from '@core/framework-detector/npm/lock-file-parser';
 import { createMockFileSystem } from '@tests/test.utils';
 import { DEFAULT_FRAMEWORK_CONFIG } from '../config';
 import { FrameworkDetector } from '../framework-detector';

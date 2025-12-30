@@ -2,7 +2,7 @@
  * Framework detector - main implementation for detecting frontend/backend frameworks
  */
 
-import type { LockFileParser } from '@core/shared/npm/lock-file-parser';
+import type { LockFileParser } from '@core/framework-detector/npm/lock-file-parser';
 import type { PackageReader } from './npm/package-reader';
 import type { FrameworkDetectionResult } from './types';
 
@@ -21,7 +21,10 @@ export class FrameworkDetector {
 
     const primaryMatch = matches[0];
 
-    const exactVersion = this.lockFileParser.getVersion(repoPath, primaryMatch.framework.packageName);
+    const exactVersion = await this.lockFileParser.getVersion(
+      repoPath,
+      primaryMatch.framework.packageName
+    );
 
     return {
       name: primaryMatch.framework.name,

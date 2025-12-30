@@ -1,4 +1,4 @@
-import { LockFileParser } from '@core/shared/npm/lock-file-parser';
+import { LockFileParser } from '@core/framework-detector/npm/lock-file-parser';
 import { NodeFileSystem } from '@utils/file-system';
 import { DEFAULT_FRAMEWORK_CONFIG } from './config';
 import { FrameworkDetector } from './framework-detector';
@@ -22,9 +22,7 @@ import type { FrameworkDetectionResult } from './types';
  * // Result: { name: 'Next.js', version: '14.1.0', category: 'frontend' }
  * ```
  */
-export async function detectFramework(
-  repoPath: string
-): Promise<FrameworkDetectionResult | null> {
+export async function detectFramework(repoPath: string): Promise<FrameworkDetectionResult | null> {
   const fs = new NodeFileSystem();
   const config = DEFAULT_FRAMEWORK_CONFIG;
 
@@ -37,4 +35,3 @@ export async function detectFramework(
 }
 
 export type { FrameworkCategory, FrameworkDetectionResult } from './types';
-
