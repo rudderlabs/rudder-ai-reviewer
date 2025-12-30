@@ -6,7 +6,7 @@ import { PackageReader } from '../npm/package-reader';
 
 describe('FrameworkDetector', () => {
   describe('detect', () => {
-    test('returns all detected frameworks sorted by priority', async () => {
+    test('returns all detected frameworks in config order', async () => {
       const fs = createMockFileSystem({
         '/repo/package.json': JSON.stringify({
           dependencies: {
@@ -60,13 +60,13 @@ describe('FrameworkDetector', () => {
       expect(results).toEqual([]);
     });
 
-    test('maintains priority order with multiple frameworks', async () => {
+    test('returns frameworks in config order', async () => {
       const fs = createMockFileSystem({
         '/repo/package.json': JSON.stringify({
           dependencies: {
-            nuxt: '^3.0.0',
             vue: '^3.0.0',
             react: '^18.0.0',
+            nuxt: '^3.0.0',
           },
         }),
         '/repo/package-lock.json': JSON.stringify({
@@ -84,6 +84,7 @@ describe('FrameworkDetector', () => {
 
       const results = await detector.detect('/repo');
 
+      // Should follow config order: Next.js, Nuxt, React, Vue, Angular
       expect(results).toHaveLength(3);
       expect(results[0].name).toBe('Nuxt');
       expect(results[1].name).toBe('React');

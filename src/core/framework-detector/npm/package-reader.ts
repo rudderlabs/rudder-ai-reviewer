@@ -19,7 +19,7 @@ export class PackageReader {
 
   /**
    * Read package.json and find all matching frameworks
-   * Returns all matches, sorted by priority (highest first)
+   * Returns all matches in config order
    */
   readAll(repoPath: string): FrameworkMatch[] {
     const packagePath = this.fs.join(repoPath, 'package.json');
@@ -49,7 +49,7 @@ export class PackageReader {
         }
       }
 
-      return matches.sort((a, b) => b.framework.priority - a.framework.priority);
+      return matches;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Failed to read package.json: ${errorMessage}`);

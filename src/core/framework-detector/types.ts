@@ -14,6 +14,4 @@ export interface FrameworkInfo {
   name: string;
   packageName: string;
   category: FrameworkCategory;
-  priority: number;
-  isMetaFramework: boolean;
 }
