@@ -1,6 +1,5 @@
-import type { LockFileParser } from '@core/shared/npm';
-import type { PackageReader } from './npm/package-reader';
-import type { FrameworkDetectionResult } from './types';
+import type { LockFileParser, PackageReader } from '@core/shared/npm';
+import type { FrameworkDetectionResult, FrameworkInfo } from './types';
 
 export class FrameworkDetector {
   constructor(
@@ -8,26 +7,28 @@ export class FrameworkDetector {
     private readonly lockFileParser: LockFileParser
   ) {}
 
-  async detect(repoPath: string): Promise<FrameworkDetectionResult[]> {
-    const matches = this.packageReader.readAll(repoPath);
+  async detect(repoPath: string, frameworks: FrameworkInfo[]): Promise<FrameworkDetectionResult[]> {
+    const packageNames = frameworks.map(f => f.packageName);
+    const declaredVersions = this.packageReader.getVersions(repoPath, packageNames);
+    const foundFrameworks = frameworks.filter(f => declaredVersions.has(f.packageName));
 
-    if (matches.length === 0) {
+    if (foundFrameworks.length === 0) {
       return [];
     }
 
-    // Get all package names to check in lock file
-    const packageNames = matches.map(m => m.framework.packageName);
-    const versions = await this.lockFileParser.getVersions(repoPath, packageNames);
+    const foundPackageNames = foundFrameworks.map(f => f.packageName);
+    const exactVersions = await this.lockFileParser.getVersions(repoPath, foundPackageNames);
 
     const results: FrameworkDetectionResult[] = [];
 
-    for (const match of matches) {
-      const exactVersion = versions.get(match.framework.packageName);
+    for (const framework of foundFrameworks) {
+      const exactVersion = exactVersions.get(framework.packageName);
+      const declaredVersion = declaredVersions.get(framework.packageName);
 
       results.push({
-        name: match.framework.name,
-        version: exactVersion || match.version,
-        category: match.framework.category,
+        name: framework.name,
+        version: exactVersion || declaredVersion,
+        category: framework.category,
       });
     }
 

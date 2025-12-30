@@ -1,9 +1,8 @@
-import { LockFileParser } from '@core/shared/npm';
+import { LockFileParser, PackageReader } from '@core/shared/npm';
 import { NodeFileSystem } from '@utils/file-system';
 import { CDNScanner } from './cdn/file-scanner';
 import { DEFAULT_JS_CONFIG } from './config';
 import { JavaScriptSDKDetector } from './javascript-detector';
-import { PackageReader } from './npm/package-reader';
 import type { SDKDetectionResult } from './types';
 
 /**

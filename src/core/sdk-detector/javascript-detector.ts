@@ -1,6 +1,5 @@
-import type { LockFileParser } from '@core/shared/npm';
+import type { LockFileParser, PackageReader } from '@core/shared/npm';
 import type { CDNScanner } from './cdn/file-scanner';
-import type { PackageReader } from './npm/package-reader';
 import type { SDKDetectionResult, SDKInstallationType } from './types';
 
 interface NPMDetectionResult {
@@ -31,13 +30,15 @@ export class JavaScriptSDKDetector {
   }
 
   private async detectNPM(repoPath: string, packageName: string): Promise<NPMDetectionResult> {
-    const declaredVersion = this.packageReader.read(repoPath, packageName);
+    const declaredVersions = this.packageReader.getVersions(repoPath, [packageName]);
+    const declaredVersion = declaredVersions.get(packageName);
+
     if (!declaredVersion) {
       return { found: false };
     }
 
-    const versions = await this.lockFileParser.getVersions(repoPath, [packageName]);
-    const exactVersion = versions.get(packageName);
+    const exactVersions = await this.lockFileParser.getVersions(repoPath, [packageName]);
+    const exactVersion = exactVersions.get(packageName);
 
     return {
       found: true,

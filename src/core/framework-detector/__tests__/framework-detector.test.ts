@@ -1,8 +1,7 @@
-import { LockFileParser } from '@core/shared/npm';
+import { LockFileParser, PackageReader } from '@core/shared/npm';
 import { createMockFileSystem } from '@tests/test.utils';
 import { DEFAULT_FRAMEWORK_CONFIG } from '../config';
 import { FrameworkDetector } from '../framework-detector';
-import { PackageReader } from '../npm/package-reader';
 
 describe('FrameworkDetector', () => {
   describe('detect', () => {
@@ -22,11 +21,11 @@ describe('FrameworkDetector', () => {
         }),
       });
 
-      const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
+      const packageReader = new PackageReader(fs);
       const lockFileParser = new LockFileParser(fs);
       const detector = new FrameworkDetector(packageReader, lockFileParser);
 
-      const results = await detector.detect('/repo');
+      const results = await detector.detect('/repo', DEFAULT_FRAMEWORK_CONFIG.frameworks);
 
       expect(results).toEqual([
         {
@@ -51,11 +50,11 @@ describe('FrameworkDetector', () => {
         }),
       });
 
-      const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
+      const packageReader = new PackageReader(fs);
       const lockFileParser = new LockFileParser(fs);
       const detector = new FrameworkDetector(packageReader, lockFileParser);
 
-      const results = await detector.detect('/repo');
+      const results = await detector.detect('/repo', DEFAULT_FRAMEWORK_CONFIG.frameworks);
 
       expect(results).toEqual([]);
     });
@@ -78,11 +77,11 @@ describe('FrameworkDetector', () => {
         }),
       });
 
-      const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
+      const packageReader = new PackageReader(fs);
       const lockFileParser = new LockFileParser(fs);
       const detector = new FrameworkDetector(packageReader, lockFileParser);
 
-      const results = await detector.detect('/repo');
+      const results = await detector.detect('/repo', DEFAULT_FRAMEWORK_CONFIG.frameworks);
 
       // Should follow config order: Next.js, Nuxt, React, Vue, Angular
       expect(results).toHaveLength(3);
