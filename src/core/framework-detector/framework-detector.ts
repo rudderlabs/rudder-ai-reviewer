@@ -1,8 +1,4 @@
-/**
- * Framework detector - main implementation for detecting frontend/backend frameworks
- */
-
-import type { LockFileParser } from '@core/framework-detector/npm/lock-file-parser';
+import type { LockFileParser } from '@core/shared/npm';
 import type { PackageReader } from './npm/package-reader';
 import type { FrameworkDetectionResult } from './types';
 
@@ -12,24 +8,29 @@ export class FrameworkDetector {
     private readonly lockFileParser: LockFileParser
   ) {}
 
-  async detect(repoPath: string): Promise<FrameworkDetectionResult | null> {
+  async detect(repoPath: string): Promise<FrameworkDetectionResult[]> {
     const matches = this.packageReader.readAll(repoPath);
 
     if (matches.length === 0) {
-      return null;
+      return [];
     }
 
-    const primaryMatch = matches[0];
+    // Get all package names to check in lock file
+    const packageNames = matches.map(m => m.framework.packageName);
+    const versions = await this.lockFileParser.getVersions(repoPath, packageNames);
 
-    const exactVersion = await this.lockFileParser.getVersion(
-      repoPath,
-      primaryMatch.framework.packageName
-    );
+    const results: FrameworkDetectionResult[] = [];
 
-    return {
-      name: primaryMatch.framework.name,
-      version: exactVersion || primaryMatch.version,
-      category: primaryMatch.framework.category,
-    };
+    for (const match of matches) {
+      const exactVersion = versions.get(match.framework.packageName);
+
+      results.push({
+        name: match.framework.name,
+        version: exactVersion || match.version,
+        category: match.framework.category,
+      });
+    }
+
+    return results;
   }
 }

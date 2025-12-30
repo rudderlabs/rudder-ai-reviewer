@@ -1,7 +1,3 @@
-/**
- * Configuration for SDK detection
- */
-
 export interface NPMConfig {
   packageName: string;
   lockFiles: {

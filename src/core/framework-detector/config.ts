@@ -1,7 +1,3 @@
-/**
- * Configuration for framework detection
- */
-
 import type { FrameworkInfo } from './types';
 
 export interface NPMConfig {

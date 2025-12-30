@@ -2,10 +2,7 @@ import { createMockFileSystem } from '@tests/test.utils';
 import { PackageReader } from '../package-reader';
 
 describe('PackageReader', () => {
-  const config = {
-    packageName: '@rudderstack/analytics-js',
-    lockFiles: { npm: 'package-lock.json', yarn: 'yarn.lock', pnpm: 'pnpm-lock.yaml' },
-  };
+  const packageName = '@rudderstack/analytics-js';
 
   test('reads package with SDK in dependencies', () => {
     const fs = createMockFileSystem({
@@ -15,9 +12,9 @@ describe('PackageReader', () => {
         },
       }),
     });
-    const reader = new PackageReader(fs, config);
+    const reader = new PackageReader(fs);
 
-    const result = reader.read('/repo');
+    const result = reader.read('/repo', packageName);
 
     expect(result).toBe('3.0.0');
   });
@@ -30,18 +27,18 @@ describe('PackageReader', () => {
         },
       }),
     });
-    const reader = new PackageReader(fs, config);
+    const reader = new PackageReader(fs);
 
-    const result = reader.read('/repo');
+    const result = reader.read('/repo', packageName);
 
     expect(result).toBe('2.5.0');
   });
 
   test('returns null when package.json does not exist', () => {
     const fs = createMockFileSystem({});
-    const reader = new PackageReader(fs, config);
+    const reader = new PackageReader(fs);
 
-    const result = reader.read('/repo');
+    const result = reader.read('/repo', packageName);
 
     expect(result).toBeNull();
   });
@@ -54,9 +51,9 @@ describe('PackageReader', () => {
         },
       }),
     });
-    const reader = new PackageReader(fs, config);
+    const reader = new PackageReader(fs);
 
-    const result = reader.read('/repo');
+    const result = reader.read('/repo', packageName);
 
     expect(result).toBeNull();
   });

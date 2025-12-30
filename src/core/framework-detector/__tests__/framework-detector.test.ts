@@ -1,83 +1,93 @@
-import { LockFileParser } from '@core/framework-detector/npm/lock-file-parser';
+import { LockFileParser } from '@core/shared/npm';
 import { createMockFileSystem } from '@tests/test.utils';
 import { DEFAULT_FRAMEWORK_CONFIG } from '../config';
 import { FrameworkDetector } from '../framework-detector';
 import { PackageReader } from '../npm/package-reader';
 
 describe('FrameworkDetector', () => {
-  test('detects Next.js with exact version from lock file', async () => {
-    const fs = createMockFileSystem({
-      '/repo/package.json': JSON.stringify({
-        dependencies: {
-          next: '^14.0.0',
-          react: '^18.0.0',
+  describe('detect', () => {
+    test('returns all detected frameworks sorted by priority', async () => {
+      const fs = createMockFileSystem({
+        '/repo/package.json': JSON.stringify({
+          dependencies: {
+            next: '^14.0.0',
+            react: '^18.0.0',
+          },
+        }),
+        '/repo/package-lock.json': JSON.stringify({
+          packages: {
+            'node_modules/next': { version: '14.1.0' },
+            'node_modules/react': { version: '18.2.0' },
+          },
+        }),
+      });
+
+      const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
+      const lockFileParser = new LockFileParser(fs);
+      const detector = new FrameworkDetector(packageReader, lockFileParser);
+
+      const results = await detector.detect('/repo');
+
+      expect(results).toEqual([
+        {
+          name: 'Next.js',
+          version: '14.1.0',
+          category: 'frontend',
         },
-      }),
-      '/repo/package-lock.json': JSON.stringify({
-        packages: {
-          'node_modules/next': { version: '14.1.0' },
-          'node_modules/react': { version: '18.2.0' },
+        {
+          name: 'React',
+          version: '18.2.0',
+          category: 'frontend',
         },
-      }),
+      ]);
     });
 
-    const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
-    const lockFileParser = new LockFileParser(fs, DEFAULT_FRAMEWORK_CONFIG.npm);
-    const detector = new FrameworkDetector(packageReader, lockFileParser);
+    test('returns empty array when no frameworks detected', async () => {
+      const fs = createMockFileSystem({
+        '/repo/package.json': JSON.stringify({
+          dependencies: {
+            lodash: '^4.0.0',
+          },
+        }),
+      });
 
-    const result = await detector.detect('/repo');
+      const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
+      const lockFileParser = new LockFileParser(fs);
+      const detector = new FrameworkDetector(packageReader, lockFileParser);
 
-    expect(result).toEqual({
-      name: 'Next.js',
-      version: '14.1.0',
-      category: 'frontend',
-    });
-  });
+      const results = await detector.detect('/repo');
 
-  test('returns null when no framework detected', async () => {
-    const fs = createMockFileSystem({
-      '/repo/package.json': JSON.stringify({
-        dependencies: {
-          lodash: '^4.0.0',
-        },
-      }),
+      expect(results).toEqual([]);
     });
 
-    const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
-    const lockFileParser = new LockFileParser(fs, DEFAULT_FRAMEWORK_CONFIG.npm);
-    const detector = new FrameworkDetector(packageReader, lockFileParser);
+    test('maintains priority order with multiple frameworks', async () => {
+      const fs = createMockFileSystem({
+        '/repo/package.json': JSON.stringify({
+          dependencies: {
+            nuxt: '^3.0.0',
+            vue: '^3.0.0',
+            react: '^18.0.0',
+          },
+        }),
+        '/repo/package-lock.json': JSON.stringify({
+          packages: {
+            'node_modules/nuxt': { version: '3.10.0' },
+            'node_modules/vue': { version: '3.4.0' },
+            'node_modules/react': { version: '18.2.0' },
+          },
+        }),
+      });
 
-    const result = await detector.detect('/repo');
+      const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
+      const lockFileParser = new LockFileParser(fs);
+      const detector = new FrameworkDetector(packageReader, lockFileParser);
 
-    expect(result).toBeNull();
-  });
+      const results = await detector.detect('/repo');
 
-  test('selects meta-framework over base framework', async () => {
-    const fs = createMockFileSystem({
-      '/repo/package.json': JSON.stringify({
-        dependencies: {
-          nuxt: '^3.0.0',
-          vue: '^3.0.0',
-        },
-      }),
-      '/repo/package-lock.json': JSON.stringify({
-        packages: {
-          'node_modules/nuxt': { version: '3.10.0' },
-          'node_modules/vue': { version: '3.4.0' },
-        },
-      }),
-    });
-
-    const packageReader = new PackageReader(fs, DEFAULT_FRAMEWORK_CONFIG.frameworks);
-    const lockFileParser = new LockFileParser(fs, DEFAULT_FRAMEWORK_CONFIG.npm);
-    const detector = new FrameworkDetector(packageReader, lockFileParser);
-
-    const result = await detector.detect('/repo');
-
-    expect(result).toEqual({
-      name: 'Nuxt',
-      version: '3.10.0',
-      category: 'frontend',
+      expect(results).toHaveLength(3);
+      expect(results[0].name).toBe('Nuxt');
+      expect(results[1].name).toBe('React');
+      expect(results[2].name).toBe('Vue');
     });
   });
 });

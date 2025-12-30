@@ -1,18 +1,10 @@
-/**
- * Read and parse package.json for SDK dependencies
- */
-
-import type { FileSystem } from '@custom-types/file.type';
-import type { NPMConfig } from '../config';
 import { cleanSemverPrefix } from '@core/shared/npm/version-utils';
+import type { FileSystem } from '@custom-types/file.type';
 
 export class PackageReader {
-  constructor(
-    private readonly fs: FileSystem,
-    private readonly config: NPMConfig
-  ) {}
+  constructor(private readonly fs: FileSystem) {}
 
-  read(repoPath: string): string | null {
+  read(repoPath: string, packageName: string): string | null {
     const packagePath = this.fs.join(repoPath, 'package.json');
 
     if (!this.fs.exists(packagePath)) {
@@ -28,7 +20,7 @@ export class PackageReader {
         ...packageJson.devDependencies,
       };
 
-      const rawVersion = allDeps[this.config.packageName];
+      const rawVersion = allDeps[packageName];
       if (!rawVersion) {
         return null;
       }
