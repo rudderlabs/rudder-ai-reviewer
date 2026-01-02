@@ -1,11 +1,6 @@
-/**
- * Tests for PR changes detector factory function
- */
-
 import type { GitHubPRContext } from '@core/shared/github/pr-context';
 import { detectPRChanges } from '../index';
 
-// Mock dependencies
 jest.mock('@actions/github', () => ({
   getOctokit: jest.fn(),
 }));
@@ -13,7 +8,6 @@ jest.mock('@actions/github', () => ({
 jest.mock('@clients/github.client');
 jest.mock('../pr-changes-detector');
 
-// Import after mocking
 import { getOctokit } from '@actions/github';
 import { GitHubClient } from '@clients/github.client';
 import { PRChangesDetector } from '../pr-changes-detector';
@@ -24,7 +18,6 @@ describe('detectPRChanges', () => {
   });
 
   it('should create detector with proper dependencies and return result', async () => {
-    // Arrange
     const prContext: GitHubPRContext = {
       owner: 'test-owner',
       repo: 'test-repo',
@@ -55,10 +48,8 @@ describe('detectPRChanges', () => {
     };
     (PRChangesDetector as jest.Mock).mockImplementation(() => mockDetector);
 
-    // Act
     const result = await detectPRChanges('test-token', prContext);
 
-    // Assert
     expect(getOctokit).toHaveBeenCalledWith('test-token');
     expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
     expect(PRChangesDetector).toHaveBeenCalledWith(expect.any(Object));
