@@ -5,7 +5,7 @@
 import type { FileSystem } from '@custom-types/file.type';
 import * as path from 'path';
 import type { CDNConfig } from '../config';
-import { extractVersionNumber } from '../npm/version-utils';
+import { extractVersionNumber } from '@core/shared/npm/version-utils';
 import { VariableExtractor } from './variable-extractor';
 
 export interface CDNResult {

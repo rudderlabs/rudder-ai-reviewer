@@ -1,10 +1,5 @@
-/**
- * JavaScript SDK detector - main implementation for detecting RudderStack JS SDK
- */
-
+import type { LockFileParser, PackageReader } from '@core/shared/npm';
 import type { CDNScanner } from './cdn/file-scanner';
-import type { LockFileParser } from './npm/lock-file-parser';
-import type { PackageReader } from './npm/package-reader';
 import type { SDKDetectionResult, SDKInstallationType } from './types';
 
 interface NPMDetectionResult {
@@ -25,22 +20,25 @@ export class JavaScriptSDKDetector {
     private readonly cdnScanner: CDNScanner
   ) {}
 
-  async detect(repoPath: string): Promise<SDKDetectionResult | null> {
+  async detect(repoPath: string, packageName: string): Promise<SDKDetectionResult | null> {
     const [npmResult, cdnResult] = await Promise.all([
-      this.detectNPM(repoPath),
+      this.detectNPM(repoPath, packageName),
       this.detectCDN(repoPath),
     ]);
 
     return this.buildResult(npmResult, cdnResult);
   }
 
-  private async detectNPM(repoPath: string): Promise<NPMDetectionResult> {
-    const declaredVersion = this.packageReader.read(repoPath);
+  private async detectNPM(repoPath: string, packageName: string): Promise<NPMDetectionResult> {
+    const declaredVersions = this.packageReader.getVersions(repoPath, [packageName]);
+    const declaredVersion = declaredVersions.get(packageName);
+
     if (!declaredVersion) {
       return { found: false };
     }
 
-    const exactVersion = await this.lockFileParser.getVersion(repoPath);
+    const exactVersions = await this.lockFileParser.getVersions(repoPath, [packageName]);
+    const exactVersion = exactVersions.get(packageName);
 
     return {
       found: true,

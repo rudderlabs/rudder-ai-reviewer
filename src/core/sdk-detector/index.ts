@@ -1,9 +1,8 @@
+import { LockFileParser, PackageReader } from '@core/shared/npm';
 import { NodeFileSystem } from '@utils/file-system';
 import { CDNScanner } from './cdn/file-scanner';
 import { DEFAULT_JS_CONFIG } from './config';
 import { JavaScriptSDKDetector } from './javascript-detector';
-import { LockFileParser } from './npm/lock-file-parser';
-import { PackageReader } from './npm/package-reader';
 import type { SDKDetectionResult } from './types';
 
 /**
@@ -17,11 +16,11 @@ export async function detectSDK(repoPath: string): Promise<SDKDetectionResult | 
   const fs = new NodeFileSystem();
   const config = DEFAULT_JS_CONFIG;
 
-  const packageReader = new PackageReader(fs, config.npm);
-  const lockFileParser = new LockFileParser(fs, config.npm);
+  const packageReader = new PackageReader(fs);
+  const lockFileParser = new LockFileParser(fs);
   const cdnScanner = new CDNScanner(fs, config.cdn);
 
   const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
-  return detector.detect(repoPath);
+  return detector.detect(repoPath, config.npm.packageName);
 }

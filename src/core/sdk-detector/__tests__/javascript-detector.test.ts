@@ -1,11 +1,12 @@
+import { LockFileParser, PackageReader } from '@core/shared/npm';
 import { createMockFileSystem } from '@tests/test.utils';
 import { CDNScanner } from '../cdn/file-scanner';
 import { DEFAULT_JS_CONFIG } from '../config';
 import { JavaScriptSDKDetector } from '../javascript-detector';
-import { LockFileParser } from '../npm/lock-file-parser';
-import { PackageReader } from '../npm/package-reader';
 
 describe('JavaScriptSDKDetector', () => {
+  const packageName = DEFAULT_JS_CONFIG.npm.packageName;
+
   describe('NPM only installation', () => {
     test('detects NPM installation with exact version from lock file', async () => {
       const fs = createMockFileSystem({
@@ -23,12 +24,12 @@ describe('JavaScriptSDKDetector', () => {
         }),
       });
 
-      const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
-      const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
+      const packageReader = new PackageReader(fs);
+      const lockFileParser = new LockFileParser(fs);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
       const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
-      const result = await detector.detect('/repo');
+      const result = await detector.detect('/repo', packageName);
 
       expect(result?.installationType).toBe('npm');
       expect(result?.version).toBe('3.0.4');
@@ -43,12 +44,12 @@ describe('JavaScriptSDKDetector', () => {
         }),
       });
 
-      const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
-      const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
+      const packageReader = new PackageReader(fs);
+      const lockFileParser = new LockFileParser(fs);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
       const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
-      const result = await detector.detect('/repo');
+      const result = await detector.detect('/repo', packageName);
 
       expect(result?.installationType).toBe('npm');
       expect(result?.version).toBe('2.5.0');
@@ -69,12 +70,12 @@ describe('JavaScriptSDKDetector', () => {
         `,
       });
 
-      const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
-      const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
+      const packageReader = new PackageReader(fs);
+      const lockFileParser = new LockFileParser(fs);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
       const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
-      const result = await detector.detect('/repo');
+      const result = await detector.detect('/repo', packageName);
 
       expect(result?.installationType).toBe('cdn');
       expect(result?.version).toBe('3');
@@ -105,12 +106,12 @@ describe('JavaScriptSDKDetector', () => {
         `,
       });
 
-      const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
-      const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
+      const packageReader = new PackageReader(fs);
+      const lockFileParser = new LockFileParser(fs);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
       const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
-      const result = await detector.detect('/repo');
+      const result = await detector.detect('/repo', packageName);
 
       // Should prefer NPM version
       expect(result?.installationType).toBe('npm');
@@ -129,12 +130,12 @@ describe('JavaScriptSDKDetector', () => {
         '/repo/index.html': '<html><body>No SDK</body></html>',
       });
 
-      const packageReader = new PackageReader(fs, DEFAULT_JS_CONFIG.npm);
-      const lockFileParser = new LockFileParser(fs, DEFAULT_JS_CONFIG.npm);
+      const packageReader = new PackageReader(fs);
+      const lockFileParser = new LockFileParser(fs);
       const cdnScanner = new CDNScanner(fs, DEFAULT_JS_CONFIG.cdn);
       const detector = new JavaScriptSDKDetector(packageReader, lockFileParser, cdnScanner);
 
-      const result = await detector.detect('/repo');
+      const result = await detector.detect('/repo', packageName);
 
       expect(result).toBeNull();
     });
