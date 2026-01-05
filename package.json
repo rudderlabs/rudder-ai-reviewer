@@ -4,7 +4,7 @@
   "description": "GitHub Action to review PRs with RudderStack SDK integrations",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "watch": "tsc --watch",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -45,6 +45,7 @@
     "jest": "^29.7.0",
     "prettier": "^3.2.4",
     "ts-jest": "^29.2.5",
+    "tsc-alias": "^1.8.16",
     "typescript": "^5.3.3"
   },
   "overrides": {
