@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import type { FileSystem } from '@custom-types/file.type';
 import type { DepGraph } from '@snyk/dep-graph';
 import {
@@ -70,7 +71,7 @@ export class LockFileParser {
       return this.extractVersionsFromDepGraph(depGraph, packageNames);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to parse ${this.lockFiles.npm}: ${errorMessage}`);
+      core.error(`Failed to parse ${this.lockFiles.npm}: ${errorMessage}`);
       return new Map();
     }
   }
@@ -101,7 +102,7 @@ export class LockFileParser {
       return this.extractVersionsFromDepGraph(depGraph, packageNames);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to parse ${this.lockFiles.yarn}: ${errorMessage}`);
+      core.error(`Failed to parse ${this.lockFiles.yarn}: ${errorMessage}`);
       return new Map();
     }
   }
@@ -131,7 +132,7 @@ export class LockFileParser {
       return this.extractVersionsFromDepGraph(depGraph, packageNames);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to parse ${this.lockFiles.pnpm}: ${errorMessage}`);
+      core.error(`Failed to parse ${this.lockFiles.pnpm}: ${errorMessage}`);
       return new Map();
     }
   }

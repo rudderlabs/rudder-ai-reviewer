@@ -1,5 +1,8 @@
+import * as core from '@actions/core';
 import { createMockFileSystem } from '@tests/test.utils';
 import { CDNScanner } from '../file-scanner';
+
+jest.mock('@actions/core');
 
 describe('CDNScanner', () => {
   const config = {
@@ -102,6 +105,24 @@ describe('CDNScanner', () => {
 
       expect(result.found).toBe(true);
       expect(result.version).toBe('3');
+    });
+
+    test('handles file read errors gracefully', async () => {
+      const fs = createMockFileSystem({});
+      fs.exists = jest.fn().mockReturnValue(true);
+      fs.read = jest.fn().mockImplementation(() => {
+        throw new Error('File read error');
+      });
+
+      const scanner = new CDNScanner(fs, config);
+      const coreErrorSpy = jest.spyOn(core, 'error').mockImplementation();
+
+      const result = await scanner.scan('/repo');
+
+      expect(result.found).toBe(false);
+      expect(coreErrorSpy).toHaveBeenCalled();
+
+      coreErrorSpy.mockRestore();
     });
   });
 });
