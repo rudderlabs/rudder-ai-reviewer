@@ -1,7 +1,4 @@
-/**
- * Scan files for RudderStack CDN usage
- */
-
+import * as core from '@actions/core';
 import type { FileSystem } from '@custom-types/file.type';
 import * as path from 'path';
 import type { CDNConfig } from '../config';
@@ -86,7 +83,7 @@ export class CDNScanner {
       return { found, version };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to scan file ${filename}: ${errorMessage}`);
+      core.error(`Failed to scan file ${filename}: ${errorMessage}`);
       return { found: false };
     }
   }

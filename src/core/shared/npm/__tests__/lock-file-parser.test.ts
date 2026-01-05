@@ -1,5 +1,8 @@
+import * as core from '@actions/core';
 import type { FileSystem } from '@custom-types/file.type';
 import { LockFileParser } from '../lock-file-parser';
+
+jest.mock('@actions/core');
 
 describe('LockFileParser', () => {
   let mockFs: FileSystem;
@@ -136,14 +139,14 @@ react@^18.0.0:
       (mockFs.exists as jest.Mock).mockReturnValue(true);
       (mockFs.read as jest.Mock).mockReturnValue('invalid json');
 
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const coreErrorSpy = jest.spyOn(core, 'error').mockImplementation();
 
       const versions = await parser.getVersions('/test/repo', ['react']);
 
       expect(versions.size).toBe(0);
-      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(coreErrorSpy).toHaveBeenCalled();
 
-      consoleErrorSpy.mockRestore();
+      coreErrorSpy.mockRestore();
     });
 
     it('should filter only requested packages', async () => {

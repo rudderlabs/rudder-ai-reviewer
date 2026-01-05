@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import { cleanSemverPrefix } from '@core/shared/npm/version-utils';
 import type { FileSystem } from '@custom-types/file.type';
 
@@ -42,7 +43,7 @@ export class PackageReader {
       return versions;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to read package.json: ${errorMessage}`);
+      core.error(`Failed to read package.json: ${errorMessage}`);
       return new Map();
     }
   }
