@@ -12,10 +12,10 @@ async function run(): Promise<void> {
   try {
     core.info('🚀 RudderStack PR Reviewer starting...');
 
-    const githubToken = core.getInput('github-token', { required: true });
     const sourceId = core.getInput('source-id', { required: true });
     const serviceAccessToken = core.getInput('service-access-token', { required: true });
     const rootDirectory = core.getInput('root-directory') || '.';
+    const githubToken = core.getInput('github-token', { required: true });
 
     const prNumber = github.context.payload.pull_request?.number;
     if (!prNumber) {
