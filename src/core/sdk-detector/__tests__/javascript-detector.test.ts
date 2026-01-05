@@ -31,6 +31,7 @@ describe('JavaScriptSDKDetector', () => {
 
       const result = await detector.detect('/repo', packageName);
 
+      expect(result?.name).toBe('@rudderstack/analytics-js');
       expect(result?.installationType).toBe('npm');
       expect(result?.version).toBe('3.0.4');
     });
@@ -51,6 +52,7 @@ describe('JavaScriptSDKDetector', () => {
 
       const result = await detector.detect('/repo', packageName);
 
+      expect(result?.name).toBe('@rudderstack/analytics-js');
       expect(result?.installationType).toBe('npm');
       expect(result?.version).toBe('2.5.0');
     });
@@ -77,6 +79,7 @@ describe('JavaScriptSDKDetector', () => {
 
       const result = await detector.detect('/repo', packageName);
 
+      expect(result?.name).toBe('@rudderstack/analytics-js');
       expect(result?.installationType).toBe('cdn');
       expect(result?.version).toBe('3');
     });
@@ -114,6 +117,7 @@ describe('JavaScriptSDKDetector', () => {
       const result = await detector.detect('/repo', packageName);
 
       // Should prefer NPM version
+      expect(result?.name).toBe('@rudderstack/analytics-js');
       expect(result?.installationType).toBe('npm');
       expect(result?.version).toBe('3.0.4');
     });

@@ -26,7 +26,7 @@ export class JavaScriptSDKDetector {
       this.detectCDN(repoPath),
     ]);
 
-    return this.buildResult(npmResult, cdnResult);
+    return this.buildResult(npmResult, cdnResult, packageName);
   }
 
   private async detectNPM(repoPath: string, packageName: string): Promise<NPMDetectionResult> {
@@ -53,7 +53,8 @@ export class JavaScriptSDKDetector {
 
   private buildResult(
     npmResult: NPMDetectionResult,
-    cdnResult: CDNDetectionResult
+    cdnResult: CDNDetectionResult,
+    packageName: string
   ): SDKDetectionResult | null {
     const hasNPM = npmResult.found;
     const hasCDN = cdnResult.found;
@@ -71,6 +72,7 @@ export class JavaScriptSDKDetector {
     }
 
     return {
+      name: packageName,
       installationType,
       version,
     };

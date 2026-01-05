@@ -24,3 +24,5 @@ export async function detectSDK(repoPath: string): Promise<SDKDetectionResult | 
 
   return detector.detect(repoPath, config.npm.packageName);
 }
+
+export type { SDKDetectionResult, SDKInstallationType } from './types';
