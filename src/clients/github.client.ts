@@ -6,6 +6,39 @@ export class GitHubClient {
   constructor(private readonly octokit: ReturnType<typeof getOctokit>) {}
 
   /**
+   * Fetches repository metadata (visibility, languages, primary language)
+   *
+   * @param owner - Repository owner
+   * @param repo - Repository name
+   */
+  async getRepositoryMetadata(
+    owner: string,
+    repo: string
+  ): Promise<{
+    visibility: 'public' | 'private' | 'internal';
+    primary_language?: string;
+    languages: Record<string, number>;
+  }> {
+    // Fetch repository details
+    const { data: repoData } = await this.octokit.rest.repos.get({
+      owner,
+      repo,
+    });
+
+    // Fetch languages used in the repository
+    const { data: languagesData } = await this.octokit.rest.repos.listLanguages({
+      owner,
+      repo,
+    });
+
+    return {
+      visibility: repoData.visibility as 'public' | 'private' | 'internal',
+      primary_language: repoData.language || undefined,
+      languages: languagesData,
+    };
+  }
+
+  /**
    * Fetches all changed files from PR with automatic pagination
    *
    * @param context - GitHub PR context (owner, repo, prNumber)

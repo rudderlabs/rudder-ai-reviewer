@@ -8,6 +8,101 @@ describe('GitHubClient', () => {
     prNumber: 123,
   };
 
+  describe('getRepositoryMetadata', () => {
+    it('should fetch repository metadata successfully', async () => {
+      const mockRepoData = {
+        visibility: 'public',
+        language: 'TypeScript',
+      };
+
+      const mockLanguagesData = {
+        TypeScript: 50000,
+        JavaScript: 30000,
+        CSS: 5000,
+      };
+
+      const mockOctokit = {
+        rest: {
+          repos: {
+            get: jest.fn().mockResolvedValue({ data: mockRepoData }),
+            listLanguages: jest.fn().mockResolvedValue({ data: mockLanguagesData }),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const metadata = await client.getRepositoryMetadata('test-owner', 'test-repo');
+
+      expect(metadata).toEqual({
+        visibility: 'public',
+        primary_language: 'TypeScript',
+        languages: {
+          TypeScript: 50000,
+          JavaScript: 30000,
+          CSS: 5000,
+        },
+      });
+      expect(mockOctokit.rest.repos.get).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+      });
+      expect(mockOctokit.rest.repos.listLanguages).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+      });
+    });
+
+    it('should handle null language gracefully', async () => {
+      const mockRepoData = {
+        visibility: 'private',
+        language: null,
+      };
+
+      const mockLanguagesData = {
+        Python: 15000,
+      };
+
+      const mockOctokit = {
+        rest: {
+          repos: {
+            get: jest.fn().mockResolvedValue({ data: mockRepoData }),
+            listLanguages: jest.fn().mockResolvedValue({ data: mockLanguagesData }),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const metadata = await client.getRepositoryMetadata('test-owner', 'test-repo');
+
+      expect(metadata).toEqual({
+        visibility: 'private',
+        primary_language: undefined,
+        languages: {
+          Python: 15000,
+        },
+      });
+    });
+
+    it('should throw on API failure', async () => {
+      const mockOctokit = {
+        rest: {
+          repos: {
+            get: jest.fn().mockRejectedValue(new Error('Repository not found')),
+            listLanguages: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      await expect(client.getRepositoryMetadata('test-owner', 'test-repo')).rejects.toThrow(
+        'Repository not found'
+      );
+    });
+  });
+
   describe('getChangedFiles', () => {
     it('should fetch all files with pagination', async () => {
       const mockFiles = [
