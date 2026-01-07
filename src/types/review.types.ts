@@ -16,7 +16,7 @@ export type PropertyType =
   | 'array'
   | 'null'
   | 'unknown';
-export type ReviewVerdict = 'approved' | 'changes_requested' | 'comment';
+export type ReviewVerdict = 'approved' | 'changes_requested' | 'comment' | 'no_comment';
 export type SDKInstallationType = 'npm' | 'cdn';
 
 export interface ReviewResponse {

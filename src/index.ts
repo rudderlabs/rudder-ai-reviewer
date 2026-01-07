@@ -3,6 +3,7 @@ import * as github from '@actions/github';
 import { PRReviewerServiceClient } from '@clients/pr-reviewer-service.client';
 import { detectFrameworks } from '@core/framework-detector';
 import { detectPRChanges } from '@core/pr-changes-detector';
+import { postReviewComment } from '@core/review-commenter';
 import { buildReviewPayload } from '@core/review-payload-builder';
 import { detectSDK } from '@core/sdk-detector';
 import type { GitHubPRContext } from '@core/shared/github';
@@ -64,8 +65,11 @@ async function run(): Promise<void> {
       frameworks,
     });
 
-    core.info('📤 Posting review to PR Reviewer Service...');
-    await serviceClient.postReview(payload);
+    core.info('📤 Sending code changes to PR Reviewer Service...');
+    const reviewResponse = await serviceClient.postReview(payload);
+
+    core.info('📤 Posting review comment to PR...');
+    await postReviewComment(githubToken, prContext, reviewResponse);
 
     core.setOutput('status', 'success');
     core.setOutput('message', 'Successfully analyzed and submitted PR review');
