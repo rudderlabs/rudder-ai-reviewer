@@ -34,7 +34,7 @@ export class PRReviewerServiceClient {
         );
       }
 
-      const responseData = await response.json() as ReviewResponse;
+      const responseData = (await response.json()) as ReviewResponse;
       core.debug(`Review response: ${JSON.stringify(responseData)}`);
       return responseData;
     } catch (error) {
