@@ -3,7 +3,7 @@ import type { FileSystem } from '@custom-types/file.type';
 export function createMockFileSystem(files: Record<string, string>): FileSystem {
   // Build directory structure from files
   const directories = new Set<string>();
-  Object.keys(files).forEach((filePath) => {
+  Object.keys(files).forEach(filePath => {
     const parts = filePath.split('/');
     for (let i = 1; i < parts.length; i++) {
       directories.add(parts.slice(0, i).join('/'));
@@ -22,7 +22,7 @@ export function createMockFileSystem(files: Record<string, string>): FileSystem 
       const entries = new Set<string>();
 
       // Add files and directories
-      Object.keys(files).forEach((filePath) => {
+      Object.keys(files).forEach(filePath => {
         if (filePath.startsWith(normalizedDir + '/')) {
           const relativePath = filePath.substring(normalizedDir.length + 1);
           const firstPart = relativePath.split('/')[0];
@@ -31,7 +31,7 @@ export function createMockFileSystem(files: Record<string, string>): FileSystem 
       });
 
       // Add subdirectories
-      directories.forEach((dir) => {
+      directories.forEach(dir => {
         if (dir.startsWith(normalizedDir + '/')) {
           const relativePath = dir.substring(normalizedDir.length + 1);
           const firstPart = relativePath.split('/')[0];

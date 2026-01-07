@@ -90,6 +90,4 @@ describe('VariableExtractor', () => {
       expect(variables.size).toBe(0);
     });
   });
-
 });
-
