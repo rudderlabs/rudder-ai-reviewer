@@ -70,7 +70,7 @@ describe('PRReviewerServiceClient', () => {
 
       const client = new PRReviewerServiceClient(mockServiceAccessToken);
 
-      await expect(client.postReview(mockPayload)).resolves.toBeUndefined();
+      await expect(client.postReview(mockPayload)).resolves.toEqual(mockResponseData);
 
       expect(global.fetch).toHaveBeenCalledWith('https://api.rudderstack.com/v1/review', {
         method: 'POST',
@@ -168,7 +168,7 @@ describe('PRReviewerServiceClient', () => {
 
       const client = new PRReviewerServiceClient(mockServiceAccessToken);
 
-      await expect(client.postReview(payloadWithOptionals)).resolves.toBeUndefined();
+      await expect(client.postReview(payloadWithOptionals)).resolves.toEqual({ success: true });
 
       expect(global.fetch).toHaveBeenCalledWith(
         'https://api.rudderstack.com/v1/review',

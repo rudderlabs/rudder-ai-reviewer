@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import { getOctokit } from '@actions/github';
 import { GitHubClient } from '@clients/github.client';
 import type { GitHubPRContext } from '@core/shared/github/pr-context';
@@ -18,10 +19,13 @@ export async function postReviewComment(
   reviewResponse: ReviewResponse
 ): Promise<void> {
   try {
+    if (reviewResponse.summary.verdict === 'no_comment') {
+      core.info('No comment needed for this PR');
+      return;
+    }
+
     const octokit = getOctokit(githubToken);
     const githubClient = new GitHubClient(octokit);
-
-    // Get PR metadata including commit SHA for generating permalinks
     const metadata = await githubClient.getPRMetadata(prContext);
 
     const githubContext: GitHubContext = {
