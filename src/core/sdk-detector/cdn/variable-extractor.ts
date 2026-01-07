@@ -1,8 +1,3 @@
-/**
- * Simple regex-based variable extraction for CDN detection
- * Alternative to AST-based approach - lighter and faster for simple pattern matching
- */
-
 import type { CDNConfig } from '../config';
 
 export interface VariableInfo {
@@ -50,20 +45,6 @@ export class VariableExtractor {
     }
 
     return variables;
-  }
-
-  /**
-   * Check if all required CDN variables are present
-   */
-  isCDNDetected(variables: Map<string, VariableInfo>): boolean {
-    const hasBaseUrl = variables.has(this.config.variableNames.baseUrl);
-    const hasVersion = variables.has(this.config.variableNames.version);
-    const hasFileName =
-      variables.has(this.config.variableNames.fileName) &&
-      variables.get(this.config.variableNames.fileName)?.value.includes(this.config.fileName) ===
-        true;
-
-    return hasBaseUrl && hasVersion && hasFileName;
   }
 
   /**
