@@ -50,13 +50,19 @@ describe('PRReviewerServiceClient', () => {
     },
   };
 
+  const originalEnv = process.env;
+
   beforeEach(() => {
     jest.clearAllMocks();
     global.fetch = jest.fn();
+    // Reset environment to ensure tests don't depend on external state
+    process.env = { ...originalEnv };
+    delete process.env.INPUT_REVIEW_SERVICE_BASE_URL;
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+    process.env = originalEnv;
   });
 
   describe('postReview', () => {
@@ -176,6 +182,35 @@ describe('PRReviewerServiceClient', () => {
           body: JSON.stringify(payloadWithOptionals),
         })
       );
+    });
+
+    it('should use custom base URL from environment variable', async () => {
+      const customBaseUrl = 'https://custom-api.example.com';
+      process.env.INPUT_REVIEW_SERVICE_BASE_URL = customBaseUrl;
+
+      // Re-import module to pick up new environment variable
+      jest.resetModules();
+      const { PRReviewerServiceClient: ReloadedClient } = require('../pr-reviewer-service.client');
+
+      const mockResponseData = { success: true, review_id: 'review-456' };
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue(mockResponseData),
+      });
+
+      const client = new ReloadedClient(mockServiceAccessToken);
+
+      await expect(client.postReview(mockPayload)).resolves.toEqual(mockResponseData);
+
+      expect(global.fetch).toHaveBeenCalledWith(`${customBaseUrl}/v1/review`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${mockServiceAccessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(mockPayload),
+      });
     });
   });
 });

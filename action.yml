@@ -24,6 +24,11 @@ inputs:
     required: false
     default: '.'
 
+  review-service-base-url:
+    description: 'Base URL of the PR Reviewer Service'
+    required: false
+    default: 'https://api.rudderstack.com'
+
 
 outputs:
   status:
@@ -55,3 +60,4 @@ runs:
         INPUT_SOURCE_ID: ${{ inputs.source-id }}
         INPUT_SERVICE_ACCESS_TOKEN: ${{ inputs.service-access-token }}
         INPUT_ROOT_DIRECTORY: ${{ inputs.root-directory }}
+        INPUT_REVIEW_SERVICE_BASE_URL: ${{ inputs.review-service-base-url }}
