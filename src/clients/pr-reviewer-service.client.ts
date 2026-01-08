@@ -2,7 +2,6 @@ import * as core from '@actions/core';
 import type { ReviewPayload } from '@custom-types/review-payload.types';
 import { ReviewResponse } from '@custom-types/review.types';
 
-// TODO: Add the actual URL once the service is deployed
 const PR_REVIEWER_SERVICE_BASE_URL =
   process.env.INPUT_REVIEW_SERVICE_BASE_URL || 'https://api.rudderstack.com';
 
