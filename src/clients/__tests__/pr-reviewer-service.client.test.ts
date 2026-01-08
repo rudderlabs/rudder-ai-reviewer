@@ -190,6 +190,7 @@ describe('PRReviewerServiceClient', () => {
 
       // Re-import module to pick up new environment variable
       jest.resetModules();
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { PRReviewerServiceClient: ReloadedClient } = require('../pr-reviewer-service.client');
 
       const mockResponseData = { success: true, review_id: 'review-456' };
