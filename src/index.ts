@@ -20,7 +20,10 @@ async function run(): Promise<void> {
 
     const prNumber = github.context.payload.pull_request?.number;
     if (!prNumber) {
-      throw new Error('This action must be run in a pull request context');
+      core.warning('This action must be run in a pull request context');
+      core.setOutput('status', 'warning');
+      core.setOutput('message', 'This action must be run in a pull request context');
+      return;
     }
 
     const { owner, repo } = github.context.repo;
@@ -42,7 +45,10 @@ async function run(): Promise<void> {
         `✅ Detected SDK: ${sdkDetection.installationType}, version: ${sdkDetection.version || 'unknown'}`
       );
     } else {
-      core.info('No SDK detected');
+      core.warning('No SDK detected');
+      core.setOutput('status', 'warning');
+      core.setOutput('message', 'No SDK detected');
+      return;
     }
 
     core.info('🔍 Detecting frameworks...');
@@ -52,7 +58,7 @@ async function run(): Promise<void> {
         `✅ Detected frameworks: ${frameworks.map(f => `${f.name}@${f.version || 'unknown'}`).join(', ')}`
       );
     } else {
-      core.info('No frameworks detected');
+      core.warning('No frameworks detected');
     }
 
     core.info('📦 Building review payload...');
@@ -71,9 +77,9 @@ async function run(): Promise<void> {
     core.info('📤 Posting review comment to PR...');
     await postReviewComment(githubToken, prContext, reviewResponse);
 
+    core.info('✨ RudderStack PR Reviewer completed successfully!');
     core.setOutput('status', 'success');
     core.setOutput('message', 'Successfully analyzed and submitted PR review');
-    core.info('✨ RudderStack PR Reviewer completed successfully!');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
