@@ -2,7 +2,8 @@ import { VariableExtractor } from '../variable-extractor';
 
 describe('VariableExtractor', () => {
   const config = {
-    searchPaths: [],
+    markerString: 'RudderSnippetVersion',
+    excludedFolders: ['node_modules', 'dist', 'build', 'coverage', '.git', '.next', '.nuxt'],
     variableNames: {
       baseUrl: 'sdkBaseUrl',
       version: 'sdkVersion',
@@ -10,7 +11,7 @@ describe('VariableExtractor', () => {
     },
     fileName: 'rsa.min.js',
     fileExtensions: {
-      javascript: ['.tsx', '.jsx', '.ts', '.js'],
+      javascript: ['.tsx', '.jsx', '.ts', '.js', '.vue', '.svelte', '.astro'],
       html: '.html',
     },
   };
@@ -87,54 +88,6 @@ describe('VariableExtractor', () => {
       const variables = extractor.extract(code);
 
       expect(variables.size).toBe(0);
-    });
-  });
-
-  describe('isCDNDetected', () => {
-    test('returns true when all required variables present', () => {
-      const variables = new Map([
-        ['sdkBaseUrl', { value: 'https://cdn.rudderlabs.com', line: 1, snippet: '' }],
-        ['sdkVersion', { value: 'v3', line: 2, snippet: '' }],
-        ['sdkFileName', { value: 'rsa.min.js', line: 3, snippet: '' }],
-      ]);
-
-      const result = extractor.isCDNDetected(variables);
-
-      expect(result).toBe(true);
-    });
-
-    test('returns false when baseUrl missing', () => {
-      const variables = new Map([
-        ['sdkVersion', { value: 'v3', line: 2, snippet: '' }],
-        ['sdkFileName', { value: 'rsa.min.js', line: 3, snippet: '' }],
-      ]);
-
-      const result = extractor.isCDNDetected(variables);
-
-      expect(result).toBe(false);
-    });
-
-    test('returns false when version missing', () => {
-      const variables = new Map([
-        ['sdkBaseUrl', { value: 'https://cdn.rudderlabs.com', line: 1, snippet: '' }],
-        ['sdkFileName', { value: 'rsa.min.js', line: 3, snippet: '' }],
-      ]);
-
-      const result = extractor.isCDNDetected(variables);
-
-      expect(result).toBe(false);
-    });
-
-    test('returns false when fileName incorrect', () => {
-      const variables = new Map([
-        ['sdkBaseUrl', { value: 'https://cdn.rudderlabs.com', line: 1, snippet: '' }],
-        ['sdkVersion', { value: 'v3', line: 2, snippet: '' }],
-        ['sdkFileName', { value: 'other.js', line: 3, snippet: '' }],
-      ]);
-
-      const result = extractor.isCDNDetected(variables);
-
-      expect(result).toBe(false);
     });
   });
 });

@@ -6,7 +6,8 @@ jest.mock('@actions/core');
 
 describe('CDNScanner', () => {
   const config = {
-    searchPaths: ['index.html', 'public/index.html', 'src/app/layout.tsx'],
+    markerString: 'RudderSnippetVersion',
+    excludedFolders: ['node_modules', 'dist', 'build', 'coverage', '.git', '.next', '.nuxt'],
     variableNames: {
       baseUrl: 'sdkBaseUrl',
       version: 'sdkVersion',
@@ -14,15 +15,16 @@ describe('CDNScanner', () => {
     },
     fileName: 'rsa.min.js',
     fileExtensions: {
-      javascript: ['.tsx', '.jsx', '.ts', '.js'],
+      javascript: ['.tsx', '.jsx', '.ts', '.js', '.vue', '.svelte', '.astro'],
       html: '.html',
     },
   };
 
   describe('scan', () => {
-    test('detects CDN usage in JavaScript file', async () => {
+    test('detects CDN usage with RudderSnippetVersion marker in JavaScript file', async () => {
       const fs = createMockFileSystem({
         '/repo/src/app/layout.tsx': `
+          window.RudderSnippetVersion = "3.2.0";
           const sdkBaseUrl = "https://cdn.rudderlabs.com";
           const sdkVersion = "v3";
           const sdkFileName = "rsa.min.js";
@@ -36,12 +38,13 @@ describe('CDNScanner', () => {
       expect(result.version).toBe('3');
     });
 
-    test('detects CDN usage in HTML file', async () => {
+    test('detects CDN usage with RudderSnippetVersion marker in HTML file', async () => {
       const fs = createMockFileSystem({
         '/repo/index.html': `
           <html>
             <head>
               <script>
+                window.RudderSnippetVersion = "3.2.0";
                 const sdkBaseUrl = "https://cdn.rudderlabs.com";
                 const sdkVersion = "v3.0.0";
                 const sdkFileName = "rsa.min.js";
@@ -58,13 +61,36 @@ describe('CDNScanner', () => {
       expect(result.version).toBe('3.0.0');
     });
 
-    test('returns not found when no CDN usage', async () => {
+    test('detects CDN usage with marker even without version variable', async () => {
       const fs = createMockFileSystem({
         '/repo/index.html': `
           <html>
             <head>
               <script>
-                console.log("No RudderStack here");
+                window.RudderSnippetVersion = "3.2.0";
+                // No sdkVersion variable here
+              </script>
+            </head>
+          </html>
+        `,
+      });
+      const scanner = new CDNScanner(fs, config);
+
+      const result = await scanner.scan('/repo');
+
+      expect(result.found).toBe(true);
+      expect(result.version).toBe('3'); // Defaults to v3
+    });
+
+    test('returns not found when no RudderSnippetVersion marker', async () => {
+      const fs = createMockFileSystem({
+        '/repo/index.html': `
+          <html>
+            <head>
+              <script>
+                const sdkBaseUrl = "https://cdn.rudderlabs.com";
+                const sdkVersion = "v3";
+                const sdkFileName = "rsa.min.js";
               </script>
             </head>
           </html>
@@ -78,7 +104,7 @@ describe('CDNScanner', () => {
       expect(result.version).toBeUndefined();
     });
 
-    test('returns not found when search files do not exist', async () => {
+    test('returns not found when directory does not exist', async () => {
       const fs = createMockFileSystem({});
       const scanner = new CDNScanner(fs, config);
 
@@ -88,14 +114,54 @@ describe('CDNScanner', () => {
       expect(result.version).toBeUndefined();
     });
 
-    test('scans multiple files and returns on first match', async () => {
+    test('recursively scans subdirectories', async () => {
       const fs = createMockFileSystem({
-        '/repo/index.html': '<html><body>No SDK</body></html>',
-        '/repo/public/index.html': `
+        '/repo/src/utils/helper.js': 'console.log("no SDK")',
+        '/repo/src/components/deep/nested/Analytics.tsx': `
+          window.RudderSnippetVersion = "3.2.0";
+          const sdkVersion = "v3.5.0";
+        `,
+      });
+      const scanner = new CDNScanner(fs, config);
+
+      const result = await scanner.scan('/repo');
+
+      expect(result.found).toBe(true);
+      expect(result.version).toBe('3.5.0');
+    });
+
+    test('excludes folders from scanning', async () => {
+      const fs = createMockFileSystem({
+        '/repo/node_modules/package/index.js': 'window.RudderSnippetVersion = "3.2.0";',
+        '/repo/dist/bundle.js': 'window.RudderSnippetVersion = "3.2.0";',
+        '/repo/src/app.js': 'console.log("no SDK")',
+      });
+      const scanner = new CDNScanner(fs, config);
+
+      const result = await scanner.scan('/repo');
+
+      expect(result.found).toBe(false);
+    });
+
+    test('only scans files with allowed extensions', async () => {
+      const fs = createMockFileSystem({
+        '/repo/README.md': 'window.RudderSnippetVersion = "3.2.0";',
+        '/repo/data.json': '{"version": "window.RudderSnippetVersion"}',
+        '/repo/script.js': 'window.RudderSnippetVersion = "3.2.0";',
+      });
+      const scanner = new CDNScanner(fs, config);
+
+      const result = await scanner.scan('/repo');
+
+      expect(result.found).toBe(true);
+    });
+
+    test('scans Vue, Svelte, and Astro files', async () => {
+      const fs = createMockFileSystem({
+        '/repo/src/App.vue': `
           <script>
-            const sdkBaseUrl = "https://cdn.rudderlabs.com";
-            const sdkVersion = "v3";
-            const sdkFileName = "rsa.min.js";
+            window.RudderSnippetVersion = "3.2.0";
+            const sdkVersion = "v3.1.0";
           </script>
         `,
       });
@@ -104,12 +170,27 @@ describe('CDNScanner', () => {
       const result = await scanner.scan('/repo');
 
       expect(result.found).toBe(true);
-      expect(result.version).toBe('3');
+      expect(result.version).toBe('3.1.0');
+    });
+
+    test('returns on first match for performance', async () => {
+      const fs = createMockFileSystem({
+        '/repo/first.js': 'window.RudderSnippetVersion = "3.2.0"; const sdkVersion = "v1.0.0";',
+        '/repo/second.js': 'window.RudderSnippetVersion = "3.2.0"; const sdkVersion = "v2.0.0";',
+      });
+      const scanner = new CDNScanner(fs, config);
+
+      const result = await scanner.scan('/repo');
+
+      expect(result.found).toBe(true);
+      // Should find first.js first
+      expect(result.version).toBe('1.0.0');
     });
 
     test('handles file read errors gracefully', async () => {
-      const fs = createMockFileSystem({});
-      fs.exists = jest.fn().mockReturnValue(true);
+      const fs = createMockFileSystem({
+        '/repo/error.js': 'some content',
+      });
       fs.read = jest.fn().mockImplementation(() => {
         throw new Error('File read error');
       });

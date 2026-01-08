@@ -1,8 +1,8 @@
 import * as core from '@actions/core';
+import { extractVersionNumber } from '@core/shared/npm/version-utils';
 import type { FileSystem } from '@custom-types/file.type';
 import * as path from 'path';
 import type { CDNConfig } from '../config';
-import { extractVersionNumber } from '@core/shared/npm/version-utils';
 import { VariableExtractor } from './variable-extractor';
 
 export interface CDNResult {
@@ -22,31 +22,61 @@ export class CDNScanner {
     this.variableExtractor = new VariableExtractor(config);
   }
 
-  /**
-   * Scan common file paths for CDN usage
-   */
   async scan(repoPath: string): Promise<CDNResult> {
-    let version: string | undefined;
-
-    for (const file of this.config.searchPaths) {
-      const filePath = this.fs.join(repoPath, file);
-      const result = await this.scanFile(filePath, file);
-
-      if (result.found) {
-        if (result.version && !version) {
-          version = result.version;
-        }
-        // Found CDN usage, we can return early
-        return { found: true, version };
-      }
-    }
-
-    return { found: false };
+    return this.scanDirectory(repoPath);
   }
 
-  /**
-   * Scan a single file for CDN usage
-   */
+  private async scanDirectory(dirPath: string): Promise<CDNResult> {
+    if (!this.fs.exists(dirPath)) {
+      return { found: false };
+    }
+
+    try {
+      const entries = this.fs.readDir(dirPath);
+
+      for (const entry of entries) {
+        const fullPath = this.fs.join(dirPath, entry);
+        const isDirectory = this.fs.isDirectory(fullPath);
+
+        if (!isDirectory && this.shouldScanFile(entry)) {
+          const result = await this.scanFile(fullPath, entry);
+          if (result.found) {
+            return result;
+          }
+        }
+      }
+
+      for (const entry of entries) {
+        const fullPath = this.fs.join(dirPath, entry);
+        const isDirectory = this.fs.isDirectory(fullPath);
+
+        if (isDirectory && !this.shouldExcludeFolder(entry)) {
+          const result = await this.scanDirectory(fullPath);
+          if (result.found) {
+            return result;
+          }
+        }
+      }
+
+      return { found: false };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      core.error(`Failed to scan directory ${dirPath}: ${errorMessage}`);
+      return { found: false };
+    }
+  }
+
+  private shouldScanFile(filename: string): boolean {
+    const ext = path.extname(filename);
+    return (
+      this.config.fileExtensions.javascript.includes(ext) || ext === this.config.fileExtensions.html
+    );
+  }
+
+  private shouldExcludeFolder(folderName: string): boolean {
+    return this.config.excludedFolders.includes(folderName);
+  }
+
   private async scanFile(
     filePath: string,
     filename: string
@@ -57,30 +87,27 @@ export class CDNScanner {
 
     try {
       const content = this.fs.read(filePath);
+      if (!content.includes(this.config.markerString)) {
+        return { found: false };
+      }
+
       const jsCode = this.extractJavaScriptCode(content, filename);
-
-      if (!jsCode) {
-        return { found: false };
-      }
-
-      const variables = this.variableExtractor.extract(jsCode);
-      if (!variables) {
-        return { found: false };
-      }
-
-      const found = this.variableExtractor.isCDNDetected(variables);
-      if (!found) {
-        return { found: false };
-      }
-
-      // Extract version
       let version: string | undefined;
-      if (variables.has(this.config.variableNames.version)) {
-        const sdkVersion = variables.get(this.config.variableNames.version)!.value;
-        version = extractVersionNumber(sdkVersion);
+
+      if (jsCode) {
+        const variables = this.variableExtractor.extract(jsCode);
+        if (variables.has(this.config.variableNames.version)) {
+          const sdkVersion = variables.get(this.config.variableNames.version)!.value;
+          version = extractVersionNumber(sdkVersion);
+        }
       }
 
-      return { found, version };
+      // Default to v3 if version not found but marker was detected
+      if (!version) {
+        version = '3';
+      }
+
+      return { found: true, version };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       core.error(`Failed to scan file ${filename}: ${errorMessage}`);
@@ -88,18 +115,13 @@ export class CDNScanner {
     }
   }
 
-  /**
-   * Extract JavaScript code from various file types
-   */
   private extractJavaScriptCode(content: string, filename: string): string | null {
     const ext = path.extname(filename);
 
-    // For .tsx/.jsx/.ts/.js files, return as-is
     if (this.config.fileExtensions.javascript.includes(ext)) {
       return content;
     }
 
-    // For HTML files, extract script tags
     if (ext === this.config.fileExtensions.html) {
       const scriptMatches = content.matchAll(HTML_SCRIPT_TAG_REGEX);
       const scripts: string[] = [];

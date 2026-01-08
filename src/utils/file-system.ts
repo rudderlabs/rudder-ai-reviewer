@@ -14,4 +14,12 @@ export class NodeFileSystem implements FileSystem {
   join(...paths: string[]): string {
     return path.join(...paths);
   }
+
+  readDir(dirPath: string): string[] {
+    return fs.readdirSync(dirPath);
+  }
+
+  isDirectory(path: string): boolean {
+    return fs.statSync(path).isDirectory();
+  }
 }

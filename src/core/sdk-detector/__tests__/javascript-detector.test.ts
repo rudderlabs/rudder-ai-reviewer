@@ -64,6 +64,7 @@ describe('JavaScriptSDKDetector', () => {
         '/repo/index.html': `
           <html>
             <script>
+              window.RudderSnippetVersion = "3.2.0";
               const sdkBaseUrl = "https://cdn.rudderlabs.com";
               const sdkVersion = "v3";
               const sdkFileName = "rsa.min.js";
@@ -102,6 +103,7 @@ describe('JavaScriptSDKDetector', () => {
         }),
         '/repo/index.html': `
           <script>
+            window.RudderSnippetVersion = "3.2.0";
             const sdkBaseUrl = "https://cdn.rudderlabs.com";
             const sdkVersion = "v3";
             const sdkFileName = "rsa.min.js";

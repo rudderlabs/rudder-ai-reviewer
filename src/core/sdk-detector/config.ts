@@ -8,7 +8,8 @@ export interface NPMConfig {
 }
 
 export interface CDNConfig {
-  searchPaths: string[];
+  markerString: string;
+  excludedFolders: string[];
   variableNames: {
     baseUrl: string;
     version: string;
@@ -36,17 +37,8 @@ export const DEFAULT_JS_CONFIG: JSDetectorConfig = {
     },
   },
   cdn: {
-    searchPaths: [
-      'index.html',
-      'public/index.html',
-      'src/index.html',
-      'src/app/layout.tsx',
-      'src/app/layout.jsx',
-      'src/pages/_app.tsx',
-      'src/pages/_app.jsx',
-      'pages/_app.tsx',
-      'pages/_app.jsx',
-    ],
+    markerString: 'RudderSnippetVersion',
+    excludedFolders: ['node_modules', 'dist', 'build', 'coverage', '.git', '.next', '.nuxt'],
     variableNames: {
       baseUrl: 'sdkBaseUrl',
       version: 'sdkVersion',
@@ -54,7 +46,7 @@ export const DEFAULT_JS_CONFIG: JSDetectorConfig = {
     },
     fileName: 'rsa.min.js',
     fileExtensions: {
-      javascript: ['.tsx', '.jsx', '.ts', '.js'],
+      javascript: ['.tsx', '.jsx', '.ts', '.js', '.vue'],
       html: '.html',
     },
   },
