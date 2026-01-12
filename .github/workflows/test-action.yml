@@ -24,6 +24,6 @@ jobs:
         uses: ./
         with:
           github-token: ${{ github.token }}
-          source-id: test-source-id
-          service-access-token: test-service-access-token
+          source-id: ${{ secrets.RUDDERSTACK_SOURCE_ID }}
+          service-access-token: ${{ secrets.RUDDERSTACK_SERVICE_ACCESS_TOKEN }}
           root-directory: .
