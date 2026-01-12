@@ -5,7 +5,7 @@ export interface ReviewPayload {
   detected_sdk?: DetectedSDK;
   diff_context: DiffContext[];
   github_action: GitHubActionInfo;
-  frameworks?: FrameworkInfo[];
+  frameworks: FrameworkInfo[];
 }
 
 export interface RepositoryInfo {

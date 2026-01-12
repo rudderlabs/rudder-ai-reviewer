@@ -109,6 +109,7 @@ describe('ReviewPayloadBuilder', () => {
           name: 'rudderstack-pr-reviewer',
           version: '1.0.0',
         },
+        frameworks: [],
       });
 
       expect(mockGitHubClient.getRepositoryMetadata).toHaveBeenCalledWith(
@@ -205,7 +206,7 @@ describe('ReviewPayloadBuilder', () => {
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
       const payload = await builder.buildPayload(input);
 
-      expect(payload.frameworks).toBeUndefined();
+      expect(payload.frameworks).toEqual([]);
     });
 
     it('should handle SDK with CDN installation type', async () => {
