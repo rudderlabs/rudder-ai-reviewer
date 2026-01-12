@@ -48,6 +48,7 @@ describe('PRReviewerServiceClient', () => {
       name: 'rudderstack-ai-reviewer',
       version: '1.0.0',
     },
+    frameworks: [],
   };
 
   const originalEnv = process.env;
@@ -78,7 +79,7 @@ describe('PRReviewerServiceClient', () => {
 
       await expect(client.postReview(mockPayload)).resolves.toEqual(mockResponseData);
 
-      expect(global.fetch).toHaveBeenCalledWith('https://api.rudderstack.com/v1/review', {
+      expect(global.fetch).toHaveBeenCalledWith('https://api.rudderstack.com/v2/pr-review', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${mockServiceAccessToken}`,
@@ -177,7 +178,7 @@ describe('PRReviewerServiceClient', () => {
       await expect(client.postReview(payloadWithOptionals)).resolves.toEqual({ success: true });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.rudderstack.com/v1/review',
+        'https://api.rudderstack.com/v2/pr-review',
         expect.objectContaining({
           body: JSON.stringify(payloadWithOptionals),
         })
@@ -204,7 +205,7 @@ describe('PRReviewerServiceClient', () => {
 
       await expect(client.postReview(mockPayload)).resolves.toEqual(mockResponseData);
 
-      expect(global.fetch).toHaveBeenCalledWith(`${customBaseUrl}/v1/review`, {
+      expect(global.fetch).toHaveBeenCalledWith(`${customBaseUrl}/v2/pr-review`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${mockServiceAccessToken}`,

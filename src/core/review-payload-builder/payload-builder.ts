@@ -45,6 +45,10 @@ export class ReviewPayloadBuilder {
         name,
         version,
       },
+      frameworks: frameworks.map(fw => ({
+        name: fw.name,
+        version: fw.version,
+      })),
     };
 
     if (sdkDetection) {
@@ -53,13 +57,6 @@ export class ReviewPayloadBuilder {
         version: sdkDetection.version,
         installation_type: sdkDetection.installationType,
       };
-    }
-
-    if (frameworks.length > 0) {
-      payload.frameworks = frameworks.map(fw => ({
-        name: fw.name,
-        version: fw.version,
-      }));
     }
 
     return payload;

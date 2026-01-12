@@ -18,7 +18,7 @@ export class PRReviewerServiceClient {
     try {
       core.info(`Posting review to PR Reviewer Service: ${PR_REVIEWER_SERVICE_BASE_URL}`);
 
-      const response = await fetch(`${PR_REVIEWER_SERVICE_BASE_URL}/v1/review`, {
+      const response = await fetch(`${PR_REVIEWER_SERVICE_BASE_URL}/v2/pr-review`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.serviceAccessToken}`,
