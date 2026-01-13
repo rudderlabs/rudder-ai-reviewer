@@ -8,7 +8,6 @@ export default function Home() {
   const [email, setEmail] = useState('');
 
   useEffect(() => {
-    // Track page view on mount
     trackPageView('app', 'home', {
       source: 'nextjs_app',
       route: '/',
@@ -17,7 +16,6 @@ export default function Home() {
 
   const handleSignup = () => {
     if (userId && email) {
-      // Valid identify call
       identifyUser(userId, {
         email: email,
         signup_date: new Date().toISOString(),
@@ -25,7 +23,6 @@ export default function Home() {
         source: 'website',
       });
 
-      // Valid track call
       trackEvent('user_signed_up', {
         user_id: userId,
         method: 'email',
@@ -45,17 +42,14 @@ export default function Home() {
   };
 
   const handleInvalidTrack = () => {
-    // ERROR: Missing event name
     trackEvent();
   };
 
   const handleInvalidProperties = () => {
-    // ERROR: Properties not an object
     trackEvent('click_event', 'not an object');
   };
 
   const handleWarningCase = () => {
-    // WARNING: camelCase event name instead of snake_case
     trackEvent('UserClickedButton', {
       buttonId: 'submit',
     });

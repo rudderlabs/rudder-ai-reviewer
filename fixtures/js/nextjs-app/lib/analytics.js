@@ -1,8 +1,3 @@
-/**
- * RudderStack Analytics for Next.js
- * Client-side only
- * Test app for PR reviewer action
- */
 import { RudderAnalytics } from '@rudderstack/analytics-js';
 
 let analytics = null;

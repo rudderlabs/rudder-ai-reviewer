@@ -5,7 +5,6 @@ import { initializeAnalytics } from '../lib/analytics';
 
 export default function RootLayout({ children }) {
   useEffect(() => {
-    // Initialize analytics on mount
     initializeAnalytics();
   }, []);
 
