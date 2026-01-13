@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CDN Invalid Test App</title>
+  <title>CDN Test App</title>
   <!-- Test app for PR reviewer action -->
 </head>
 <body>
-  <h1>RudderStack CDN Invalid Test</h1>
+  <h1>RudderStack CDN Test</h1>
 
   <script>
     // RudderStack CDN Snippet (v3)
@@ -52,6 +52,35 @@
     rudderanalytics.group();
 
     // ERROR: Page with wrong parameter types
+    rudderanalytics.page(123, 456);
+
+
+
+
+
+    rudderanalytics.track();
+
+    const event = 1;
+    rudderanalytics.track(event);
+
+    rudderanalytics.track('', { prop: 'value' });
+
+    rudderanalytics.track('UserSignedUp', {
+      userId: '123',
+    });
+
+    rudderanalytics.track('click', 'wrong type');
+
+    rudderanalytics.track('page_view');
+
+    rudderanalytics.identify('user123', 'not an object');
+
+    rudderanalytics.identify();
+
+    rudderanalytics.track('event', {}, {}, () => {}, 'extra');
+
+    rudderanalytics.group();
+
     rudderanalytics.page(123, 456);
   </script>
 </body>

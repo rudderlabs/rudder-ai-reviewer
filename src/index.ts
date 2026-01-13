@@ -70,11 +70,11 @@ async function run(): Promise<void> {
       sdkDetection,
       frameworks,
     });
-    core.debug(`Payload: ${JSON.stringify(payload, null, 2)}`);
+    core.info(`Payload: ${JSON.stringify(payload, null, 2)}`);
 
     core.info('📤 Sending code changes to PR Reviewer Service...');
     const reviewResponse = await serviceClient.postReview(payload);
-    core.debug(`Review response: ${JSON.stringify(reviewResponse, null, 2)}`);
+    core.info(`Review response: ${JSON.stringify(reviewResponse, null, 2)}`);
 
     core.info('📤 Posting review comment to PR...');
     await postReviewComment(githubToken, prContext, reviewResponse);
