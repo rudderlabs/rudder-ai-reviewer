@@ -53,7 +53,9 @@ export class JavaScriptSDKDetector {
 
   private async detectCDN(repoPath: string): Promise<CDNDetectionResult> {
     const result = await this.cdnScanner.scan(repoPath);
-    core.debug(`SDK CDN detection: ${result.found ? `found version ${result.version || 'unknown'}` : 'not found'}`);
+    core.debug(
+      `SDK CDN detection: ${result.found ? `found version ${result.version || 'unknown'}` : 'not found'}`
+    );
     return result;
   }
 
@@ -78,7 +80,9 @@ export class JavaScriptSDKDetector {
       return null;
     }
 
-    core.debug(`SDK detection: Final result - ${installationType} installation, version ${version || 'unknown'}`);
+    core.debug(
+      `SDK detection: Final result - ${installationType} installation, version ${version || 'unknown'}`
+    );
 
     return {
       name: packageName,
