@@ -218,8 +218,8 @@ function formatIssueItem(issue: ReviewIssue, index: number, githubContext: GitHu
 
   if (issue.suggestedFix) {
     const fileExtension = getFileExtension(issue.file);
-    item += `\n   **Suggested Fix:**\n`;
-    item += `   \`\`\`${fileExtension}\n   ${issue.suggestedFix}\n   \`\`\`\n`;
+    item += `\n   **Suggested Fix:**\n\n`;
+    item += `\`\`\`${fileExtension}\n${issue.suggestedFix}\n\`\`\`\n\n`;
   }
 
   item += `\n`;
