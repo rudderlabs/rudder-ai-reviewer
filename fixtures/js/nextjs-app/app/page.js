@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { trackEvent, identifyUser, trackPageView } from '../lib/analytics';
+import { useEffect, useState } from 'react';
+import { identifyUser, trackEvent, trackPageView } from '../lib/analytics';
 
 export default function Home() {
   const [userId, setUserId] = useState('');
@@ -55,6 +55,22 @@ export default function Home() {
     });
   };
 
+  const handleCheckout = () => {
+    trackEvent('checkout', {
+      product_id: 'prod_123',
+      price: 299.99,
+      currency: 'INR',
+    });
+  };
+
+  const handlePurchase = () => {
+    trackEvent('purchase', {
+      product_id: 'prod_123',
+      price: 299.99,
+      currency: 'INR',
+    });
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <h1>RudderStack Next.js Test App</h1>
@@ -90,6 +106,16 @@ export default function Home() {
         <button onClick={handleWarningCase} style={{ marginLeft: '10px' }}>
           Warning Case (camelCase event)
         </button>
+      </div>
+
+      <div>
+        <h2>Checkout</h2>
+        <button onClick={handleCheckout}>Checkout</button>
+      </div>
+
+      <div>
+        <h2>Purchase</h2>
+        <button onClick={handlePurchase}>Purchase</button>
       </div>
     </div>
   );
