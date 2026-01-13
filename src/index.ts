@@ -34,7 +34,7 @@ async function run(): Promise<void> {
     const prContext: GitHubPRContext = { owner, repo, prNumber };
 
     core.info('🔍 Detecting PR changes...');
-    const prChanges = await detectPRChanges(githubToken, prContext);
+    const prChanges = await detectPRChanges(githubToken, prContext, rootDirectory);
     core.info(`✅ Detected ${prChanges.diff_context.length} changed files`);
 
     const repoPath = resolve(process.cwd(), rootDirectory);
