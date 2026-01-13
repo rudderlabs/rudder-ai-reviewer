@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import type { getOctokit } from '@actions/github';
 import { FileStatus } from '@core/pr-changes-detector';
 import type { GitHubPRContext } from '@core/shared/github';
@@ -63,6 +64,8 @@ export class GitHubClient {
       per_page: 100,
     });
 
+    core.debug(`Fetched ${files.length} changed files from PR #${prNumber}`);
+
     return files;
   }
 
@@ -115,7 +118,9 @@ export class GitHubClient {
       });
 
       const existingComment = comments.find(c => c.body?.includes(marker));
-      return existingComment?.id ?? null;
+      const commentId = existingComment?.id ?? null;
+      core.debug(`Existing review comment ${commentId ? `found (ID: ${commentId})` : 'not found'}`);
+      return commentId;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to find review comment: ${message}`);
@@ -131,6 +136,7 @@ export class GitHubClient {
    */
   async createComment(context: GitHubPRContext, body: string): Promise<number> {
     const { owner, repo, prNumber } = context;
+    core.debug(`Creating comment for PR #${prNumber} with body: ${body}`);
 
     try {
       const { data } = await this.octokit.rest.issues.createComment({
@@ -156,6 +162,7 @@ export class GitHubClient {
    */
   async updateComment(context: GitHubPRContext, commentId: number, body: string): Promise<void> {
     const { owner, repo } = context;
+    core.debug(`Updating comment ${commentId} with body: ${body}`);
 
     try {
       await this.octokit.rest.issues.updateComment({
