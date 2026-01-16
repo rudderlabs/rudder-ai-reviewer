@@ -91,11 +91,47 @@
               window.rudderAnalyticsMount();
             }
             var loadOptions = {
-              logLevel: 'ASDF',
-              configUrl: 2,
+              logLevel: 'NONE',
+              configUrl: 'https://api.rudderstack.com',
               destSDKBaseURL: sdkBaseUrl + '/' + sdkVersion + '/' + window.rudderAnalyticsBuildType + '/js-integrations',
               pluginsSDKBaseURL: sdkBaseUrl + '/' + sdkVersion + '/' + window.rudderAnalyticsBuildType + '/plugins',
-              onLoaded: 3
+              configUrl: DEFAULT_CONFIG_BE_URL,
+                loadIntegration: true,
+                sessions: {
+                    autoTrack: true,
+                    timeout: 30000,
+                    cutOff: {
+                    enabled: false,
+                    },
+                },
+                sameSiteCookie: 'Lax',
+                polyfillIfRequired: true,
+                integrations: {
+                  All: true
+                },
+                useBeacon: false,
+                beaconQueueOptions: {},
+                destinationsQueueOptions: {},
+                queueOptions: {},
+                lockIntegrationsVersion: true,
+                lockPluginsVersion: true,
+                uaChTrackLevel: 'none',
+                plugins: [],
+                useGlobalIntegrationsConfigInEvents: false,
+                bufferDataPlaneEventsUntilReady: false,
+                dataPlaneEventsBufferTimeout: 30000,
+                storage: {
+                    encryption: {
+                    version: 3,
+                    },
+                    migrate: true,
+                    cookie: {},
+                },
+                sendAdblockPage: false,
+                sameDomainCookiesOnly: false,
+                secureCookie: false,
+                sendAdblockPageOptions: {},
+                useServerSideCookies: false,
             };
             rudderanalytics.load(env.WRITE_KEY, env.DATA_PLANE_URL, loadOptions);
           }
