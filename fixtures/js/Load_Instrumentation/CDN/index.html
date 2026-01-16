@@ -94,9 +94,10 @@
               logLevel: 'DEBUG',
               configUrl: 'https://api.rudderstack.com',
               destSDKBaseURL: sdkBaseUrl + '/' + sdkVersion + '/' + window.rudderAnalyticsBuildType + '/js-integrations',
-              pluginsSDKBaseURL: sdkBaseUrl + '/' + sdkVersion + '/' + window.rudderAnalyticsBuildType + '/plugins'
+              pluginsSDKBaseURL: sdkBaseUrl + '/' + sdkVersion + '/' + window.rudderAnalyticsBuildType + '/plugins',
+              asdf: true
             };
-            rudderanalytics.load('__WRITE_KEY__', '__DATAPLANE_URL__', loadOptions);
+            rudderanalytics.load(env.WRITE_KEY, env.DATA_PLANE_URL, loadOptions);
           }
         }
       })();
