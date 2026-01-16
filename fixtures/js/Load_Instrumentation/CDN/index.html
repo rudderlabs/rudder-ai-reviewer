@@ -95,7 +95,7 @@
               configUrl: 2,
               destSDKBaseURL: sdkBaseUrl + '/' + sdkVersion + '/' + window.rudderAnalyticsBuildType + '/js-integrations',
               pluginsSDKBaseURL: sdkBaseUrl + '/' + sdkVersion + '/' + window.rudderAnalyticsBuildType + '/plugins',
-              asdf: true
+              onLoaded: 3
             };
             rudderanalytics.load(env.WRITE_KEY, env.DATA_PLANE_URL, loadOptions);
           }
