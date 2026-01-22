@@ -69,7 +69,7 @@ describe('ReviewPayloadBuilder', () => {
 
     mockGitHubClient = {
       getRepositoryMetadata: jest.fn().mockResolvedValue(mockRepoMetadata),
-      findComments: jest.fn().mockResolvedValue([]),
+      findReviewComments: jest.fn().mockResolvedValue([]),
     } as any;
 
     (readFileSync as jest.Mock).mockReturnValue(
