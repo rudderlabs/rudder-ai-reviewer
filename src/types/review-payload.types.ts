@@ -6,6 +6,12 @@ export interface ReviewPayload {
   diff_context: DiffContext[];
   github_action: GitHubActionInfo;
   frameworks: FrameworkInfo[];
+  existing_review_comments: ExistingReviewComment[];
+}
+
+export interface ExistingReviewComment {
+  id: number;
+  body: string;
 }
 
 export interface RepositoryInfo {

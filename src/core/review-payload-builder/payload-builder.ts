@@ -3,7 +3,9 @@ import { GitHubClient } from '@clients/github.client';
 import type { FrameworkDetectionResult } from '@core/framework-detector';
 import type { PRChangesResult } from '@core/pr-changes-detector';
 import type { SDKDetectionResult } from '@core/sdk-detector';
+import { GitHubPRContext } from '@core/shared/github/pr-context';
 import type { ReviewPayload } from '@custom-types/review-payload.types';
+import { COMMENT_INLINE_MARKER } from '@utils/constants';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -28,6 +30,15 @@ export class ReviewPayloadBuilder {
     core.info('Fetching repository metadata...');
     const repoMetadata = await this.githubClient.getRepositoryMetadata(owner, repo);
 
+    core.info('Fetch existing review comment...');
+    const existingReviewComments = await this.getExistingReviewComments(
+      input,
+      COMMENT_INLINE_MARKER
+    );
+    core.info(
+      `Found ${existingReviewComments.length} existing review comments - ${JSON.stringify(existingReviewComments, null, 2)}`
+    );
+
     const { name, version } = this.getPackageDetails();
 
     const payload: ReviewPayload = {
@@ -49,6 +60,7 @@ export class ReviewPayloadBuilder {
         name: fw.name,
         version: fw.version,
       })),
+      existing_review_comments: existingReviewComments,
     };
 
     if (sdkDetection) {
@@ -83,5 +95,17 @@ export class ReviewPayloadBuilder {
       );
       return { name: 'rudderstack-ai-reviewer', version: '1.0.0' };
     }
+  }
+
+  private async getExistingReviewComments(input: PayloadBuilderInput, marker: string) {
+    const { owner, repo, prChanges } = input;
+    const context: GitHubPRContext = { owner, repo, prNumber: prChanges.pull_request.number };
+    const comments = await this.githubClient.findComments(context, marker);
+    return comments.map(comment => {
+      return {
+        id: comment.id,
+        body: comment.body ?? '',
+      };
+    });
   }
 }

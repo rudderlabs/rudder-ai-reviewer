@@ -8,7 +8,7 @@ import type {
   ReviewStats,
   SDKInfo,
 } from '@custom-types/review.types';
-import { COMMENT_MARKER } from '@utils/constants';
+import { COMMENT_INLINE_MARKER, COMMENT_SUMMARY_MARKER } from '@utils/constants';
 
 export interface GitHubContext {
   owner: string;
@@ -18,7 +18,7 @@ export interface GitHubContext {
 
 export function formatReviewComment(review: ReviewResponse, githubContext: GitHubContext): string {
   const sections: string[] = [
-    COMMENT_MARKER,
+    COMMENT_SUMMARY_MARKER,
     formatHeader(review),
     formatSummarySection(review),
     formatIssuesSection(review, githubContext),
@@ -345,7 +345,7 @@ function formatIssueDetails(issue: ReviewIssue): string {
  * Formats issue metadata footer
  */
 function formatIssueMetadata(issue: ReviewIssue, includeMarker: boolean = true): string {
-  const marker = includeMarker ? ` | ${COMMENT_MARKER}` : '';
+  const marker = includeMarker ? ` | ${COMMENT_SUMMARY_MARKER}` : '';
   return `<sub>Category: ${issue.category} | ID: \`${issue.id}\`${marker}</sub>`;
 }
 
@@ -388,7 +388,7 @@ export function formatCombinedInlineComment(issues: ReviewIssue[]): string {
     }
   });
 
-  body += `---\n<sub>${COMMENT_MARKER}</sub>`;
+  body += `---\n<sub>${COMMENT_INLINE_MARKER}</sub>`;
   return body;
 }
 
