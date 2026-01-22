@@ -345,7 +345,7 @@ function formatIssueDetails(issue: ReviewIssue): string {
  * Formats issue metadata footer
  */
 function formatIssueMetadata(issue: ReviewIssue, includeMarker: boolean = true): string {
-  const marker = includeMarker ? ` | ${COMMENT_SUMMARY_MARKER}` : '';
+  const marker = includeMarker ? ` | ${COMMENT_INLINE_MARKER}` : '';
   return `<sub>Category: ${issue.category} | ID: \`${issue.id}\`${marker}</sub>`;
 }
 
