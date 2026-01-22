@@ -1,10 +1,5 @@
 import type { ReviewIssue, ReviewResponse } from '@custom-types/review.types';
-import {
-  buildInlineCommentsArray,
-  formatCombinedInlineComment,
-  formatInlineComment,
-  formatReviewComment,
-} from '../comment-formatter';
+import { formatInlineComments, formatReviewComment } from '../comment-formatter';
 
 describe('comment-formatter', () => {
   const mockGitHubContext = {
@@ -78,7 +73,7 @@ describe('comment-formatter', () => {
 
       const result = formatReviewComment(review, mockGitHubContext);
 
-      expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
+      expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('🔴 RudderStack PR Review');
       expect(result).toContain('📦 **rudderstack-javascript-sdk** v3.0.0 (NPM)');
       expect(result).toContain('### Summary');
@@ -122,7 +117,7 @@ describe('comment-formatter', () => {
 
       const result = formatReviewComment(review, mockGitHubContext);
 
-      expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
+      expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('🟢 RudderStack PR Review');
       expect(result).toContain('🌐 **rudderstack-javascript-sdk** v3.0.0 (CDN)');
       expect(result).toContain('Great work! No issues found.');
@@ -340,7 +335,7 @@ describe('comment-formatter', () => {
 
       const result = formatReviewComment(review, mockGitHubContext);
 
-      expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
+      expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('💡 Suggestions (1)');
       expect(result).toContain('Consider adding documentation');
       expect(result).not.toContain('**Suggested Fix:**');
@@ -411,252 +406,105 @@ describe('comment-formatter', () => {
   });
 });
 
-describe('inline-comment-formatter', () => {
-  const mockIssue: ReviewIssue = {
-    id: 'RS_JS_001',
-    severity: 'error',
-    category: 'event_tracking',
-    message: 'Missing event name in track() call',
-    file: 'src/analytics.ts',
-    line: 23,
-    column: 5,
-    impact: 'Event will not be sent',
-    suggestedFix: "track('event_name', { ...properties });",
-    relatedEvents: ['purchase_completed'],
-    affectedDestinations: ['Google Analytics', 'Amplitude'],
-  };
-
-  describe('formatInlineComment', () => {
-    it('should format a complete issue with all fields', () => {
-      const result = formatInlineComment(mockIssue);
-
-      expect(result).toContain('❌');
-      expect(result).toContain('Missing event name in track() call');
-      expect(result).toContain('**Impact:** Event will not be sent');
-      expect(result).toContain('**Affected Destinations:** Google Analytics, Amplitude');
-      expect(result).toContain('**Suggested Fix:**');
-      expect(result).toContain("track('event_name', { ...properties });");
-      expect(result).toContain('Category: event_tracking');
-      expect(result).toContain('ID: `RS_JS_001`');
-      expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
-    });
-
-    it('should format issue without optional fields', () => {
-      const minimalIssue: ReviewIssue = {
-        id: 'RS_JS_002',
+describe('buildInlineCommentsArray', () => {
+  it('should convert issues to inline comments', () => {
+    const issues: ReviewIssue[] = [
+      {
+        id: 'issue-1',
+        severity: 'error',
+        category: 'event_tracking',
+        message: 'Error 1',
+        file: 'src/app.ts',
+        line: 10,
+        impact: 'High',
+        relatedEvents: [],
+      },
+      {
+        id: 'issue-2',
         severity: 'warning',
         category: 'best_practice',
-        message: 'Simple warning',
+        message: 'Warning 1',
         file: 'src/app.ts',
-        line: 10,
-        impact: 'Low impact',
+        line: 20,
+        impact: 'Medium',
         relatedEvents: [],
-      };
+      },
+    ];
 
-      const result = formatInlineComment(minimalIssue);
+    const result = formatInlineComments(issues);
 
-      expect(result).toContain('⚠️');
-      expect(result).toContain('Simple warning');
-      expect(result).toContain('**Impact:** Low impact');
-      expect(result).not.toContain('**Affected Destinations:**');
-      expect(result).not.toContain('**Suggested Fix:**');
-    });
+    expect(result).toHaveLength(2);
+    expect(result[0].path).toBe('src/app.ts');
+    expect(result[0].line).toBe(10);
+    expect(result[0].body).toContain('❌');
+    expect(result[0].body).toContain('Error 1');
+    expect(result[0].body).toContain('<!-- rudder-pr-reviewer-bot-inline -->');
 
-    it('should use correct severity icons', () => {
-      const errorIssue = { ...mockIssue, severity: 'error' as const };
-      const warningIssue = { ...mockIssue, severity: 'warning' as const };
-      const suggestionIssue = { ...mockIssue, severity: 'suggestion' as const };
-      const infoIssue = { ...mockIssue, severity: 'info' as const };
-
-      expect(formatInlineComment(errorIssue)).toContain('❌');
-      expect(formatInlineComment(warningIssue)).toContain('⚠️');
-      expect(formatInlineComment(suggestionIssue)).toContain('💡');
-      expect(formatInlineComment(infoIssue)).toContain('ℹ️');
-    });
-
-    it('should format suggested fix with correct file extension', () => {
-      const tsIssue = { ...mockIssue, file: 'src/app.ts' };
-      const jsIssue = { ...mockIssue, file: 'src/app.js' };
-      const pyIssue = { ...mockIssue, file: 'src/app.py' };
-
-      expect(formatInlineComment(tsIssue)).toContain('```ts\n');
-      expect(formatInlineComment(jsIssue)).toContain('```js\n');
-      expect(formatInlineComment(pyIssue)).toContain('```py\n');
-    });
+    expect(result[1].path).toBe('src/app.ts');
+    expect(result[1].line).toBe(20);
+    expect(result[1].body).toContain('⚠️');
+    expect(result[1].body).toContain('Warning 1');
   });
 
-  describe('formatCombinedInlineComment', () => {
-    it('should format single issue same as formatInlineComment', () => {
-      const result = formatCombinedInlineComment([mockIssue]);
-
-      expect(result).toContain('❌');
-      expect(result).toContain('Missing event name in track() call');
-      expect(result).toContain('Category: event_tracking');
-    });
-
-    it('should combine multiple issues with numbered sections', () => {
-      const issue1: ReviewIssue = {
-        id: 'RS_JS_001',
+  it('should handle issues across different files', () => {
+    const issues: ReviewIssue[] = [
+      {
+        id: 'issue-1',
         severity: 'error',
         category: 'event_tracking',
-        message: 'First error',
+        message: 'Error in app',
         file: 'src/app.ts',
         line: 10,
-        impact: 'High impact',
+        impact: 'High',
         relatedEvents: [],
-      };
-
-      const issue2: ReviewIssue = {
-        id: 'RS_JS_002',
+      },
+      {
+        id: 'issue-2',
         severity: 'error',
         category: 'event_tracking',
-        message: 'Second error',
-        file: 'src/app.ts',
+        message: 'Error in utils',
+        file: 'src/utils.ts',
         line: 10,
-        impact: 'Medium impact',
+        impact: 'High',
         relatedEvents: [],
-      };
+      },
+    ];
 
-      const result = formatCombinedInlineComment([issue1, issue2]);
+    const result = formatInlineComments(issues);
 
-      expect(result).toContain('**2 Issues Found**');
-      expect(result).toContain('### 1. ❌ First error');
-      expect(result).toContain('### 2. ❌ Second error');
-      expect(result).toContain('ID: `RS_JS_001`');
-      expect(result).toContain('ID: `RS_JS_002`');
-      expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
-    });
-
-    it('should separate multiple issues with horizontal rules', () => {
-      const issues: ReviewIssue[] = [
-        { ...mockIssue, id: 'issue-1', message: 'First' },
-        { ...mockIssue, id: 'issue-2', message: 'Second' },
-        { ...mockIssue, id: 'issue-3', message: 'Third' },
-      ];
-
-      const result = formatCombinedInlineComment(issues);
-
-      // Should have 2 separators for 3 issues
-      const separatorCount = (result.match(/---/g) || []).length;
-      expect(separatorCount).toBeGreaterThanOrEqual(2);
-    });
+    expect(result).toHaveLength(2);
+    expect(result.find(c => c.path === 'src/app.ts')).toBeDefined();
+    expect(result.find(c => c.path === 'src/utils.ts')).toBeDefined();
   });
 
-  describe('buildInlineCommentsArray', () => {
-    it('should convert issues to inline comments without grouping', () => {
-      const issues: ReviewIssue[] = [
-        {
-          id: 'issue-1',
-          severity: 'error',
-          category: 'event_tracking',
-          message: 'Error 1',
-          file: 'src/app.ts',
-          line: 10,
-          impact: 'High',
-          relatedEvents: [],
-        },
-        {
-          id: 'issue-2',
-          severity: 'error',
-          category: 'event_tracking',
-          message: 'Error 2',
-          file: 'src/app.ts',
-          line: 20,
-          impact: 'High',
-          relatedEvents: [],
-        },
-      ];
+  it('should handle empty issues array', () => {
+    const result = formatInlineComments([]);
 
-      const result = buildInlineCommentsArray(issues, false);
+    expect(result).toHaveLength(0);
+  });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].path).toBe('src/app.ts');
-      expect(result[0].line).toBe(10);
-      expect(result[0].issueId).toBe('issue-1');
-      expect(result[1].path).toBe('src/app.ts');
-      expect(result[1].line).toBe(20);
-      expect(result[1].issueId).toBe('issue-2');
-    });
+  it('should include all issue details in inline comment body', () => {
+    const issue: ReviewIssue = {
+      id: 'RS_JS_001',
+      severity: 'error',
+      category: 'event_tracking',
+      message: 'Missing event name in track() call',
+      file: 'src/analytics.ts',
+      line: 23,
+      impact: 'Event will not be sent',
+      suggestedFix: "track('event_name', { ...properties });",
+      relatedEvents: ['purchase_completed'],
+      affectedDestinations: ['Google Analytics', 'Amplitude'],
+    };
 
-    it('should group issues by location when enabled', () => {
-      const issues: ReviewIssue[] = [
-        {
-          id: 'issue-1',
-          severity: 'error',
-          category: 'event_tracking',
-          message: 'Error 1',
-          file: 'src/app.ts',
-          line: 10,
-          impact: 'High',
-          relatedEvents: [],
-        },
-        {
-          id: 'issue-2',
-          severity: 'warning',
-          category: 'best_practice',
-          message: 'Warning 1',
-          file: 'src/app.ts',
-          line: 10,
-          impact: 'Medium',
-          relatedEvents: [],
-        },
-        {
-          id: 'issue-3',
-          severity: 'error',
-          category: 'event_tracking',
-          message: 'Error 2',
-          file: 'src/app.ts',
-          line: 20,
-          impact: 'High',
-          relatedEvents: [],
-        },
-      ];
+    const result = formatInlineComments([issue]);
 
-      const result = buildInlineCommentsArray(issues, true);
-
-      expect(result).toHaveLength(2);
-      expect(result[0].line).toBe(10);
-      expect(result[0].issueId).toBe('issue-1,issue-2');
-      expect(result[0].body).toContain('2 Issues Found');
-      expect(result[1].line).toBe(20);
-      expect(result[1].issueId).toBe('issue-3');
-    });
-
-    it('should handle issues across different files', () => {
-      const issues: ReviewIssue[] = [
-        {
-          id: 'issue-1',
-          severity: 'error',
-          category: 'event_tracking',
-          message: 'Error in app',
-          file: 'src/app.ts',
-          line: 10,
-          impact: 'High',
-          relatedEvents: [],
-        },
-        {
-          id: 'issue-2',
-          severity: 'error',
-          category: 'event_tracking',
-          message: 'Error in utils',
-          file: 'src/utils.ts',
-          line: 10,
-          impact: 'High',
-          relatedEvents: [],
-        },
-      ];
-
-      const result = buildInlineCommentsArray(issues, true);
-
-      expect(result).toHaveLength(2);
-      expect(result.find(c => c.path === 'src/app.ts')).toBeDefined();
-      expect(result.find(c => c.path === 'src/utils.ts')).toBeDefined();
-    });
-
-    it('should handle empty issues array', () => {
-      const result = buildInlineCommentsArray([], true);
-
-      expect(result).toHaveLength(0);
-    });
+    expect(result).toHaveLength(1);
+    expect(result[0].body).toContain('❌');
+    expect(result[0].body).toContain('Missing event name in track() call');
+    expect(result[0].body).toContain('**Impact:** Event will not be sent');
+    expect(result[0].body).toContain('**Affected Destinations:** Google Analytics, Amplitude');
+    expect(result[0].body).toContain('**Suggested Fix:**');
+    expect(result[0].body).toContain("track('event_name', { ...properties });");
   });
 });

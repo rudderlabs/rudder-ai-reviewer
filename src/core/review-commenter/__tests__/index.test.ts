@@ -9,7 +9,7 @@ jest.mock('../comment-formatter');
 
 import { getOctokit } from '@actions/github';
 import { GitHubClient } from '@clients/github.client';
-import { buildInlineCommentsArray, formatReviewComment } from '../comment-formatter';
+import { formatInlineComments, formatReviewComment } from '../comment-formatter';
 
 describe('review-commenter', () => {
   const mockContext: GitHubPRContext = {
@@ -55,7 +55,7 @@ describe('review-commenter', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (buildInlineCommentsArray as jest.Mock).mockImplementation(issues =>
+    (formatInlineComments as jest.Mock).mockImplementation(issues =>
       issues.map((issue: any) => ({
         path: issue.file,
         line: issue.line,

@@ -69,6 +69,7 @@ describe('ReviewPayloadBuilder', () => {
 
     mockGitHubClient = {
       getRepositoryMetadata: jest.fn().mockResolvedValue(mockRepoMetadata),
+      findComments: jest.fn().mockResolvedValue([]),
     } as any;
 
     (readFileSync as jest.Mock).mockReturnValue(
@@ -110,6 +111,7 @@ describe('ReviewPayloadBuilder', () => {
           version: '1.0.0',
         },
         frameworks: [],
+        existing_review_comments: [],
       });
 
       expect(mockGitHubClient.getRepositoryMetadata).toHaveBeenCalledWith(
