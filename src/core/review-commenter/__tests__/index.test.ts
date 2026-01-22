@@ -1,6 +1,6 @@
 import type { GitHubPRContext } from '@core/shared/github/pr-context';
 import type { ReviewResponse } from '@custom-types/review.types';
-import { COMMENT_MARKER } from '@utils/constants';
+import { COMMENT_SUMMARY_MARKER } from '@utils/constants';
 import { postReviewComment } from '../index';
 
 jest.mock('@actions/github');
@@ -82,7 +82,7 @@ describe('review-commenter', () => {
         createComment: jest.fn().mockResolvedValue(123),
         createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
@@ -94,7 +94,10 @@ describe('review-commenter', () => {
       expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
       expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockContext);
       expect(mockGitHubClient.getChangedFilesMap).toHaveBeenCalledWith(mockContext);
-      expect(mockGitHubClient.findComment).toHaveBeenCalledWith(mockContext, COMMENT_MARKER);
+      expect(mockGitHubClient.findComment).toHaveBeenCalledWith(
+        mockContext,
+        COMMENT_SUMMARY_MARKER
+      );
       expect(mockGitHubClient.createComment).toHaveBeenCalledWith(mockContext, formattedComment);
     });
 
@@ -115,7 +118,7 @@ describe('review-commenter', () => {
         updateComment: jest.fn().mockResolvedValue(undefined),
         createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nUpdated`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nUpdated`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
@@ -127,7 +130,10 @@ describe('review-commenter', () => {
       expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
       expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockContext);
       expect(mockGitHubClient.getChangedFilesMap).toHaveBeenCalledWith(mockContext);
-      expect(mockGitHubClient.findComment).toHaveBeenCalledWith(mockContext, COMMENT_MARKER);
+      expect(mockGitHubClient.findComment).toHaveBeenCalledWith(
+        mockContext,
+        COMMENT_SUMMARY_MARKER
+      );
       expect(mockGitHubClient.updateComment).toHaveBeenCalledWith(
         mockContext,
         existingCommentId,
@@ -178,7 +184,7 @@ describe('review-commenter', () => {
         findComment: jest.fn().mockRejectedValue(new Error('API error')),
         createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
@@ -205,7 +211,7 @@ describe('review-commenter', () => {
         createComment: jest.fn().mockRejectedValue(new Error('Rate limit exceeded')),
         createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
@@ -233,7 +239,7 @@ describe('review-commenter', () => {
         updateComment: jest.fn().mockRejectedValue(new Error('Comment not found')),
         createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);

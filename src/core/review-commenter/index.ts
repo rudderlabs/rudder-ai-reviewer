@@ -3,7 +3,7 @@ import { getOctokit } from '@actions/github';
 import { GitHubClient } from '@clients/github.client';
 import type { GitHubPRContext } from '@core/shared/github/pr-context';
 import type { PostReviewOptions, ReviewResponse } from '@custom-types/review.types';
-import { COMMENT_MARKER } from '@utils/constants';
+import { COMMENT_SUMMARY_MARKER } from '@utils/constants';
 import {
   buildInlineCommentsArray,
   formatReviewComment,
@@ -61,7 +61,7 @@ export async function postReviewComment(
       githubContext
     );
 
-    const commentId = await githubClient.findComment(prContext, COMMENT_MARKER);
+    const commentId = await githubClient.findComment(prContext, COMMENT_SUMMARY_MARKER);
     if (commentId) {
       await githubClient.updateComment(prContext, commentId, commentBody);
     } else {

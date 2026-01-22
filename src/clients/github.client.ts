@@ -100,6 +100,20 @@ export class GitHubClient {
     };
   }
 
+  async findComments(context: GitHubPRContext, marker: string) {
+    const { owner, repo, prNumber } = context;
+    const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
+      owner,
+      repo,
+      issue_number: prNumber,
+    });
+    const existingComments = comments.filter(c => c.body?.includes(marker));
+    core.debug(
+      `Existing review comments ${existingComments.length ? `found (IDs: ${existingComments.map(c => c.id).join(', ')})` : 'not found'}`
+    );
+    return existingComments;
+  }
+
   /**
    * Finds existing PR review comment by magic marker
    *
