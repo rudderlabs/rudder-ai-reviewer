@@ -100,12 +100,12 @@ export class GitHubClient {
     };
   }
 
-  async findComments(context: GitHubPRContext, marker: string) {
+  async findReviewComments(context: GitHubPRContext, marker: string) {
     const { owner, repo, prNumber } = context;
-    const comments = await this.octokit.paginate(this.octokit.rest.issues.listComments, {
+    const comments = await this.octokit.paginate(this.octokit.rest.pulls.listReviewComments, {
       owner,
       repo,
-      issue_number: prNumber,
+      pull_number: prNumber,
     });
     const existingComments = comments.filter(c => c.body?.includes(marker));
     core.debug(

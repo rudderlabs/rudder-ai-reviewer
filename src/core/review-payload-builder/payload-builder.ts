@@ -100,7 +100,7 @@ export class ReviewPayloadBuilder {
   private async getExistingReviewComments(input: PayloadBuilderInput, marker: string) {
     const { owner, repo, prChanges } = input;
     const context: GitHubPRContext = { owner, repo, prNumber: prChanges.pull_request.number };
-    const comments = await this.githubClient.findComments(context, marker);
+    const comments = await this.githubClient.findReviewComments(context, marker);
     return comments.map(comment => {
       return {
         id: comment.id,
