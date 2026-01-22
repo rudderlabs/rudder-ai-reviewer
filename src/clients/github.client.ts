@@ -176,4 +176,157 @@ export class GitHubClient {
       throw new Error(`Failed to update review comment: ${message}`);
     }
   }
+
+  /**
+   * Creates a PR review with inline comments
+   *
+   * @param context - GitHub PR context (owner, repo, prNumber)
+   * @param comments - Array of inline comments with path, line, and body
+   * @param event - Review event type (COMMENT, APPROVE, REQUEST_CHANGES)
+   * @param body - Optional review body/summary
+   * @returns Review ID
+   */
+  async createReview(
+    context: GitHubPRContext,
+    comments: Array<{ path: string; line: number; body: string }>,
+    event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES' = 'COMMENT',
+    body?: string
+  ): Promise<number> {
+    const { owner, repo, prNumber } = context;
+    core.debug(`Creating review for PR #${prNumber} with ${comments.length} inline comments`);
+
+    try {
+      const { data } = await this.octokit.rest.pulls.createReview({
+        owner,
+        repo,
+        pull_number: prNumber,
+        event,
+        body,
+        comments,
+      });
+
+      core.debug(`Review created with ID: ${data.id}`);
+      return data.id;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to create review: ${message}`);
+    }
+  }
+
+  /**
+   * Gets a map of changed files with their line ranges
+   *
+   * @param context - GitHub PR context (owner, repo, prNumber)
+   * @returns Map of file path to line range and status
+   */
+  async getChangedFilesMap(
+    context: GitHubPRContext
+  ): Promise<Map<string, { start: number; end: number; status: string }>> {
+    const files = await this.getChangedFiles(context);
+    const fileMap = new Map<string, { start: number; end: number; status: string }>();
+
+    files.forEach(file => {
+      // For added/modified files, we need to parse the patch to get line ranges
+      if (file.patch && file.status !== 'removed') {
+        const lineRanges = this.parsePatchLineRanges(file.patch);
+        if (lineRanges) {
+          fileMap.set(file.filename, {
+            start: lineRanges.start,
+            end: lineRanges.end,
+            status: file.status,
+          });
+        }
+      } else {
+        // For files without patch or removed files, set a default range
+        fileMap.set(file.filename, {
+          start: 1,
+          end: file.status === 'removed' ? 0 : Number.MAX_SAFE_INTEGER,
+          status: file.status,
+        });
+      }
+    });
+
+    return fileMap;
+  }
+
+  /**
+   * Parses patch content to extract line ranges
+   *
+   * @param patch - Git patch/diff content
+   * @returns Line range or null if cannot parse
+   */
+  private parsePatchLineRanges(patch: string): { start: number; end: number } | null {
+    // Parse unified diff format: @@ -old_start,old_count +new_start,new_count @@
+    const lines = patch.split('\n');
+    let minLine = Number.MAX_SAFE_INTEGER;
+    let maxLine = 0;
+
+    for (const line of lines) {
+      const match = line.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,(\d+))?\s+@@/);
+      if (match) {
+        const start = parseInt(match[1], 10);
+        const count = match[2] ? parseInt(match[2], 10) : 1;
+        const end = start + count - 1;
+
+        minLine = Math.min(minLine, start);
+        maxLine = Math.max(maxLine, end);
+      }
+    }
+
+    if (minLine === Number.MAX_SAFE_INTEGER || maxLine === 0) {
+      return null;
+    }
+
+    return { start: minLine, end: maxLine };
+  }
+
+  /**
+   * Finds existing PR review by searching for marker in review comments
+   *
+   * @param context - GitHub PR context (owner, repo, prNumber)
+   * @param marker - Magic marker to search for
+   * @returns Review ID if found, null otherwise
+   */
+  async findReview(context: GitHubPRContext, marker: string): Promise<number | null> {
+    const { owner, repo, prNumber } = context;
+
+    try {
+      const reviews = await this.octokit.paginate(this.octokit.rest.pulls.listReviews, {
+        owner,
+        repo,
+        pull_number: prNumber,
+        per_page: 100,
+      });
+
+      for (const review of reviews) {
+        if (review.body?.includes(marker)) {
+          core.debug(`Existing review found (ID: ${review.id})`);
+          return review.id;
+        }
+
+        const reviewComments = await this.octokit.paginate(
+          this.octokit.rest.pulls.listCommentsForReview,
+          {
+            owner,
+            repo,
+            pull_number: prNumber,
+            review_id: review.id,
+            per_page: 100,
+          }
+        );
+
+        const foundComment = reviewComments.find(comment => comment.body?.includes(marker));
+        if (foundComment) {
+          core.debug(`Existing review found via comment (ID: ${review.id})`);
+          return review.id;
+        }
+      }
+
+      core.debug('No existing review found');
+      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to find review: ${message}`);
+    }
+  }
 }

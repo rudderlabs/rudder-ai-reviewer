@@ -78,3 +78,16 @@ export interface ReviewStats {
   eventsModified: number;
   eventsDeleted?: number;
 }
+
+export type CommentStrategy = 'errors-warnings-inline' | 'all-inline' | 'summary-only';
+
+export interface PostReviewOptions {
+  strategy?: CommentStrategy;
+}
+
+export interface InlineComment {
+  path: string;
+  line: number;
+  body: string;
+  issueId: string;
+}

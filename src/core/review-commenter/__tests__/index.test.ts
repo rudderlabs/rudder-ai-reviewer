@@ -9,7 +9,7 @@ jest.mock('../comment-formatter');
 
 import { getOctokit } from '@actions/github';
 import { GitHubClient } from '@clients/github.client';
-import { formatReviewComment } from '../comment-formatter';
+import { buildInlineCommentsArray, formatReviewComment } from '../comment-formatter';
 
 describe('review-commenter', () => {
   const mockContext: GitHubPRContext = {
@@ -55,6 +55,14 @@ describe('review-commenter', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (buildInlineCommentsArray as jest.Mock).mockImplementation(issues =>
+      issues.map((issue: any) => ({
+        path: issue.file,
+        line: issue.line,
+        body: `Mock inline comment for ${issue.id}`,
+        issueId: issue.id,
+      }))
+    );
   });
 
   describe('postReviewComment', () => {
@@ -69,8 +77,10 @@ describe('review-commenter', () => {
           head_ref: 'feature',
           base_ref: 'main',
         }),
+        getChangedFilesMap: jest.fn().mockResolvedValue(new Map()),
         findComment: jest.fn().mockResolvedValue(null),
         createComment: jest.fn().mockResolvedValue(123),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
       const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
 
@@ -83,11 +93,7 @@ describe('review-commenter', () => {
       expect(getOctokit).toHaveBeenCalledWith('test-token');
       expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
       expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockContext);
-      expect(formatReviewComment).toHaveBeenCalledWith(mockReview, {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        commitSha: 'abc123def456',
-      });
+      expect(mockGitHubClient.getChangedFilesMap).toHaveBeenCalledWith(mockContext);
       expect(mockGitHubClient.findComment).toHaveBeenCalledWith(mockContext, COMMENT_MARKER);
       expect(mockGitHubClient.createComment).toHaveBeenCalledWith(mockContext, formattedComment);
     });
@@ -104,8 +110,10 @@ describe('review-commenter', () => {
           head_ref: 'feature',
           base_ref: 'main',
         }),
+        getChangedFilesMap: jest.fn().mockResolvedValue(new Map()),
         findComment: jest.fn().mockResolvedValue(existingCommentId),
         updateComment: jest.fn().mockResolvedValue(undefined),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
       const formattedComment = `${COMMENT_MARKER}\n## Review\nUpdated`;
 
@@ -118,11 +126,7 @@ describe('review-commenter', () => {
       expect(getOctokit).toHaveBeenCalledWith('test-token');
       expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
       expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockContext);
-      expect(formatReviewComment).toHaveBeenCalledWith(mockReview, {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        commitSha: 'abc123def456',
-      });
+      expect(mockGitHubClient.getChangedFilesMap).toHaveBeenCalledWith(mockContext);
       expect(mockGitHubClient.findComment).toHaveBeenCalledWith(mockContext, COMMENT_MARKER);
       expect(mockGitHubClient.updateComment).toHaveBeenCalledWith(
         mockContext,
@@ -142,8 +146,10 @@ describe('review-commenter', () => {
           head_ref: 'feature',
           base_ref: 'main',
         }),
+        getChangedFilesMap: jest.fn().mockResolvedValue(new Map()),
         findComment: jest.fn(),
         createComment: jest.fn(),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
@@ -168,7 +174,9 @@ describe('review-commenter', () => {
           head_ref: 'feature',
           base_ref: 'main',
         }),
+        getChangedFilesMap: jest.fn().mockResolvedValue(new Map()),
         findComment: jest.fn().mockRejectedValue(new Error('API error')),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
       const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
 
@@ -192,8 +200,10 @@ describe('review-commenter', () => {
           head_ref: 'feature',
           base_ref: 'main',
         }),
+        getChangedFilesMap: jest.fn().mockResolvedValue(new Map()),
         findComment: jest.fn().mockResolvedValue(null),
         createComment: jest.fn().mockRejectedValue(new Error('Rate limit exceeded')),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
       const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
 
@@ -218,8 +228,10 @@ describe('review-commenter', () => {
           head_ref: 'feature',
           base_ref: 'main',
         }),
+        getChangedFilesMap: jest.fn().mockResolvedValue(new Map()),
         findComment: jest.fn().mockResolvedValue(existingCommentId),
         updateComment: jest.fn().mockRejectedValue(new Error('Comment not found')),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
       const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
 
@@ -236,6 +248,8 @@ describe('review-commenter', () => {
       const mockOctokit = {};
       const mockGitHubClient = {
         getPRMetadata: jest.fn().mockRejectedValue(new Error('Failed to fetch PR')),
+        getChangedFilesMap: jest.fn(),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);

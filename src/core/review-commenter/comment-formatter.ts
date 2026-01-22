@@ -1,6 +1,7 @@
 import type {
   EventDetection,
   EventStatus,
+  InlineComment,
   IssueSeverity,
   ReviewIssue,
   ReviewResponse,
@@ -316,4 +317,130 @@ function groupEventsByStatus(events: EventDetection[]): Record<string, EventDete
     },
     {} as Record<string, EventDetection[]>
   );
+}
+
+/**
+ * Formats issue details (impact, destinations, suggested fix)
+ */
+function formatIssueDetails(issue: ReviewIssue): string {
+  let details = '';
+
+  if (issue.impact) {
+    details += `**Impact:** ${issue.impact}\n\n`;
+  }
+
+  if (issue.affectedDestinations && issue.affectedDestinations.length > 0) {
+    details += `**Affected Destinations:** ${issue.affectedDestinations.join(', ')}\n\n`;
+  }
+
+  if (issue.suggestedFix) {
+    const fileExtension = getFileExtension(issue.file);
+    details += `**Suggested Fix:**\n\n\`\`\`${fileExtension}\n${issue.suggestedFix}\n\`\`\`\n\n`;
+  }
+
+  return details;
+}
+
+/**
+ * Formats issue metadata footer
+ */
+function formatIssueMetadata(issue: ReviewIssue, includeMarker: boolean = true): string {
+  const marker = includeMarker ? ` | ${COMMENT_MARKER}` : '';
+  return `<sub>Category: ${issue.category} | ID: \`${issue.id}\`${marker}</sub>`;
+}
+
+/**
+ * Formats a single issue as inline comment body
+ *
+ * @param issue - Review issue to format
+ * @returns Markdown string for inline comment
+ */
+export function formatInlineComment(issue: ReviewIssue): string {
+  const icon = getSeverityIcon(issue.severity);
+  let body = `${icon} **${issue.message}**\n\n`;
+  body += formatIssueDetails(issue);
+  body += `---\n${formatIssueMetadata(issue, true)}`;
+  return body;
+}
+
+/**
+ * Formats multiple issues on the same line as a combined inline comment
+ *
+ * @param issues - Array of issues on the same line
+ * @returns Markdown string for combined inline comment
+ */
+export function formatCombinedInlineComment(issues: ReviewIssue[]): string {
+  if (issues.length === 1) {
+    return formatInlineComment(issues[0]);
+  }
+
+  const severityIcon = getSeverityIcon(issues[0].severity);
+  let body = `${severityIcon} **${issues.length} Issues Found**\n\n`;
+
+  issues.forEach((issue, idx) => {
+    const icon = getSeverityIcon(issue.severity);
+    body += `### ${idx + 1}. ${icon} ${issue.message}\n\n`;
+    body += formatIssueDetails(issue);
+    body += `${formatIssueMetadata(issue, false)}\n\n`;
+
+    if (idx < issues.length - 1) {
+      body += `---\n\n`;
+    }
+  });
+
+  body += `---\n<sub>${COMMENT_MARKER}</sub>`;
+  return body;
+}
+
+/**
+ * Builds inline comments array from issues
+ *
+ * @param issues - Issues to convert to inline comments
+ * @param groupByLocation - Whether to combine issues on same line
+ * @returns Array of inline comments
+ */
+export function buildInlineCommentsArray(
+  issues: ReviewIssue[],
+  groupByLocation: boolean = true
+): InlineComment[] {
+  if (!groupByLocation) {
+    // Simple mapping: one issue per inline comment
+    return issues.map(issue => ({
+      path: issue.file,
+      line: issue.line,
+      body: formatInlineComment(issue),
+      issueId: issue.id,
+    }));
+  }
+
+  // Group issues by file:line
+  const grouped = new Map<string, ReviewIssue[]>();
+
+  issues.forEach(issue => {
+    const key = `${issue.file}:${issue.line}`;
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.push(issue);
+    } else {
+      grouped.set(key, [issue]);
+    }
+  });
+
+  // Convert grouped issues to inline comments
+  const inlineComments: InlineComment[] = [];
+
+  grouped.forEach(groupedIssues => {
+    const firstIssue = groupedIssues[0];
+    const issueIds = groupedIssues.map(i => i.id).join(',');
+
+    inlineComments.push({
+      path: firstIssue.file,
+      line: firstIssue.line,
+      body: formatCombinedInlineComment(groupedIssues),
+      issueId: issueIds,
+    });
+  });
+
+  return inlineComments;
 }
