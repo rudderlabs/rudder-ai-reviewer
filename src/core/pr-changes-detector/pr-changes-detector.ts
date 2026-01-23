@@ -1,8 +1,9 @@
 import * as core from '@actions/core';
 import { GitHubClient } from '@clients/github.client';
 import type { GitHubPRContext } from '@core/shared/github/pr-context';
+import { isAbsolute, relative } from 'path';
 import { countPatchHunks } from './patch-parser';
-import type { DiffFile, FileStatus, PRChangesResult } from './types';
+import type { DiffFile, FileChange, FileStatus, PRChangesResult } from './types';
 
 export class PRChangesDetector {
   constructor(private readonly githubClient: GitHubClient) {}
@@ -10,7 +11,7 @@ export class PRChangesDetector {
   /**
    * Main entry point - fetches and processes all PR changes
    */
-  async detect(prContext: GitHubPRContext): Promise<PRChangesResult> {
+  async detect(prContext: GitHubPRContext, rootDirectory = '.'): Promise<PRChangesResult> {
     try {
       core.info('Fetching PR metadata...');
       const prMetadata = await this.githubClient.getPRMetadata(prContext);
@@ -18,16 +19,21 @@ export class PRChangesDetector {
       core.info('Fetching changed files...');
       const changedFiles = await this.githubClient.getChangedFiles(prContext);
 
-      core.info(`Processing ${changedFiles.length} changed files...`);
-      const diffContext = this.processDiffFiles(changedFiles);
+      core.info(`Filtering files for root directory: ${rootDirectory}`);
+      const filteredFiles = this.filterFilesByPath(changedFiles, rootDirectory);
+      core.info(
+        `Processing ${filteredFiles.length} changed files (${changedFiles.length - filteredFiles.length} filtered out)...`
+      );
+
+      const diffContext = this.processDiffFiles(filteredFiles);
 
       const result: PRChangesResult = {
         pull_request: {
           ...prMetadata,
-          files_changed_count: changedFiles.length,
-          lines_added: this.sumAdditions(changedFiles),
-          lines_deleted: this.sumDeletions(changedFiles),
-          lines_changed: this.sumChanges(changedFiles),
+          files_changed_count: filteredFiles.length,
+          lines_added: this.sumAdditions(filteredFiles),
+          lines_deleted: this.sumDeletions(filteredFiles),
+          lines_changed: this.sumChanges(filteredFiles),
         },
         diff_context: diffContext,
       };
@@ -41,17 +47,27 @@ export class PRChangesDetector {
   }
 
   /**
+   * Filters files to only include those within the specified root directory
+   */
+  private filterFilesByPath(files: FileChange[], rootDirectory: string): FileChange[] {
+    if (rootDirectory === '.') {
+      return files;
+    }
+
+    return files.filter(file => {
+      const rel = relative(rootDirectory, file.filename);
+      // File is within rootDirectory if:
+      // 1. Relative path exists (not empty)
+      // 2. Doesn't start with '..' (not a parent directory)
+      // 3. Is not absolute (not outside the tree)
+      return rel && !rel.startsWith('..') && !isAbsolute(rel);
+    }) as FileChange[];
+  }
+
+  /**
    * Transforms GitHub API file objects into DiffFile format
    */
-  private processDiffFiles(
-    files: Array<{
-      filename: string;
-      status: string;
-      additions: number;
-      deletions: number;
-      patch?: string;
-    }>
-  ): DiffFile[] {
+  private processDiffFiles(files: FileChange[]): DiffFile[] {
     return files.map(file => ({
       file_path: file.filename,
       patch: file.patch || '',
