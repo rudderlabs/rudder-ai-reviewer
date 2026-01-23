@@ -3,7 +3,7 @@ import { GitHubClient } from '@clients/github.client';
 import type { GitHubPRContext } from '@core/shared/github/pr-context';
 import { isAbsolute, relative } from 'path';
 import { countPatchHunks } from './patch-parser';
-import type { DiffFile, FileStatus, PRChangesResult } from './types';
+import type { DiffFile, FileChange, FileStatus, PRChangesResult } from './types';
 
 export class PRChangesDetector {
   constructor(private readonly githubClient: GitHubClient) {}
@@ -49,24 +49,9 @@ export class PRChangesDetector {
   /**
    * Filters files to only include those within the specified root directory
    */
-  private filterFilesByPath(
-    files: Array<{ filename: string }>,
-    rootDirectory: string
-  ): Array<{
-    filename: string;
-    status: string;
-    additions: number;
-    deletions: number;
-    patch?: string;
-  }> {
+  private filterFilesByPath(files: FileChange[], rootDirectory: string): FileChange[] {
     if (rootDirectory === '.') {
-      return files as Array<{
-        filename: string;
-        status: string;
-        additions: number;
-        deletions: number;
-        patch?: string;
-      }>;
+      return files;
     }
 
     return files.filter(file => {
@@ -76,27 +61,13 @@ export class PRChangesDetector {
       // 2. Doesn't start with '..' (not a parent directory)
       // 3. Is not absolute (not outside the tree)
       return rel && !rel.startsWith('..') && !isAbsolute(rel);
-    }) as Array<{
-      filename: string;
-      status: string;
-      additions: number;
-      deletions: number;
-      patch?: string;
-    }>;
+    }) as FileChange[];
   }
 
   /**
    * Transforms GitHub API file objects into DiffFile format
    */
-  private processDiffFiles(
-    files: Array<{
-      filename: string;
-      status: string;
-      additions: number;
-      deletions: number;
-      patch?: string;
-    }>
-  ): DiffFile[] {
+  private processDiffFiles(files: FileChange[]): DiffFile[] {
     return files.map(file => ({
       file_path: file.filename,
       patch: file.patch || '',
