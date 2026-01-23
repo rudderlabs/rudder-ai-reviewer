@@ -53,7 +53,7 @@ describe('detectPRChanges', () => {
     expect(getOctokit).toHaveBeenCalledWith('test-token');
     expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
     expect(PRChangesDetector).toHaveBeenCalledWith(expect.any(Object));
-    expect(mockDetector.detect).toHaveBeenCalledWith(prContext);
+    expect(mockDetector.detect).toHaveBeenCalledWith(prContext, '.');
     expect(result).toEqual(mockResult);
   });
 });

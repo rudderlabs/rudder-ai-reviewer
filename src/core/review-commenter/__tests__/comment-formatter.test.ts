@@ -74,7 +74,7 @@ describe('comment-formatter', () => {
       const result = formatReviewComment(review, mockGitHubContext);
 
       expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
-      expect(result).toContain('🔴 RudderStack PR Review');
+      expect(result).toContain('🔴 Rudder AI Reviewer');
       expect(result).toContain('📦 **rudderstack-javascript-sdk** v3.0.0 (NPM)');
       expect(result).toContain('### Summary');
       expect(result).toContain('Found some issues that need attention before merging.');
@@ -118,7 +118,7 @@ describe('comment-formatter', () => {
       const result = formatReviewComment(review, mockGitHubContext);
 
       expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
-      expect(result).toContain('🟢 RudderStack PR Review');
+      expect(result).toContain('🟢 Rudder AI Reviewer');
       expect(result).toContain('🌐 **rudderstack-javascript-sdk** v3.0.0 (CDN)');
       expect(result).toContain('Great work! No issues found.');
       expect(result).not.toContain('### ❌ Errors');
@@ -164,7 +164,7 @@ describe('comment-formatter', () => {
 
       const result = formatReviewComment(review, mockGitHubContext);
 
-      expect(result).toContain('🟡 RudderStack PR Review');
+      expect(result).toContain('🟡 Rudder AI Reviewer');
       expect(result).toContain('<summary><b>⚠️ Warnings (1)</b></summary>');
       expect(result).toContain('Consider batching events');
       expect(result).not.toContain('### ❌ Errors');
