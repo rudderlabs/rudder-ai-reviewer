@@ -334,7 +334,7 @@ function formatIssueDetails(issue: ReviewIssue): string {
   }
 
   if (issue.suggestedFix) {
-    details += `**Suggested Fix:**\n\n\`\`\`suggestion\n${issue.suggestedFix}\n\`\`\`\n\n`;
+    details += `**Suggested Fix:**\n\n\`\`\`${getFileExtension(issue.file)}\n${issue.suggestedFix}\n\`\`\`\n\n`;
   }
 
   return details;
