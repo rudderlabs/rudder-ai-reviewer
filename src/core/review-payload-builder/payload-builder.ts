@@ -30,7 +30,7 @@ export class ReviewPayloadBuilder {
     core.info('Fetching repository metadata...');
     const repoMetadata = await this.githubClient.getRepositoryMetadata(owner, repo);
 
-    core.info('Fetch existing review comment...');
+    core.info('Fetching existing review comments...');
     const existingReviewComments = await this.getExistingReviewComments(
       input,
       COMMENT_INLINE_MARKER

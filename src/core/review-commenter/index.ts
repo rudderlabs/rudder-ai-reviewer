@@ -62,8 +62,10 @@ export async function postReviewComment(
     }
 
     // Build and post inline comments
-    const inlineComments = formatInlineComments(inlineIssues);
-    await githubClient.createReview(prContext, inlineComments, 'COMMENT');
+    if (inlineIssues.length > 0) {
+      const inlineComments = formatInlineComments(inlineIssues);
+      await githubClient.createReview(prContext, inlineComments, 'COMMENT', metadata.head_sha);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Failed to post review comment: ${message}`);
