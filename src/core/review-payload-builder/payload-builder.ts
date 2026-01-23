@@ -35,9 +35,6 @@ export class ReviewPayloadBuilder {
       input,
       COMMENT_INLINE_MARKER
     );
-    core.info(
-      `Found ${existingReviewComments.length} existing review comments - ${JSON.stringify(existingReviewComments, null, 2)}`
-    );
 
     const { name, version } = this.getPackageDetails();
 
