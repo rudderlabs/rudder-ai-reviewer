@@ -334,8 +334,7 @@ function formatIssueDetails(issue: ReviewIssue): string {
   }
 
   if (issue.suggestedFix) {
-    const fileExtension = getFileExtension(issue.file);
-    details += `**Suggested Fix:**\n\n\`\`\`${fileExtension}\n${issue.suggestedFix}\n\`\`\`\n\n`;
+    details += `**Suggested Fix:**\n\n\`\`\`suggestion\n${issue.suggestedFix}\n\`\`\`\n\n`;
   }
 
   return details;
@@ -351,7 +350,7 @@ function formatCommentBody(issue: ReviewIssue): string {
   const icon = getSeverityIcon(issue.severity);
   let body = `${icon} **${issue.message}**\n\n`;
   body += formatIssueDetails(issue);
-  body += `---\n<sub>${COMMENT_INLINE_MARKER}</sub>`;
+  body += `\n\n<sub>${COMMENT_INLINE_MARKER}</sub>`;
   return body;
 }
 
