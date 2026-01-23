@@ -48,7 +48,7 @@ function formatHeader(review: ReviewResponse): string {
   const verdictBadge = getVerdictBadge(review.stats);
   const sdkBadge = formatSDKBadge(review.sdk);
 
-  return `## ${verdictBadge} RudderStack PR Review\n\n${sdkBadge}`;
+  return `## ${verdictBadge} Rudder AI Reviewer\n\n${sdkBadge}`;
 }
 
 /**
