@@ -11,7 +11,7 @@ import { resolve } from 'path';
 
 async function run(): Promise<void> {
   try {
-    core.info('🚀 RudderStack PR Reviewer starting...');
+    core.info('🚀 Rudder AI Reviewer starting...');
 
     const sourceId = process.env.INPUT_SOURCE_ID || '';
     const serviceAccessToken = process.env.INPUT_SERVICE_ACCESS_TOKEN || '';
@@ -34,7 +34,7 @@ async function run(): Promise<void> {
     const prContext: GitHubPRContext = { owner, repo, prNumber };
 
     core.info('🔍 Detecting PR changes...');
-    const prChanges = await detectPRChanges(githubToken, prContext);
+    const prChanges = await detectPRChanges(githubToken, prContext, rootDirectory);
     core.info(`✅ Detected ${prChanges.diff_context.length} changed files`);
 
     const repoPath = resolve(process.cwd(), rootDirectory);
@@ -79,7 +79,7 @@ async function run(): Promise<void> {
     core.info('📤 Posting review comment to PR...');
     await postReviewComment(githubToken, prContext, reviewResponse);
 
-    core.info('✨ RudderStack PR Reviewer completed successfully!');
+    core.info('✨ Rudder AI Reviewer completed successfully!');
     core.setOutput('status', 'success');
     core.setOutput('message', 'Successfully analyzed and submitted PR review');
   } catch (error) {

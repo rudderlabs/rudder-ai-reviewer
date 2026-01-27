@@ -197,6 +197,7 @@ export class GitHubClient {
    * @param context - GitHub PR context (owner, repo, prNumber)
    * @param comments - Array of inline comments with path, line, and body
    * @param event - Review event type (COMMENT, APPROVE, REQUEST_CHANGES)
+   * @param commitId - Commit SHA to attach the review to
    * @param body - Optional review body/summary
    * @returns Review ID
    */
@@ -204,6 +205,7 @@ export class GitHubClient {
     context: GitHubPRContext,
     comments: Array<{ path: string; line: number; body: string }>,
     event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES' = 'COMMENT',
+    commitId?: string,
     body?: string
   ): Promise<number> {
     const { owner, repo, prNumber } = context;
@@ -217,6 +219,7 @@ export class GitHubClient {
         event,
         body,
         comments,
+        commit_id: commitId,
       });
 
       core.debug(`Review created with ID: ${data.id}`);
@@ -280,7 +283,7 @@ export class GitHubClient {
       if (match) {
         const start = parseInt(match[1], 10);
         const count = match[2] ? parseInt(match[2], 10) : 1;
-        const end = start + count - 1;
+        const end = count === 0 ? start : start + count - 1;
 
         minLine = Math.min(minLine, start);
         maxLine = Math.max(maxLine, end);

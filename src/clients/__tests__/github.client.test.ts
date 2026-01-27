@@ -472,6 +472,36 @@ describe('GitHubClient', () => {
         event: 'COMMENT',
         body: undefined,
         comments: inlineComments,
+        commit_id: undefined,
+      });
+    });
+
+    it('should create review with commit_id when provided', async () => {
+      const inlineComments = [{ path: 'src/app.ts', line: 10, body: 'Issue 1' }];
+      const commitId = 'abc123def456';
+      const mockResponse = { id: 789 };
+
+      const mockOctokit = {
+        rest: {
+          pulls: {
+            createReview: jest.fn().mockResolvedValue({ data: mockResponse }),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const reviewId = await client.createReview(mockContext, inlineComments, 'COMMENT', commitId);
+
+      expect(reviewId).toBe(789);
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        pull_number: 123,
+        event: 'COMMENT',
+        body: undefined,
+        comments: inlineComments,
+        commit_id: commitId,
       });
     });
 
@@ -595,6 +625,38 @@ describe('GitHubClient', () => {
       expect(result.get('binary-file.png')).toEqual({
         start: 1,
         end: Number.MAX_SAFE_INTEGER,
+        status: 'modified',
+      });
+    });
+
+    it('should handle patch with zero-count hunk', async () => {
+      const mockFiles = [
+        {
+          filename: 'src/insert.ts',
+          status: 'modified',
+          additions: 2,
+          deletions: 0,
+          patch: '@@ -10,0 +10,2 @@\n+new line 1\n+new line 2',
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(1);
+      expect(result.get('src/insert.ts')).toEqual({
+        start: 10,
+        end: 11,
         status: 'modified',
       });
     });
