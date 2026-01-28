@@ -334,7 +334,11 @@ function formatIssueDetails(issue: ReviewIssue): string {
   }
 
   if (issue.suggestedFix) {
-    details += `**Suggested Fix:**\n\n\`\`\`${getFileExtension(issue.file)}\n${issue.suggestedFix}\n\`\`\`\n\n`;
+    if (issue.startLine) {
+      details += `**Suggested Fix:**\n\n\`\`\`suggestion\n${issue.suggestedFix}\n\`\`\`\n\n`;
+    } else {
+      details += `**Suggested Fix:**\n\n\`\`\`${getFileExtension(issue.file)}\n${issue.suggestedFix}\n\`\`\`\n\n`;
+    }
   }
 
   return details;
@@ -358,12 +362,22 @@ function formatCommentBody(issue: ReviewIssue): string {
  * Builds inline comments array from issues
  *
  * @param issues - Issues to convert to inline comments
- * @returns Array of inline comments
+ * @returns Array of inline comments formatted for GitHub API
  */
 export function formatInlineComments(issues: ReviewIssue[]): InlineComment[] {
-  return issues.map(issue => ({
-    path: issue.file,
-    line: issue.line,
-    body: formatCommentBody(issue),
-  }));
+  return issues.map(issue => {
+    const comment: InlineComment = {
+      path: issue.file,
+      body: formatCommentBody(issue),
+      line: issue.line,
+      side: 'RIGHT',
+    };
+
+    if (issue.startLine && issue.startLine !== issue.line) {
+      comment.start_line = issue.startLine;
+      comment.start_side = 'RIGHT';
+    }
+
+    return comment;
+  });
 }

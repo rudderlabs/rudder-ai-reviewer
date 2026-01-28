@@ -21,7 +21,7 @@ describe('CommentSplitter', () => {
     category: 'event_tracking',
     message: `Issue ${id}`,
     file,
-    line,
+    line: line,
     impact: 'High',
     relatedEvents: [],
   });

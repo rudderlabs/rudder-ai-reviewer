@@ -447,8 +447,8 @@ describe('GitHubClient', () => {
   describe('createReview', () => {
     it('should create review with inline comments successfully', async () => {
       const inlineComments = [
-        { path: 'src/app.ts', line: 10, body: 'Issue 1' },
-        { path: 'src/utils.ts', line: 20, body: 'Issue 2' },
+        { path: 'src/app.ts', line: 10, body: 'Issue 1', side: 'RIGHT' },
+        { path: 'src/utils.ts', line: 20, body: 'Issue 2', side: 'RIGHT' },
       ];
       const mockResponse = { id: 456 };
 
@@ -477,7 +477,7 @@ describe('GitHubClient', () => {
     });
 
     it('should create review with commit_id when provided', async () => {
-      const inlineComments = [{ path: 'src/app.ts', line: 10, body: 'Issue 1' }];
+      const inlineComments = [{ path: 'src/app.ts', line: 10, body: 'Issue 1', side: 'RIGHT' }];
       const commitId = 'abc123def456';
       const mockResponse = { id: 789 };
 

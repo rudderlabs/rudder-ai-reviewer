@@ -63,6 +63,7 @@ export interface ReviewIssue {
   message: string;
   file: string;
   line: number;
+  startLine?: number;
   column?: number;
   impact: string;
   suggestedFix?: string;
@@ -81,6 +82,9 @@ export interface ReviewStats {
 
 export interface InlineComment {
   path: string;
-  line: number;
   body: string;
+  line: number;
+  start_line?: number;
+  side: string;
+  start_side?: string;
 }

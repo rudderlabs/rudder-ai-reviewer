@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import type { getOctokit } from '@actions/github';
 import { FileStatus } from '@core/pr-changes-detector';
 import type { GitHubPRContext } from '@core/shared/github';
+import type { InlineComment } from '@custom-types/review.types';
 
 export class GitHubClient {
   constructor(private readonly octokit: ReturnType<typeof getOctokit>) {}
@@ -195,7 +196,7 @@ export class GitHubClient {
    * Creates a PR review with inline comments
    *
    * @param context - GitHub PR context (owner, repo, prNumber)
-   * @param comments - Array of inline comments with path, line, and body
+   * @param comments - Array of inline comments formatted for GitHub API
    * @param event - Review event type (COMMENT, APPROVE, REQUEST_CHANGES)
    * @param commitId - Commit SHA to attach the review to
    * @param body - Optional review body/summary
@@ -203,7 +204,7 @@ export class GitHubClient {
    */
   async createReview(
     context: GitHubPRContext,
-    comments: Array<{ path: string; line: number; body: string }>,
+    comments: InlineComment[],
     event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES' = 'COMMENT',
     commitId?: string,
     body?: string
