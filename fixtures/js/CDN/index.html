@@ -186,6 +186,39 @@
 
       // TODO: Call other APIs here
       // Test app for PR reviewer action
+      console.log('test app for PR reviewer action');
+
+      function checkout() {
+        rudderanalytics.track('checkout', {
+          revenue: 100,
+          currency: 'INR',
+          user_actual_id: 12345,
+          items: [
+            {
+              id: '123',
+              name: 'Item 1',
+              price: 100,
+              quantity: 1,
+            },
+          ],
+        });
+      }
+
+      function purchase() {
+        rudderanalytics.track('purchase', {
+          revenue: 100,
+          currency: 'USD',
+          user_actual_id: 12345,
+          items: [
+            {
+              id: '123',
+              name: 'Item 1',
+              price: 100,
+              quantity: 1,
+            },
+          ],
+        });
+      }
     </script>
   </head>
   <body>
@@ -200,6 +233,10 @@
 
     <p data-testid="action" id="action"></p>
     <p data-testid="payload" id="rudderElement"></p>
+
+
+    <button data-testid="checkout-btn" onclick="checkout()">Checkout</button>
+    <button data-testid="purchase-btn" onclick="purchase()">Purchase</button>
 
     <script>
       function page() {
