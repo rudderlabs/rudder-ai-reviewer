@@ -75,6 +75,7 @@ async function run(): Promise<void> {
     core.info('📤 Sending code changes to PR Reviewer Service...');
     const reviewResponse = await serviceClient.postReview(payload);
     core.debug(`Review response: ${JSON.stringify(reviewResponse, null, 2)}`);
+    console.log('Review response: ', JSON.stringify(reviewResponse, null, 2));
 
     core.info('📤 Posting review comment to PR...');
     await postReviewComment(githubToken, prContext, reviewResponse);
