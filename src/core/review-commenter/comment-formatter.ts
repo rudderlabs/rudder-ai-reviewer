@@ -373,7 +373,7 @@ export function formatInlineComments(issues: ReviewIssue[]): InlineComment[] {
       side: 'RIGHT',
     };
 
-    if (issue.startLine && issue.startLine !== issue.line) {
+    if (issue.startLine) {
       comment.start_line = issue.startLine;
       comment.start_side = 'RIGHT';
     }
