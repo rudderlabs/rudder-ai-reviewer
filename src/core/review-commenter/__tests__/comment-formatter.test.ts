@@ -507,4 +507,50 @@ describe('buildInlineCommentsArray', () => {
     expect(result[0].body).toContain('**Suggested Fix:**');
     expect(result[0].body).toContain("track('event_name', { ...properties });");
   });
+
+  it('should handle multi-line comments with startLine', () => {
+    const issue: ReviewIssue = {
+      id: 'issue-1',
+      severity: 'warning',
+      category: 'best_practice',
+      message: 'Code block needs improvement',
+      file: 'src/app.ts',
+      line: 25,
+      startLine: 20,
+      impact: 'Medium',
+      relatedEvents: [],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].path).toBe('src/app.ts');
+    expect(result[0].line).toBe(25);
+    expect(result[0].start_line).toBe(20);
+    expect(result[0].side).toBe('RIGHT');
+    expect(result[0].start_side).toBe('RIGHT');
+    expect(result[0].body).toContain('⚠️');
+    expect(result[0].body).toContain('Code block needs improvement');
+  });
+
+  it('should format suggested fix as suggestion block when startLine is present', () => {
+    const issue: ReviewIssue = {
+      id: 'issue-1',
+      severity: 'error',
+      category: 'event_tracking',
+      message: 'Incorrect event properties',
+      file: 'src/tracking.ts',
+      line: 30,
+      startLine: 28,
+      impact: 'High',
+      suggestedFix: 'track("event_name", {\n  property1: value1,\n  property2: value2\n});',
+      relatedEvents: [],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].body).toContain('```suggestion');
+    expect(result[0].body).toContain('track("event_name", {');
+  });
 });
