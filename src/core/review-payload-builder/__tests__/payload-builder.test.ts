@@ -348,5 +348,33 @@ describe('ReviewPayloadBuilder', () => {
 
       await expect(builder.buildPayload(input)).rejects.toThrow('GitHub API error');
     });
+
+    it('should include existing review comments when present', async () => {
+      const mockExistingComments = [
+        { id: 123, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 1' },
+        { id: 456, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 2' },
+      ];
+
+      mockGitHubClient.findReviewComments = jest.fn().mockResolvedValue(mockExistingComments);
+
+      const input: PayloadBuilderInput = {
+        sourceId: 'test-source-id',
+        owner: 'test-owner',
+        repo: 'test-repo',
+        prChanges: mockPRChanges,
+      };
+
+      const builder = new ReviewPayloadBuilder(mockGitHubClient);
+      const payload = await builder.buildPayload(input);
+
+      expect(payload.existing_review_comments).toEqual([
+        { id: 123, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 1' },
+        { id: 456, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 2' },
+      ]);
+      expect(mockGitHubClient.findReviewComments).toHaveBeenCalledWith(
+        { owner: 'test-owner', repo: 'test-repo', prNumber: 123 },
+        expect.stringContaining('rudder-pr-reviewer-bot-inline')
+      );
+    });
   });
 });

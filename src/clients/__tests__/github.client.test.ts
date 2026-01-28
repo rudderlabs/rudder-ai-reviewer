@@ -660,5 +660,70 @@ describe('GitHubClient', () => {
         status: 'modified',
       });
     });
+
+    it('should handle patch with multiple hunks', async () => {
+      const mockFiles = [
+        {
+          filename: 'src/multi-hunk.ts',
+          status: 'modified',
+          additions: 5,
+          deletions: 2,
+          patch:
+            '@@ -5,3 +5,5 @@\n line1\n+line2\n line3\n@@ -20,2 +22,3 @@\n line4\n+line5\n line6',
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(1);
+      expect(result.get('src/multi-hunk.ts')).toEqual({
+        start: 5,
+        end: 24,
+        status: 'modified',
+      });
+    });
+
+    it('should handle patch with single line change', async () => {
+      const mockFiles = [
+        {
+          filename: 'src/single.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          patch: '@@ -15 +15,2 @@\n line\n+new line',
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(1);
+      expect(result.get('src/single.ts')).toEqual({
+        start: 15,
+        end: 16,
+        status: 'modified',
+      });
+    });
   });
 });
