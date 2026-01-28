@@ -26,4 +26,4 @@ jobs:
           github-token: ${{ github.token }}
           source-id: ${{ secrets.RUDDERSTACK_SOURCE_ID }}
           service-access-token: ${{ secrets.RUDDERSTACK_SERVICE_ACCESS_TOKEN }}
-          root-directory: .
+          root-directory: fixtures/js/CDN
