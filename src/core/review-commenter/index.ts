@@ -64,6 +64,7 @@ export async function postReviewComment(
     // Build and post inline comments
     if (inlineIssues.length > 0) {
       const inlineComments = formatInlineComments(inlineIssues);
+      console.log('Inline comments: ', JSON.stringify(inlineComments, null, 2));
       await githubClient.createReview(prContext, inlineComments, 'COMMENT', metadata.head_sha);
     }
   } catch (error) {
@@ -74,3 +75,4 @@ export async function postReviewComment(
 
 export type * from '@custom-types/review.types';
 export { formatReviewComment } from './comment-formatter';
+
