@@ -131,4 +131,102 @@ describe('PRChangesDetector', () => {
     const detector = new PRChangesDetector(mockGitHubClient as any);
     await expect(detector.detect(mockPRContext)).rejects.toThrow('API error');
   });
+
+  it('should filter files by root directory', async () => {
+    const mockPRMetadata = {
+      number: 123,
+      title: 'Test PR',
+      head_sha: 'abc123',
+      base_sha: 'def456',
+      head_ref: 'feature',
+      base_ref: 'main',
+    };
+
+    const mockFiles = [
+      {
+        filename: 'src/file1.ts',
+        status: 'modified',
+        additions: 10,
+        deletions: 5,
+        patch: '@@ -1,3 +1,5 @@ test',
+      },
+      {
+        filename: 'docs/README.md',
+        status: 'modified',
+        additions: 5,
+        deletions: 2,
+        patch: '@@ -1,1 +1,2 @@ readme',
+      },
+      {
+        filename: 'package.json',
+        status: 'modified',
+        additions: 1,
+        deletions: 1,
+        patch: '@@ -1,1 +1,1 @@ package',
+      },
+    ];
+
+    const mockGitHubClient = {
+      getPRMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
+      getChangedFiles: jest.fn().mockResolvedValue(mockFiles),
+    };
+
+    const detector = new PRChangesDetector(mockGitHubClient as any);
+    const result = await detector.detect(mockPRContext, 'src');
+
+    expect(result.pull_request.files_changed_count).toBe(1);
+    expect(result.pull_request.lines_added).toBe(10);
+    expect(result.pull_request.lines_deleted).toBe(5);
+    expect(result.diff_context).toHaveLength(1);
+    expect(result.diff_context[0].file_path).toBe('src/file1.ts');
+  });
+
+  it('should handle nested directories in root path filtering', async () => {
+    const mockPRMetadata = {
+      number: 123,
+      title: 'Test PR',
+      head_sha: 'abc123',
+      base_sha: 'def456',
+      head_ref: 'feature',
+      base_ref: 'main',
+    };
+
+    const mockFiles = [
+      {
+        filename: 'src/core/module1.ts',
+        status: 'modified',
+        additions: 15,
+        deletions: 3,
+        patch: '@@ -1,3 +1,5 @@ test',
+      },
+      {
+        filename: 'src/utils/helper.ts',
+        status: 'added',
+        additions: 25,
+        deletions: 0,
+        patch: '@@ -0,0 +1,25 @@ helper',
+      },
+      {
+        filename: 'tests/unit/test.ts',
+        status: 'added',
+        additions: 50,
+        deletions: 0,
+        patch: '@@ -0,0 +1,50 @@ test',
+      },
+    ];
+
+    const mockGitHubClient = {
+      getPRMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
+      getChangedFiles: jest.fn().mockResolvedValue(mockFiles),
+    };
+
+    const detector = new PRChangesDetector(mockGitHubClient as any);
+    const result = await detector.detect(mockPRContext, 'src/core');
+
+    expect(result.pull_request.files_changed_count).toBe(1);
+    expect(result.pull_request.lines_added).toBe(15);
+    expect(result.pull_request.lines_deleted).toBe(3);
+    expect(result.diff_context).toHaveLength(1);
+    expect(result.diff_context[0].file_path).toBe('src/core/module1.ts');
+  });
 });

@@ -1,5 +1,5 @@
-name: 'RudderStack PR Reviewer'
-description: 'Analyzes RudderStack SDK instrumentation changes in pull requests'
+name: 'Rudder AI Reviewer'
+description: 'Analyzes RudderStack SDK instrumentation changes in pull requests using AI'
 author: 'RudderStack'
 
 branding:

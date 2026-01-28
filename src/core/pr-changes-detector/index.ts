@@ -9,16 +9,18 @@ import type { PRChangesResult } from './types';
  *
  * @param githubToken - GitHub token for API authentication
  * @param prContext - GitHub PR context (owner, repo, prNumber)
+ * @param rootDirectory - Optional root directory to filter changed files (default: '.')
  */
 export async function detectPRChanges(
   githubToken: string,
-  prContext: GitHubPRContext
+  prContext: GitHubPRContext,
+  rootDirectory = '.'
 ): Promise<PRChangesResult> {
   const octokit = getOctokit(githubToken);
   const githubClient = new GitHubClient(octokit);
   const detector = new PRChangesDetector(githubClient);
 
-  return detector.detect(prContext);
+  return detector.detect(prContext, rootDirectory);
 }
 
 export type { DiffFile, FileStatus, PRChangesResult } from './types';
