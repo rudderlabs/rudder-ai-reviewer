@@ -18,7 +18,7 @@ describe('CommentSplitter', () => {
   ): ReviewIssue => ({
     id,
     severity,
-    category: 'event_tracking',
+    category: 'tracking_plan_violation',
     message: `Issue ${id}`,
     file,
     line: line,
@@ -108,7 +108,7 @@ describe('CommentSplitter', () => {
       const mockGitHubClient = {} as GitHubClient;
       const splitter = new CommentSplitter(mockGitHubClient);
 
-      const [eligible, skipped] = splitter.filterInlineEligibleIssues(issues, changedFiles);
+      const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
 
       expect(eligible).toHaveLength(3);
       expect(eligible.map(i => i.id)).toEqual(['1', '2', '3']);
@@ -127,7 +127,7 @@ describe('CommentSplitter', () => {
       const mockGitHubClient = {} as GitHubClient;
       const splitter = new CommentSplitter(mockGitHubClient);
 
-      const [eligible, skipped] = splitter.filterInlineEligibleIssues(issues, changedFiles);
+      const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
 
       expect(eligible).toHaveLength(1);
       expect(eligible[0].id).toBe('2');
@@ -149,7 +149,7 @@ describe('CommentSplitter', () => {
       const mockGitHubClient = {} as GitHubClient;
       const splitter = new CommentSplitter(mockGitHubClient);
 
-      const [eligible, skipped] = splitter.filterInlineEligibleIssues(issues, changedFiles);
+      const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
 
       expect(eligible).toHaveLength(1);
       expect(eligible[0].id).toBe('2');
@@ -168,7 +168,7 @@ describe('CommentSplitter', () => {
       const mockGitHubClient = {} as GitHubClient;
       const splitter = new CommentSplitter(mockGitHubClient);
 
-      const [eligible, skipped] = splitter.filterInlineEligibleIssues(issues, changedFiles);
+      const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
 
       expect(eligible).toHaveLength(1);
       expect(eligible[0].id).toBe('1');
@@ -182,7 +182,7 @@ describe('CommentSplitter', () => {
       const mockGitHubClient = {} as GitHubClient;
       const splitter = new CommentSplitter(mockGitHubClient);
 
-      const [eligible, skipped] = splitter.filterInlineEligibleIssues([], changedFiles);
+      const { eligible, skipped } = splitter.filterInlineEligibleIssues([], changedFiles);
 
       expect(eligible).toHaveLength(0);
       expect(skipped).toHaveLength(0);
@@ -196,7 +196,7 @@ describe('CommentSplitter', () => {
       const mockGitHubClient = {} as GitHubClient;
       const splitter = new CommentSplitter(mockGitHubClient);
 
-      const [eligible, skipped] = splitter.filterInlineEligibleIssues(issues, changedFiles);
+      const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
 
       expect(eligible).toHaveLength(0);
       expect(skipped).toHaveLength(1);

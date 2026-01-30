@@ -40,7 +40,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_001',
             severity: 'error',
-            category: 'event_tracking',
+            category: 'missing_event',
             message: 'Missing event name in track() call',
             file: 'src/analytics.ts',
             line: 23,
@@ -189,7 +189,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_004',
             severity: 'error',
-            category: 'event_tracking',
+            category: 'missing_event',
             message: 'Missing required property',
             file: 'src/analytics.ts',
             line: 10,
@@ -199,7 +199,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_005',
             severity: 'error',
-            category: 'event_tracking',
+            category: 'incorrect_property',
             message: 'Invalid event name format',
             file: 'src/analytics.ts',
             line: 20,
@@ -209,7 +209,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_006',
             severity: 'error',
-            category: 'reliability',
+            category: 'deprecated_api',
             message: 'Missing error handler',
             file: 'src/tracker.ts',
             line: 5,
@@ -269,7 +269,7 @@ describe('comment-formatter', () => {
           },
           {
             name: 'old_event',
-            status: 'deleted',
+            status: 'removed',
             file: 'src/legacy.ts',
             line: 5,
           },
@@ -290,7 +290,7 @@ describe('comment-formatter', () => {
       expect(result).toContain('Events Detected (3)');
       expect(result).toContain('✅ added');
       expect(result).toContain('✏️ modified');
-      expect(result).toContain('🗑️ deleted');
+      expect(result).toContain('🗑️ removed');
       expect(result).toContain('page_view');
       expect(result).toContain('button_click');
       expect(result).toContain('old_event');
@@ -369,7 +369,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_008',
             severity: 'error',
-            category: 'event_tracking',
+            category: 'tracking_plan_violation',
             message: 'Test issue with link',
             file: 'src/analytics.ts',
             line: 23,
@@ -412,7 +412,7 @@ describe('buildInlineCommentsArray', () => {
       {
         id: 'issue-1',
         severity: 'error',
-        category: 'event_tracking',
+        category: 'tracking_plan_violation',
         message: 'Error 1',
         file: 'src/app.ts',
         line: 10,
@@ -451,7 +451,7 @@ describe('buildInlineCommentsArray', () => {
       {
         id: 'issue-1',
         severity: 'error',
-        category: 'event_tracking',
+        category: 'tracking_plan_violation',
         message: 'Error in app',
         file: 'src/app.ts',
         line: 10,
@@ -461,7 +461,7 @@ describe('buildInlineCommentsArray', () => {
       {
         id: 'issue-2',
         severity: 'error',
-        category: 'event_tracking',
+        category: 'missing_event',
         message: 'Error in utils',
         file: 'src/utils.ts',
         line: 10,
@@ -487,7 +487,7 @@ describe('buildInlineCommentsArray', () => {
     const issue: ReviewIssue = {
       id: 'RS_JS_001',
       severity: 'error',
-      category: 'event_tracking',
+      category: 'tracking_plan_violation',
       message: 'Missing event name in track() call',
       file: 'src/analytics.ts',
       line: 23,
@@ -537,7 +537,7 @@ describe('buildInlineCommentsArray', () => {
     const issue: ReviewIssue = {
       id: 'issue-1',
       severity: 'error',
-      category: 'event_tracking',
+      category: 'tracking_plan_violation',
       message: 'Incorrect event properties',
       file: 'src/tracking.ts',
       line: 30,

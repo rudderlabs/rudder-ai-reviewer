@@ -229,7 +229,7 @@ function formatIssueItem(issue: ReviewIssue, index: number, githubContext: GitHu
 }
 
 function getFileExtension(file: string): string {
-  return file.split('.').pop() || '';
+  return file.split('.').pop() || 'text';
 }
 
 /**
@@ -242,7 +242,7 @@ function formatEventsTable(
   let table = `| Status | Event | Location | Properties |\n`;
   table += `|--------|-------|----------|------------|\n`;
 
-  const statusOrder: EventStatus[] = ['added', 'modified', 'deleted', 'unchanged'];
+  const statusOrder: EventStatus[] = ['added', 'modified', 'removed', 'unchanged'];
 
   statusOrder.forEach(status => {
     const events = eventsByStatus[status] || [];
@@ -281,7 +281,7 @@ function getEventStatusIcon(status: EventStatus): string {
   const icons: Record<EventStatus, string> = {
     added: '✅',
     modified: '✏️',
-    deleted: '🗑️',
+    removed: '🗑️',
     unchanged: '📍',
   };
   return icons[status] || '•';
@@ -373,7 +373,7 @@ export function formatInlineComments(issues: ReviewIssue[]): InlineComment[] {
       side: 'RIGHT',
     };
 
-    if (issue.startLine) {
+    if (issue.startLine && issue.startLine < issue.line) {
       comment.start_line = issue.startLine;
       comment.start_side = 'RIGHT';
     }

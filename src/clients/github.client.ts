@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import type { getOctokit } from '@actions/github';
 import { FileStatus } from '@core/pr-changes-detector';
 import type { GitHubPRContext } from '@core/shared/github';
+import { GitHubPRMetadata } from '@custom-types/github.types';
 import type { InlineComment } from '@custom-types/review.types';
 
 export class GitHubClient {
@@ -75,14 +76,7 @@ export class GitHubClient {
    *
    * @param context - GitHub PR context (owner, repo, prNumber)
    */
-  async getPRMetadata(context: GitHubPRContext): Promise<{
-    number: number;
-    title: string;
-    head_sha: string;
-    base_sha: string;
-    head_ref: string;
-    base_ref: string;
-  }> {
+  async getPRMetadata(context: GitHubPRContext): Promise<GitHubPRMetadata> {
     const { owner, repo, prNumber } = context;
 
     const { data: pr } = await this.octokit.rest.pulls.get({
@@ -253,6 +247,8 @@ export class GitHubClient {
             end: lineRanges.end,
             status: file.status,
           });
+        } else {
+          core.warning(`Skipping file '${file.filename}' due to patch parsing failure`);
         }
       } else {
         // For files without patch or removed files, set a default range
@@ -292,6 +288,9 @@ export class GitHubClient {
     }
 
     if (minLine === Number.MAX_SAFE_INTEGER || maxLine === 0) {
+      core.warning(
+        `Failed to parse patch line ranges. Patch format may be invalid or contain no valid hunks. Patch preview: ${patch.substring(0, 200)}`
+      );
       return null;
     }
 

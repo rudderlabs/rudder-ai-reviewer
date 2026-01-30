@@ -3,7 +3,7 @@ import * as github from '@actions/github';
 import { PRReviewerServiceClient } from '@clients/pr-reviewer-service.client';
 import { detectFrameworks } from '@core/framework-detector';
 import { detectPRChanges } from '@core/pr-changes-detector';
-import { postReviewComment } from '@core/review-commenter';
+import { postAIReviewerComments } from '@core/review-commenter';
 import { buildReviewPayload } from '@core/review-payload-builder';
 import { detectSDK } from '@core/sdk-detector';
 import type { GitHubPRContext } from '@core/shared/github';
@@ -77,7 +77,7 @@ async function run(): Promise<void> {
     core.debug(`Review response: ${JSON.stringify(reviewResponse, null, 2)}`);
 
     core.info('📤 Posting review comment to PR...');
-    await postReviewComment(githubToken, prContext, reviewResponse);
+    await postAIReviewerComments(githubToken, prContext, reviewResponse);
 
     core.info('✨ Rudder AI Reviewer completed successfully!');
     core.setOutput('status', 'success');
