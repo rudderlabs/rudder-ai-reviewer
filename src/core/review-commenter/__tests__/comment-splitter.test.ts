@@ -202,5 +202,43 @@ describe('CommentSplitter', () => {
       expect(skipped).toHaveLength(1);
       expect(skipped[0].id).toBe('1');
     });
+
+    it('should skip issues with invalid line numbers (zero)', () => {
+      const issues: ReviewIssue[] = [
+        mockIssue('1', 'src/app.ts', 0),
+        mockIssue('2', 'src/app.ts', 10),
+      ];
+
+      const changedFiles = new Map([['src/app.ts', { start: 1, end: 20, status: 'modified' }]]);
+
+      const mockGitHubClient = {} as GitHubClient;
+      const splitter = new CommentSplitter(mockGitHubClient);
+
+      const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
+
+      expect(eligible).toHaveLength(1);
+      expect(eligible[0].id).toBe('2');
+      expect(skipped).toHaveLength(1);
+      expect(skipped[0].id).toBe('1');
+    });
+
+    it('should skip issues with invalid line numbers (negative)', () => {
+      const issues: ReviewIssue[] = [
+        mockIssue('1', 'src/app.ts', -5),
+        mockIssue('2', 'src/app.ts', 15),
+      ];
+
+      const changedFiles = new Map([['src/app.ts', { start: 10, end: 20, status: 'modified' }]]);
+
+      const mockGitHubClient = {} as GitHubClient;
+      const splitter = new CommentSplitter(mockGitHubClient);
+
+      const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
+
+      expect(eligible).toHaveLength(1);
+      expect(eligible[0].id).toBe('2');
+      expect(skipped).toHaveLength(1);
+      expect(skipped[0].id).toBe('1');
+    });
   });
 });

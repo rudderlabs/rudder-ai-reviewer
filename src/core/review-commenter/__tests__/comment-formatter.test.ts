@@ -553,4 +553,46 @@ describe('buildInlineCommentsArray', () => {
     expect(result[0].body).toContain('```suggestion');
     expect(result[0].body).toContain('track("event_name", {');
   });
+
+  it('should not include start_line when startLine equals line', () => {
+    const issue: ReviewIssue = {
+      id: 'issue-1',
+      severity: 'warning',
+      category: 'best_practice',
+      message: 'Test issue',
+      file: 'src/app.ts',
+      line: 25,
+      startLine: 25,
+      impact: 'Medium',
+      relatedEvents: [],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].line).toBe(25);
+    expect(result[0].start_line).toBeUndefined();
+    expect(result[0].start_side).toBeUndefined();
+  });
+
+  it('should not include start_line when startLine is greater than line', () => {
+    const issue: ReviewIssue = {
+      id: 'issue-1',
+      severity: 'warning',
+      category: 'best_practice',
+      message: 'Test issue',
+      file: 'src/app.ts',
+      line: 20,
+      startLine: 25,
+      impact: 'Medium',
+      relatedEvents: [],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].line).toBe(20);
+    expect(result[0].start_line).toBeUndefined();
+    expect(result[0].start_side).toBeUndefined();
+  });
 });
