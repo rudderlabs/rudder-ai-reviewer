@@ -10,21 +10,18 @@ export class CommentSplitter {
     issues: ReviewIssue[]
   ): Promise<{ inlineIssues: ReviewIssue[]; summaryIssues: ReviewIssue[] }> {
     const changedFilesMap = await this.githubClient.getChangedFilesMap(prContext);
-    const [eligibleInlineIssues, skippedInlineIssues] = this.filterInlineEligibleIssues(
-      issues,
-      changedFilesMap
-    );
+    const { eligible, skipped } = this.filterInlineEligibleIssues(issues, changedFilesMap);
 
     return {
-      inlineIssues: eligibleInlineIssues,
-      summaryIssues: skippedInlineIssues,
+      inlineIssues: eligible,
+      summaryIssues: skipped,
     };
   }
 
   filterInlineEligibleIssues(
     issues: ReviewIssue[],
     changedFiles: Map<string, { start: number; end: number; status: string }>
-  ): [ReviewIssue[], ReviewIssue[]] {
+  ): { eligible: ReviewIssue[]; skipped: ReviewIssue[] } {
     const eligible: ReviewIssue[] = [];
     const skipped: ReviewIssue[] = [];
 
@@ -44,6 +41,6 @@ export class CommentSplitter {
       eligible.push(issue);
     });
 
-    return [eligible, skipped];
+    return { eligible, skipped };
   }
 }

@@ -75,4 +75,3 @@ export async function postReviewComment(
 
 export type * from '@custom-types/review.types';
 export { formatReviewComment } from './comment-formatter';
-
