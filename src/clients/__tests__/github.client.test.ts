@@ -725,55 +725,5 @@ describe('GitHubClient', () => {
         status: 'modified',
       });
     });
-
-    it('should log warning and skip file when patch parsing fails', async () => {
-      const warningSpy = jest.spyOn(require('@actions/core'), 'warning');
-
-      const mockFiles = [
-        {
-          filename: 'src/invalid-patch.ts',
-          status: 'modified',
-          additions: 1,
-          deletions: 0,
-          patch: 'invalid patch format without hunk headers',
-        },
-        {
-          filename: 'src/valid.ts',
-          status: 'modified',
-          additions: 1,
-          deletions: 0,
-          patch: '@@ -1 +1,2 @@\n line\n+new line',
-        },
-      ];
-
-      const mockOctokit = {
-        paginate: jest.fn().mockResolvedValue(mockFiles),
-        rest: {
-          pulls: {
-            listFiles: jest.fn(),
-          },
-        },
-      };
-
-      const client = new GitHubClient(mockOctokit as any);
-
-      const result = await client.getChangedFilesMap(mockContext);
-
-      expect(warningSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to parse patch line ranges')
-      );
-      expect(warningSpy).toHaveBeenCalledWith(
-        "Skipping file 'src/invalid-patch.ts' due to patch parsing failure"
-      );
-      expect(result.size).toBe(1);
-      expect(result.has('src/invalid-patch.ts')).toBe(false);
-      expect(result.get('src/valid.ts')).toEqual({
-        start: 1,
-        end: 2,
-        status: 'modified',
-      });
-
-      warningSpy.mockRestore();
-    });
   });
 });

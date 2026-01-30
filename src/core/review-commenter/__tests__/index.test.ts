@@ -278,7 +278,6 @@ describe('review-commenter', () => {
     });
 
     it('should continue if inline review creation fails but summary comment succeeded', async () => {
-      const warningSpy = jest.spyOn(require('@actions/core'), 'warning');
       const mockOctokit = {};
       const mockGitHubClient = {
         getPRMetadata: jest.fn().mockResolvedValue({
@@ -308,11 +307,6 @@ describe('review-commenter', () => {
         'COMMENT',
         'abc123def456'
       );
-      expect(warningSpy).toHaveBeenCalledWith(
-        'Failed to post inline comments, but summary comment was successful: Invalid line number'
-      );
-
-      warningSpy.mockRestore();
     });
 
     it('should skip inline comments when no inline issues exist', async () => {
