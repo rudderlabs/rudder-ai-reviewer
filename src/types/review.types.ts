@@ -85,6 +85,6 @@ export interface InlineComment {
   body: string;
   line: number;
   start_line?: number;
-  side: string;
-  start_side?: string;
+  side: 'LEFT' | 'RIGHT';
+  start_side?: 'LEFT' | 'RIGHT';
 }

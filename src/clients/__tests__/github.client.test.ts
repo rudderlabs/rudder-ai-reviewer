@@ -1,4 +1,5 @@
 import type { GitHubPRContext } from '@core/shared/github';
+import { InlineComment } from '@custom-types/review.types';
 import { GitHubClient } from '../github.client';
 
 describe('GitHubClient', () => {
@@ -446,7 +447,7 @@ describe('GitHubClient', () => {
 
   describe('createReview', () => {
     it('should create review with inline comments successfully', async () => {
-      const inlineComments = [
+      const inlineComments: InlineComment[] = [
         { path: 'src/app.ts', line: 10, body: 'Issue 1', side: 'RIGHT' },
         { path: 'src/utils.ts', line: 20, body: 'Issue 2', side: 'RIGHT' },
       ];
@@ -477,7 +478,7 @@ describe('GitHubClient', () => {
     });
 
     it('should create review with commit_id when provided', async () => {
-      const inlineComments = [{ path: 'src/app.ts', line: 10, body: 'Issue 1', side: 'RIGHT' }];
+      const inlineComments: InlineComment[] = [{ path: 'src/app.ts', line: 10, body: 'Issue 1', side: 'RIGHT' }];
       const commitId = 'abc123def456';
       const mockResponse = { id: 789 };
 
