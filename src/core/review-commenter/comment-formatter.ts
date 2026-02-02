@@ -1,13 +1,15 @@
 import type {
   EventDetection,
   EventStatus,
+  InlineComment,
   IssueSeverity,
   ReviewIssue,
   ReviewResponse,
   ReviewStats,
   SDKInfo,
 } from '@custom-types/review.types';
-import { COMMENT_MARKER } from '@utils/constants';
+import { COMMENT_INLINE_MARKER, COMMENT_SUMMARY_MARKER } from '@utils/constants';
+import path from 'node:path';
 
 export interface GitHubContext {
   owner: string;
@@ -17,7 +19,7 @@ export interface GitHubContext {
 
 export function formatReviewComment(review: ReviewResponse, githubContext: GitHubContext): string {
   const sections: string[] = [
-    COMMENT_MARKER,
+    COMMENT_SUMMARY_MARKER,
     formatHeader(review),
     formatSummarySection(review),
     formatIssuesSection(review, githubContext),
@@ -228,7 +230,8 @@ function formatIssueItem(issue: ReviewIssue, index: number, githubContext: GitHu
 }
 
 function getFileExtension(file: string): string {
-  return file.split('.').pop() || '';
+  const ext = path.extname(file);
+  return ext ? ext.slice(1) : 'text';
 }
 
 /**
@@ -241,7 +244,7 @@ function formatEventsTable(
   let table = `| Status | Event | Location | Properties |\n`;
   table += `|--------|-------|----------|------------|\n`;
 
-  const statusOrder: EventStatus[] = ['added', 'modified', 'deleted', 'unchanged'];
+  const statusOrder: EventStatus[] = ['added', 'modified', 'removed', 'unchanged'];
 
   statusOrder.forEach(status => {
     const events = eventsByStatus[status] || [];
@@ -280,7 +283,7 @@ function getEventStatusIcon(status: EventStatus): string {
   const icons: Record<EventStatus, string> = {
     added: '✅',
     modified: '✏️',
-    deleted: '🗑️',
+    removed: '🗑️',
     unchanged: '📍',
   };
   return icons[status] || '•';
@@ -316,4 +319,67 @@ function groupEventsByStatus(events: EventDetection[]): Record<string, EventDete
     },
     {} as Record<string, EventDetection[]>
   );
+}
+
+/**
+ * Formats issue details (impact, destinations, suggested fix)
+ */
+function formatIssueDetails(issue: ReviewIssue): string {
+  let details = '';
+
+  if (issue.impact) {
+    details += `**Impact:** ${issue.impact}\n\n`;
+  }
+
+  if (issue.affectedDestinations && issue.affectedDestinations.length > 0) {
+    details += `**Affected Destinations:** ${issue.affectedDestinations.join(', ')}\n\n`;
+  }
+
+  if (issue.suggestedFix) {
+    if (issue.startLine) {
+      details += `**Suggested Fix:**\n\n\`\`\`suggestion\n${issue.suggestedFix}\n\`\`\`\n\n`;
+    } else {
+      details += `**Suggested Fix:**\n\n\`\`\`${getFileExtension(issue.file)}\n${issue.suggestedFix}\n\`\`\`\n\n`;
+    }
+  }
+
+  return details;
+}
+
+/**
+ * Formats a single issue as inline comment body
+ *
+ * @param issue - Review issue to format
+ * @returns Markdown string for inline comment
+ */
+function formatCommentBody(issue: ReviewIssue): string {
+  const icon = getSeverityIcon(issue.severity);
+  let body = `${icon} **${issue.message}**\n\n`;
+  body += formatIssueDetails(issue);
+  body += `\n\n<sub>${COMMENT_INLINE_MARKER}</sub>`;
+  return body;
+}
+
+/**
+ * Builds inline comments array from issues
+ *
+ * @param issues - Issues to convert to inline comments
+ * @returns Array of inline comments formatted for GitHub API
+ */
+export function formatInlineComments(issues: ReviewIssue[]): InlineComment[] {
+  return issues.map(issue => {
+    const comment: InlineComment = {
+      path: issue.file,
+      body: formatCommentBody(issue),
+      line: issue.line,
+      side: 'RIGHT',
+    };
+
+    if (issue.startLine && issue.startLine < issue.line) {
+      comment.start_line = issue.startLine;
+      comment.start_side = 'RIGHT';
+    }
+
+    return comment;
+  });
 }

@@ -1,15 +1,17 @@
 import type { GitHubPRContext } from '@core/shared/github/pr-context';
 import type { ReviewResponse } from '@custom-types/review.types';
-import { COMMENT_MARKER } from '@utils/constants';
-import { postReviewComment } from '../index';
+import { COMMENT_SUMMARY_MARKER } from '@utils/constants';
+import { postAIReviewerComments } from '../index';
 
 jest.mock('@actions/github');
 jest.mock('@clients/github.client');
 jest.mock('../comment-formatter');
+jest.mock('../comment-splitter');
 
 import { getOctokit } from '@actions/github';
 import { GitHubClient } from '@clients/github.client';
-import { formatReviewComment } from '../comment-formatter';
+import { formatInlineComments, formatReviewComment } from '../comment-formatter';
+import { CommentSplitter } from '../comment-splitter';
 
 describe('review-commenter', () => {
   const mockContext: GitHubPRContext = {
@@ -55,6 +57,20 @@ describe('review-commenter', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (formatInlineComments as jest.Mock).mockImplementation(issues =>
+      issues.map((issue: any) => ({
+        path: issue.file,
+        line: issue.line,
+        body: `Mock inline comment for ${issue.id}`,
+        issueId: issue.id,
+      }))
+    );
+    (CommentSplitter as jest.Mock).mockImplementation(() => ({
+      getInlineAndSummaryIssues: jest.fn().mockResolvedValue({
+        inlineIssues: mockReview.issues,
+        summaryIssues: [],
+      }),
+    }));
   });
 
   describe('postReviewComment', () => {
@@ -71,25 +87,30 @@ describe('review-commenter', () => {
         }),
         findComment: jest.fn().mockResolvedValue(null),
         createComment: jest.fn().mockResolvedValue(123),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
       (formatReviewComment as jest.Mock).mockReturnValue(formattedComment);
 
-      await postReviewComment('test-token', mockContext, mockReview);
+      await postAIReviewerComments('test-token', mockContext, mockReview);
 
       expect(getOctokit).toHaveBeenCalledWith('test-token');
       expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
       expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockContext);
-      expect(formatReviewComment).toHaveBeenCalledWith(mockReview, {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        commitSha: 'abc123def456',
-      });
-      expect(mockGitHubClient.findComment).toHaveBeenCalledWith(mockContext, COMMENT_MARKER);
+      expect(mockGitHubClient.findComment).toHaveBeenCalledWith(
+        mockContext,
+        COMMENT_SUMMARY_MARKER
+      );
       expect(mockGitHubClient.createComment).toHaveBeenCalledWith(mockContext, formattedComment);
+      expect(mockGitHubClient.createReview).toHaveBeenCalledWith(
+        mockContext,
+        expect.any(Array),
+        'COMMENT',
+        'abc123def456'
+      );
     });
 
     it('should update existing comment when one exists', async () => {
@@ -106,28 +127,33 @@ describe('review-commenter', () => {
         }),
         findComment: jest.fn().mockResolvedValue(existingCommentId),
         updateComment: jest.fn().mockResolvedValue(undefined),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nUpdated`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nUpdated`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
       (formatReviewComment as jest.Mock).mockReturnValue(formattedComment);
 
-      await postReviewComment('test-token', mockContext, mockReview);
+      await postAIReviewerComments('test-token', mockContext, mockReview);
 
       expect(getOctokit).toHaveBeenCalledWith('test-token');
       expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
       expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockContext);
-      expect(formatReviewComment).toHaveBeenCalledWith(mockReview, {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        commitSha: 'abc123def456',
-      });
-      expect(mockGitHubClient.findComment).toHaveBeenCalledWith(mockContext, COMMENT_MARKER);
+      expect(mockGitHubClient.findComment).toHaveBeenCalledWith(
+        mockContext,
+        COMMENT_SUMMARY_MARKER
+      );
       expect(mockGitHubClient.updateComment).toHaveBeenCalledWith(
         mockContext,
         existingCommentId,
         formattedComment
+      );
+      expect(mockGitHubClient.createReview).toHaveBeenCalledWith(
+        mockContext,
+        expect.any(Array),
+        'COMMENT',
+        'abc123def456'
       );
     });
 
@@ -144,6 +170,7 @@ describe('review-commenter', () => {
         }),
         findComment: jest.fn(),
         createComment: jest.fn(),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
@@ -152,8 +179,8 @@ describe('review-commenter', () => {
         throw new Error('Formatting failed');
       });
 
-      await expect(postReviewComment('test-token', mockContext, mockReview)).rejects.toThrow(
-        'Failed to post review comment: Formatting failed'
+      await expect(postAIReviewerComments('test-token', mockContext, mockReview)).rejects.toThrow(
+        'Failed to post AI reviewer comments: Formatting failed'
       );
     });
 
@@ -169,15 +196,16 @@ describe('review-commenter', () => {
           base_ref: 'main',
         }),
         findComment: jest.fn().mockRejectedValue(new Error('API error')),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
       (formatReviewComment as jest.Mock).mockReturnValue(formattedComment);
 
-      await expect(postReviewComment('test-token', mockContext, mockReview)).rejects.toThrow(
-        'Failed to post review comment: API error'
+      await expect(postAIReviewerComments('test-token', mockContext, mockReview)).rejects.toThrow(
+        'Failed to post AI reviewer comments: Failed to post summary comment: API error'
       );
     });
 
@@ -194,15 +222,16 @@ describe('review-commenter', () => {
         }),
         findComment: jest.fn().mockResolvedValue(null),
         createComment: jest.fn().mockRejectedValue(new Error('Rate limit exceeded')),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
       (formatReviewComment as jest.Mock).mockReturnValue(formattedComment);
 
-      await expect(postReviewComment('test-token', mockContext, mockReview)).rejects.toThrow(
-        'Failed to post review comment: Rate limit exceeded'
+      await expect(postAIReviewerComments('test-token', mockContext, mockReview)).rejects.toThrow(
+        'Failed to post AI reviewer comments: Failed to post summary comment: Rate limit exceeded'
       );
     });
 
@@ -220,15 +249,16 @@ describe('review-commenter', () => {
         }),
         findComment: jest.fn().mockResolvedValue(existingCommentId),
         updateComment: jest.fn().mockRejectedValue(new Error('Comment not found')),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
-      const formattedComment = `${COMMENT_MARKER}\n## Review\nContent`;
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
       (formatReviewComment as jest.Mock).mockReturnValue(formattedComment);
 
-      await expect(postReviewComment('test-token', mockContext, mockReview)).rejects.toThrow(
-        'Failed to post review comment: Comment not found'
+      await expect(postAIReviewerComments('test-token', mockContext, mockReview)).rejects.toThrow(
+        'Failed to post AI reviewer comments: Failed to post summary comment: Comment not found'
       );
     });
 
@@ -236,14 +266,80 @@ describe('review-commenter', () => {
       const mockOctokit = {};
       const mockGitHubClient = {
         getPRMetadata: jest.fn().mockRejectedValue(new Error('Failed to fetch PR')),
+        createReview: jest.fn().mockResolvedValue(undefined),
       };
 
       (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
       (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
 
-      await expect(postReviewComment('test-token', mockContext, mockReview)).rejects.toThrow(
-        'Failed to post review comment: Failed to fetch PR'
+      await expect(postAIReviewerComments('test-token', mockContext, mockReview)).rejects.toThrow(
+        'Failed to post AI reviewer comments: Failed to fetch PR'
       );
+    });
+
+    it('should continue if inline review creation fails but summary comment succeeded', async () => {
+      const mockOctokit = {};
+      const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockResolvedValue({
+          number: 123,
+          title: 'Test PR',
+          head_sha: 'abc123def456',
+          base_sha: 'base456',
+          head_ref: 'feature',
+          base_ref: 'main',
+        }),
+        findComment: jest.fn().mockResolvedValue(null),
+        createComment: jest.fn().mockResolvedValue(123),
+        createReview: jest.fn().mockRejectedValue(new Error('Invalid line number')),
+      };
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
+
+      (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
+      (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
+      (formatReviewComment as jest.Mock).mockReturnValue(formattedComment);
+
+      await postAIReviewerComments('test-token', mockContext, mockReview);
+
+      expect(mockGitHubClient.createComment).toHaveBeenCalledWith(mockContext, formattedComment);
+      expect(mockGitHubClient.createReview).toHaveBeenCalledWith(
+        mockContext,
+        expect.any(Array),
+        'COMMENT',
+        'abc123def456'
+      );
+    });
+
+    it('should skip inline comments when no inline issues exist', async () => {
+      const mockOctokit = {};
+      const mockGitHubClient = {
+        getPRMetadata: jest.fn().mockResolvedValue({
+          number: 123,
+          title: 'Test PR',
+          head_sha: 'abc123def456',
+          base_sha: 'base456',
+          head_ref: 'feature',
+          base_ref: 'main',
+        }),
+        findComment: jest.fn().mockResolvedValue(null),
+        createComment: jest.fn().mockResolvedValue(123),
+        createReview: jest.fn().mockResolvedValue(undefined),
+      };
+      const formattedComment = `${COMMENT_SUMMARY_MARKER}\n## Review\nContent`;
+
+      (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
+      (GitHubClient as jest.Mock).mockImplementation(() => mockGitHubClient);
+      (formatReviewComment as jest.Mock).mockReturnValue(formattedComment);
+      (CommentSplitter as jest.Mock).mockImplementation(() => ({
+        getInlineAndSummaryIssues: jest.fn().mockResolvedValue({
+          inlineIssues: [],
+          summaryIssues: mockReview.issues,
+        }),
+      }));
+
+      await postAIReviewerComments('test-token', mockContext, mockReview);
+
+      expect(mockGitHubClient.createComment).toHaveBeenCalledWith(mockContext, formattedComment);
+      expect(mockGitHubClient.createReview).not.toHaveBeenCalled();
     });
   });
 });

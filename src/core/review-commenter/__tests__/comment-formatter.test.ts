@@ -1,5 +1,5 @@
-import type { ReviewResponse } from '@custom-types/review.types';
-import { formatReviewComment } from '../comment-formatter';
+import type { ReviewIssue, ReviewResponse } from '@custom-types/review.types';
+import { formatInlineComments, formatReviewComment } from '../comment-formatter';
 
 describe('comment-formatter', () => {
   const mockGitHubContext = {
@@ -40,7 +40,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_001',
             severity: 'error',
-            category: 'event_tracking',
+            category: 'missing_event',
             message: 'Missing event name in track() call',
             file: 'src/analytics.ts',
             line: 23,
@@ -73,7 +73,7 @@ describe('comment-formatter', () => {
 
       const result = formatReviewComment(review, mockGitHubContext);
 
-      expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
+      expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('🔴 Rudder AI Reviewer');
       expect(result).toContain('📦 **rudderstack-javascript-sdk** v3.0.0 (NPM)');
       expect(result).toContain('### Summary');
@@ -117,7 +117,7 @@ describe('comment-formatter', () => {
 
       const result = formatReviewComment(review, mockGitHubContext);
 
-      expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
+      expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('🟢 Rudder AI Reviewer');
       expect(result).toContain('🌐 **rudderstack-javascript-sdk** v3.0.0 (CDN)');
       expect(result).toContain('Great work! No issues found.');
@@ -189,7 +189,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_004',
             severity: 'error',
-            category: 'event_tracking',
+            category: 'missing_event',
             message: 'Missing required property',
             file: 'src/analytics.ts',
             line: 10,
@@ -199,7 +199,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_005',
             severity: 'error',
-            category: 'event_tracking',
+            category: 'incorrect_property',
             message: 'Invalid event name format',
             file: 'src/analytics.ts',
             line: 20,
@@ -209,7 +209,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_006',
             severity: 'error',
-            category: 'reliability',
+            category: 'deprecated_api',
             message: 'Missing error handler',
             file: 'src/tracker.ts',
             line: 5,
@@ -269,7 +269,7 @@ describe('comment-formatter', () => {
           },
           {
             name: 'old_event',
-            status: 'deleted',
+            status: 'removed',
             file: 'src/legacy.ts',
             line: 5,
           },
@@ -290,7 +290,7 @@ describe('comment-formatter', () => {
       expect(result).toContain('Events Detected (3)');
       expect(result).toContain('✅ added');
       expect(result).toContain('✏️ modified');
-      expect(result).toContain('🗑️ deleted');
+      expect(result).toContain('🗑️ removed');
       expect(result).toContain('page_view');
       expect(result).toContain('button_click');
       expect(result).toContain('old_event');
@@ -335,7 +335,7 @@ describe('comment-formatter', () => {
 
       const result = formatReviewComment(review, mockGitHubContext);
 
-      expect(result).toContain('<!-- rudder-pr-reviewer-bot -->');
+      expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('💡 Suggestions (1)');
       expect(result).toContain('Consider adding documentation');
       expect(result).not.toContain('**Suggested Fix:**');
@@ -369,7 +369,7 @@ describe('comment-formatter', () => {
           {
             id: 'RS_JS_008',
             severity: 'error',
-            category: 'event_tracking',
+            category: 'tracking_plan_violation',
             message: 'Test issue with link',
             file: 'src/analytics.ts',
             line: 23,
@@ -403,5 +403,196 @@ describe('comment-formatter', () => {
         '[`src/test.ts:42`](https://github.com/test-owner/test-repo/blob/abc123def456/src/test.ts#L42)'
       );
     });
+  });
+});
+
+describe('buildInlineCommentsArray', () => {
+  it('should convert issues to inline comments', () => {
+    const issues: ReviewIssue[] = [
+      {
+        id: 'issue-1',
+        severity: 'error',
+        category: 'tracking_plan_violation',
+        message: 'Error 1',
+        file: 'src/app.ts',
+        line: 10,
+        impact: 'High',
+        relatedEvents: [],
+      },
+      {
+        id: 'issue-2',
+        severity: 'warning',
+        category: 'best_practice',
+        message: 'Warning 1',
+        file: 'src/app.ts',
+        line: 20,
+        impact: 'Medium',
+        relatedEvents: [],
+      },
+    ];
+
+    const result = formatInlineComments(issues);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].path).toBe('src/app.ts');
+    expect(result[0].line).toBe(10);
+    expect(result[0].body).toContain('❌');
+    expect(result[0].body).toContain('Error 1');
+    expect(result[0].body).toContain('<!-- rudder-pr-reviewer-bot-inline -->');
+
+    expect(result[1].path).toBe('src/app.ts');
+    expect(result[1].line).toBe(20);
+    expect(result[1].body).toContain('⚠️');
+    expect(result[1].body).toContain('Warning 1');
+  });
+
+  it('should handle issues across different files', () => {
+    const issues: ReviewIssue[] = [
+      {
+        id: 'issue-1',
+        severity: 'error',
+        category: 'tracking_plan_violation',
+        message: 'Error in app',
+        file: 'src/app.ts',
+        line: 10,
+        impact: 'High',
+        relatedEvents: [],
+      },
+      {
+        id: 'issue-2',
+        severity: 'error',
+        category: 'missing_event',
+        message: 'Error in utils',
+        file: 'src/utils.ts',
+        line: 10,
+        impact: 'High',
+        relatedEvents: [],
+      },
+    ];
+
+    const result = formatInlineComments(issues);
+
+    expect(result).toHaveLength(2);
+    expect(result.find(c => c.path === 'src/app.ts')).toBeDefined();
+    expect(result.find(c => c.path === 'src/utils.ts')).toBeDefined();
+  });
+
+  it('should handle empty issues array', () => {
+    const result = formatInlineComments([]);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('should include all issue details in inline comment body', () => {
+    const issue: ReviewIssue = {
+      id: 'RS_JS_001',
+      severity: 'error',
+      category: 'tracking_plan_violation',
+      message: 'Missing event name in track() call',
+      file: 'src/analytics.ts',
+      line: 23,
+      impact: 'Event will not be sent',
+      suggestedFix: "track('event_name', { ...properties });",
+      relatedEvents: ['purchase_completed'],
+      affectedDestinations: ['Google Analytics', 'Amplitude'],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].body).toContain('❌');
+    expect(result[0].body).toContain('Missing event name in track() call');
+    expect(result[0].body).toContain('**Impact:** Event will not be sent');
+    expect(result[0].body).toContain('**Affected Destinations:** Google Analytics, Amplitude');
+    expect(result[0].body).toContain('**Suggested Fix:**');
+    expect(result[0].body).toContain("track('event_name', { ...properties });");
+  });
+
+  it('should handle multi-line comments with startLine', () => {
+    const issue: ReviewIssue = {
+      id: 'issue-1',
+      severity: 'warning',
+      category: 'best_practice',
+      message: 'Code block needs improvement',
+      file: 'src/app.ts',
+      line: 25,
+      startLine: 20,
+      impact: 'Medium',
+      relatedEvents: [],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].path).toBe('src/app.ts');
+    expect(result[0].line).toBe(25);
+    expect(result[0].start_line).toBe(20);
+    expect(result[0].side).toBe('RIGHT');
+    expect(result[0].start_side).toBe('RIGHT');
+    expect(result[0].body).toContain('⚠️');
+    expect(result[0].body).toContain('Code block needs improvement');
+  });
+
+  it('should format suggested fix as suggestion block when startLine is present', () => {
+    const issue: ReviewIssue = {
+      id: 'issue-1',
+      severity: 'error',
+      category: 'tracking_plan_violation',
+      message: 'Incorrect event properties',
+      file: 'src/tracking.ts',
+      line: 30,
+      startLine: 28,
+      impact: 'High',
+      suggestedFix: 'track("event_name", {\n  property1: value1,\n  property2: value2\n});',
+      relatedEvents: [],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].body).toContain('```suggestion');
+    expect(result[0].body).toContain('track("event_name", {');
+  });
+
+  it('should not include start_line when startLine equals line', () => {
+    const issue: ReviewIssue = {
+      id: 'issue-1',
+      severity: 'warning',
+      category: 'best_practice',
+      message: 'Test issue',
+      file: 'src/app.ts',
+      line: 25,
+      startLine: 25,
+      impact: 'Medium',
+      relatedEvents: [],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].line).toBe(25);
+    expect(result[0].start_line).toBeUndefined();
+    expect(result[0].start_side).toBeUndefined();
+  });
+
+  it('should not include start_line when startLine is greater than line', () => {
+    const issue: ReviewIssue = {
+      id: 'issue-1',
+      severity: 'warning',
+      category: 'best_practice',
+      message: 'Test issue',
+      file: 'src/app.ts',
+      line: 20,
+      startLine: 25,
+      impact: 'Medium',
+      relatedEvents: [],
+    };
+
+    const result = formatInlineComments([issue]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].line).toBe(20);
+    expect(result[0].start_line).toBeUndefined();
+    expect(result[0].start_side).toBeUndefined();
   });
 });

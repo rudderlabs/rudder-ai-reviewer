@@ -69,6 +69,7 @@ describe('ReviewPayloadBuilder', () => {
 
     mockGitHubClient = {
       getRepositoryMetadata: jest.fn().mockResolvedValue(mockRepoMetadata),
+      findReviewComments: jest.fn().mockResolvedValue([]),
     } as any;
 
     (readFileSync as jest.Mock).mockReturnValue(
@@ -110,6 +111,7 @@ describe('ReviewPayloadBuilder', () => {
           version: '1.0.0',
         },
         frameworks: [],
+        existing_review_comments: [],
       });
 
       expect(mockGitHubClient.getRepositoryMetadata).toHaveBeenCalledWith(
@@ -345,6 +347,34 @@ describe('ReviewPayloadBuilder', () => {
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
 
       await expect(builder.buildPayload(input)).rejects.toThrow('GitHub API error');
+    });
+
+    it('should include existing review comments when present', async () => {
+      const mockExistingComments = [
+        { id: 123, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 1' },
+        { id: 456, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 2' },
+      ];
+
+      mockGitHubClient.findReviewComments = jest.fn().mockResolvedValue(mockExistingComments);
+
+      const input: PayloadBuilderInput = {
+        sourceId: 'test-source-id',
+        owner: 'test-owner',
+        repo: 'test-repo',
+        prChanges: mockPRChanges,
+      };
+
+      const builder = new ReviewPayloadBuilder(mockGitHubClient);
+      const payload = await builder.buildPayload(input);
+
+      expect(payload.existing_review_comments).toEqual([
+        { id: 123, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 1' },
+        { id: 456, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 2' },
+      ]);
+      expect(mockGitHubClient.findReviewComments).toHaveBeenCalledWith(
+        { owner: 'test-owner', repo: 'test-repo', prNumber: 123 },
+        expect.stringContaining('rudder-pr-reviewer-bot-inline')
+      );
     });
   });
 });

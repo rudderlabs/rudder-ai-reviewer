@@ -1,13 +1,13 @@
 export type IssueSeverity = 'error' | 'warning' | 'suggestion' | 'info';
 export type IssueCategory =
-  | 'event_tracking'
-  | 'schema_change'
+  | 'tracking_plan_violation'
+  | 'missing_event'
   | 'best_practice'
-  | 'reliability'
+  | 'incorrect_property'
   | 'security'
   | 'performance'
-  | 'compliance';
-export type EventStatus = 'added' | 'modified' | 'deleted' | 'unchanged';
+  | 'deprecated_api';
+export type EventStatus = 'added' | 'modified' | 'removed' | 'unchanged';
 export type PropertyType =
   | 'string'
   | 'number'
@@ -63,10 +63,11 @@ export interface ReviewIssue {
   message: string;
   file: string;
   line: number;
+  startLine?: number;
   column?: number;
-  impact: string;
+  impact?: string;
   suggestedFix?: string;
-  relatedEvents: string[];
+  relatedEvents?: string[];
   affectedDestinations?: string[];
 }
 
@@ -77,4 +78,13 @@ export interface ReviewStats {
   eventsAdded: number;
   eventsModified: number;
   eventsDeleted?: number;
+}
+
+export interface InlineComment {
+  path: string;
+  body: string;
+  line: number;
+  start_line?: number;
+  side: 'LEFT' | 'RIGHT';
+  start_side?: 'LEFT' | 'RIGHT';
 }

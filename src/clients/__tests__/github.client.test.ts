@@ -1,4 +1,5 @@
 import type { GitHubPRContext } from '@core/shared/github';
+import { InlineComment } from '@custom-types/review.types';
 import { GitHubClient } from '../github.client';
 
 describe('GitHubClient', () => {
@@ -377,6 +378,355 @@ describe('GitHubClient', () => {
       await expect(client.updateComment(mockContext, 999, 'test body')).rejects.toThrow(
         'Failed to update review comment: Comment not found'
       );
+    });
+  });
+
+  describe('findReviewComments', () => {
+    it('should find existing review comments with marker', async () => {
+      const mockComments = [
+        { id: 1, body: 'Regular review comment' },
+        { id: 2, body: '<!-- rudder-pr-reviewer-bot-inline -->\nInline comment 1' },
+        { id: 3, body: 'Another regular comment' },
+        { id: 4, body: '<!-- rudder-pr-reviewer-bot-inline -->\nInline comment 2' },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockComments),
+        rest: {
+          pulls: {
+            listReviewComments: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.findReviewComments(
+        mockContext,
+        '<!-- rudder-pr-reviewer-bot-inline -->'
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe(2);
+      expect(result[1].id).toBe(4);
+      expect(mockOctokit.paginate).toHaveBeenCalledWith(
+        mockOctokit.rest.pulls.listReviewComments,
+        expect.objectContaining({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          pull_number: 123,
+        })
+      );
+    });
+
+    it('should return empty array when no comments match', async () => {
+      const mockComments = [
+        { id: 1, body: 'Regular review comment' },
+        { id: 2, body: 'Another regular comment' },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockComments),
+        rest: {
+          pulls: {
+            listReviewComments: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.findReviewComments(
+        mockContext,
+        '<!-- rudder-pr-reviewer-bot-inline -->'
+      );
+
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('createReview', () => {
+    it('should create review with inline comments successfully', async () => {
+      const inlineComments: InlineComment[] = [
+        { path: 'src/app.ts', line: 10, body: 'Issue 1', side: 'RIGHT' },
+        { path: 'src/utils.ts', line: 20, body: 'Issue 2', side: 'RIGHT' },
+      ];
+      const mockResponse = { id: 456 };
+
+      const mockOctokit = {
+        rest: {
+          pulls: {
+            createReview: jest.fn().mockResolvedValue({ data: mockResponse }),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const reviewId = await client.createReview(mockContext, inlineComments, 'COMMENT');
+
+      expect(reviewId).toBe(456);
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        pull_number: 123,
+        event: 'COMMENT',
+        body: undefined,
+        comments: inlineComments,
+        commit_id: undefined,
+      });
+    });
+
+    it('should create review with commit_id when provided', async () => {
+      const inlineComments: InlineComment[] = [
+        { path: 'src/app.ts', line: 10, body: 'Issue 1', side: 'RIGHT' },
+      ];
+      const commitId = 'abc123def456';
+      const mockResponse = { id: 789 };
+
+      const mockOctokit = {
+        rest: {
+          pulls: {
+            createReview: jest.fn().mockResolvedValue({ data: mockResponse }),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const reviewId = await client.createReview(mockContext, inlineComments, 'COMMENT', commitId);
+
+      expect(reviewId).toBe(789);
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        pull_number: 123,
+        event: 'COMMENT',
+        body: undefined,
+        comments: inlineComments,
+        commit_id: commitId,
+      });
+    });
+
+    it('should throw on API failure', async () => {
+      const mockOctokit = {
+        rest: {
+          pulls: {
+            createReview: jest.fn().mockRejectedValue(new Error('Rate limit exceeded')),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      await expect(client.createReview(mockContext, [], 'COMMENT')).rejects.toThrow(
+        'Failed to create review: Rate limit exceeded'
+      );
+    });
+  });
+
+  describe('getChangedFilesMap', () => {
+    it('should build map for files with patches', async () => {
+      const mockFiles = [
+        {
+          filename: 'src/app.ts',
+          status: 'modified',
+          additions: 10,
+          deletions: 5,
+          patch: '@@ -5,3 +5,5 @@\n line1\n+line2\n line3',
+        },
+        {
+          filename: 'src/utils.ts',
+          status: 'added',
+          additions: 20,
+          deletions: 0,
+          patch: '@@ -0,0 +1,20 @@\n+new file content',
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(2);
+      expect(result.get('src/app.ts')).toEqual({
+        start: 5,
+        end: 9,
+        status: 'modified',
+      });
+      expect(result.get('src/utils.ts')).toEqual({
+        start: 1,
+        end: 20,
+        status: 'added',
+      });
+    });
+
+    it('should handle removed files', async () => {
+      const mockFiles = [
+        {
+          filename: 'src/deleted.ts',
+          status: 'removed',
+          additions: 0,
+          deletions: 50,
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(1);
+      expect(result.get('src/deleted.ts')).toEqual({
+        start: 1,
+        end: 0,
+        status: 'removed',
+      });
+    });
+
+    it('should handle files without patches', async () => {
+      const mockFiles = [
+        {
+          filename: 'binary-file.png',
+          status: 'modified',
+          additions: 0,
+          deletions: 0,
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(1);
+      expect(result.get('binary-file.png')).toEqual({
+        start: 1,
+        end: Number.MAX_SAFE_INTEGER,
+        status: 'modified',
+      });
+    });
+
+    it('should handle patch with zero-count hunk', async () => {
+      const mockFiles = [
+        {
+          filename: 'src/insert.ts',
+          status: 'modified',
+          additions: 2,
+          deletions: 0,
+          patch: '@@ -10,0 +10,2 @@\n+new line 1\n+new line 2',
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(1);
+      expect(result.get('src/insert.ts')).toEqual({
+        start: 10,
+        end: 11,
+        status: 'modified',
+      });
+    });
+
+    it('should handle patch with multiple hunks', async () => {
+      const mockFiles = [
+        {
+          filename: 'src/multi-hunk.ts',
+          status: 'modified',
+          additions: 5,
+          deletions: 2,
+          patch:
+            '@@ -5,3 +5,5 @@\n line1\n+line2\n line3\n@@ -20,2 +22,3 @@\n line4\n+line5\n line6',
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(1);
+      expect(result.get('src/multi-hunk.ts')).toEqual({
+        start: 5,
+        end: 24,
+        status: 'modified',
+      });
+    });
+
+    it('should handle patch with single line change', async () => {
+      const mockFiles = [
+        {
+          filename: 'src/single.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          patch: '@@ -15 +15,2 @@\n line\n+new line',
+        },
+      ];
+
+      const mockOctokit = {
+        paginate: jest.fn().mockResolvedValue(mockFiles),
+        rest: {
+          pulls: {
+            listFiles: jest.fn(),
+          },
+        },
+      };
+
+      const client = new GitHubClient(mockOctokit as any);
+
+      const result = await client.getChangedFilesMap(mockContext);
+
+      expect(result.size).toBe(1);
+      expect(result.get('src/single.ts')).toEqual({
+        start: 15,
+        end: 16,
+        status: 'modified',
+      });
     });
   });
 });
