@@ -9,6 +9,7 @@ import type {
   SDKInfo,
 } from '@custom-types/review.types';
 import { COMMENT_INLINE_MARKER, COMMENT_SUMMARY_MARKER } from '@utils/constants';
+import path from 'node:path';
 
 export interface GitHubContext {
   owner: string;
@@ -229,7 +230,8 @@ function formatIssueItem(issue: ReviewIssue, index: number, githubContext: GitHu
 }
 
 function getFileExtension(file: string): string {
-  return file.split('.').pop() || 'text';
+  const ext = path.extname(file);
+  return ext ? ext.slice(1) : 'text';
 }
 
 /**

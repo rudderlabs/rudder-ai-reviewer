@@ -33,12 +33,12 @@ export class CommentSplitter {
         return;
       }
 
-      if (issue.line < fileInfo.start || issue.line > fileInfo.end) {
+      if (!issue.line || issue.line <= 0) {
         skipped.push(issue);
         return;
       }
 
-      if (!issue.line || issue.line <= 0) {
+      if (issue.line < fileInfo.start || issue.line > fileInfo.end) {
         skipped.push(issue);
         return;
       }
