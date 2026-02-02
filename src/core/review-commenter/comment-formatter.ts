@@ -96,11 +96,6 @@ function formatIssuesSection(review: ReviewResponse, githubContext: GitHubContex
     section += formatIssueGroup('suggestion', issuesBySeverity.suggestion, true, githubContext);
   }
 
-  // Info (collapsible)
-  if (issuesBySeverity.info && issuesBySeverity.info.length > 0) {
-    section += formatIssueGroup('info', issuesBySeverity.info, true, githubContext);
-  }
-
   return section;
 }
 
@@ -270,8 +265,7 @@ function getSeverityIcon(severity: IssueSeverity): string {
   const icons: Record<IssueSeverity, string> = {
     error: '❌',
     warning: '⚠️',
-    suggestion: '💡',
-    info: 'ℹ️',
+    suggestion: '💡'
   };
   return icons[severity] || '•';
 }
