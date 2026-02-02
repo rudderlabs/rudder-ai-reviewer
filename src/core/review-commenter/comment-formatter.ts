@@ -265,7 +265,7 @@ function getSeverityIcon(severity: IssueSeverity): string {
   const icons: Record<IssueSeverity, string> = {
     error: '❌',
     warning: '⚠️',
-    suggestion: '💡'
+    suggestion: '💡',
   };
   return icons[severity] || '•';
 }
