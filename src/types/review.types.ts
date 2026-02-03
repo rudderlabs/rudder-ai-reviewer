@@ -1,4 +1,4 @@
-export type IssueSeverity = 'error' | 'warning' | 'suggestion' | 'info';
+export type IssueSeverity = 'error' | 'warning' | 'suggestion';
 export type IssueCategory =
   | 'tracking_plan_violation'
   | 'missing_event'
