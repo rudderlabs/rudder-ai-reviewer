@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CDN Valid Test App</title>
   <!-- Test app for PR reviewer action -->
 </head>
+
 <body>
   <h1>RudderStack CDN Valid Test</h1>
   <button id="signup-btn">Sign Up</button>
@@ -17,7 +19,7 @@
     var sdkVersion = "v3";
     var sdkFileName = "rsa.min.js";
 
-    !function(){var e=window.rudderanalytics=window.rudderanalytics||[];e.methods=["load","page","track","identify","alias","group","ready","reset","getAnonymousId","setAnonymousId"],e.factory=function(t){return function(){var r=Array.prototype.slice.call(arguments);return r.unshift(t),e.push(r),e}};for(var t=0;t<e.methods.length;t++){var r=e.methods[t];e[r]=e.factory(r)}e.loadJS=function(e,t){var r=document.createElement("script");r.type="text/javascript",r.async=!0,r.src=e;var n=document.getElementsByTagName("script")[0];n.parentNode.insertBefore(r,n)},e.loadJS(sdkBaseUrl+"/"+sdkVersion+"/"+sdkFileName),e.load("WRITE_KEY","https://dataplane.rudderstack.com")}();
+    !function () { var e = window.rudderanalytics = window.rudderanalytics || []; e.methods = ["load", "page", "track", "identify", "alias", "group", "ready", "reset", "getAnonymousId", "setAnonymousId"], e.factory = function (t) { return function () { var r = Array.prototype.slice.call(arguments); return r.unshift(t), e.push(r), e } }; for (var t = 0; t < e.methods.length; t++) { var r = e.methods[t]; e[r] = e.factory(r) } e.loadJS = function (e, t) { var r = document.createElement("script"); r.type = "text/javascript", r.async = !0, r.src = e; var n = document.getElementsByTagName("script")[0]; n.parentNode.insertBefore(r, n) }, e.loadJS(sdkBaseUrl + "/" + sdkVersion + "/" + sdkFileName), e.load("WRITE_KEY", "https://dataplane.rudderstack.com") }();
 
     // Valid track calls
     rudderanalytics.track('page_loaded', {
@@ -26,7 +28,7 @@
     });
 
     // Event listener with tracking
-    document.getElementById('signup-btn').addEventListener('click', function() {
+    document.getElementById('signup-btn').addEventListener('click', function () {
       rudderanalytics.track('button_clicked', {
         button_id: 'signup-btn',
         button_text: 'Sign Up',
@@ -53,15 +55,110 @@
       product_category: 'Electronics',
     });
 
+    rudderanalytics.track('Product Viewed', {
+      product_id: "prod_12345",
+      product_name: "Skateboard Pro",
+      product_sku: "SKB-001",
+      product_price: 100,
+      product_category: "Sports Equipment",
+      product_brand: "SkateMax",
+      product_variant: "Blue",
+      product_description: "Professional grade skateboard",
+      product_image_url: "https://example.com/skateboard.jpg",
+      product_availability: "in_stock",
+      product_stock_quantity: 25,
+      product_rating: 4.5,
+      product_review_count: 120,
+      currency: "USD",
+      page_url: "https://example.com/products/skateboard-pro",
+      page_title: "Skateboard Pro - SkateMax",
+      timestamp: "2026-02-09T09:57:26Z"
+    });
+
+    rudderanalytics.track('Product Click', {
+      product_id: "prod_12345",
+      product_name: "Skateboard Pro",
+      product_sku: "SKB-001",
+      product_price: 100,
+      product_category: "Sports Equipment",
+      product_brand: "SkateMax",
+      product_variant: "Blue",
+      currency: "USD",
+      list_id: "featured_products",
+      list_name: "Featured Products",
+      position: 2,
+      page_url: "https://example.com/featured",
+      page_title: "Featured Products",
+      user_agent: "Mozilla/5.0...",
+      timestamp: "2026-02-09T09:58:00Z"
+    });
+
+
     rudderanalytics.track('Checkout Started', {
+      cart_total: 100,
+      products: ["item1", "item2"]
+    });
+
+    rudderanalytics.track('Cart Updated', {
+      cart_id: "cart_67890",
+      products: []
+    });
+
+
+    rudderanalytics.track('Checkout Started', {
+      cart_total: 100,
+      cart_item_count: true,
+      products: []
+    });
+
+    rudderanalytics.track('Product Click', {
+      product_id: "prod_12345",
+      product_name: "Skateboard Pro",
+      product_price: 100,
+      custom_field_1: "test",
+      custom_nested: { key: "value" },
+      unknown_property: true
+    });
+
+    rudderanalytics.track('Product Purchased', {
+      order_id: "order_xyz789",
+      order_total: 118.5,
+      shipping_address: {},
+      products: []
+    });
+
+    rudderanalytics.track('Checkout Started', {
+      cart_total: 100,
+      billing_address: {
+        city: "San Francisco",
+        state: "CA",
+        country: "US",
+        postal_code: 94102
+      },
+      products: []
+    });
+
+
+    rudderanalytics.track('Product Viewed', {
+      product_id: "prod_12345",
+      product_name: "Skateboard Pro",
+      product_price: 100,
+      product_availability: 1
+    });
+
+    rudderanalytics.track('Checkout Started', {
+      cart_id: "cart_67890",
+      checkout_id: "checkout_abc123",
+      cart_currency: "USD",
       products: [
         {
-          "price": 100,
-          "name": "Skateboard",
-          "quantity": 1,
+          price: 100,
+          name: "Skateboard Pro",
+          quantity: 1
         }
       ]
     });
   </script>
 </body>
+
 </html>
