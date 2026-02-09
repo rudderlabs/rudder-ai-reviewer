@@ -53,11 +53,12 @@
       product_category: 'Electronics',
     });
 
-    rudderanalytics.track('Checkout Completed', {
+    rudderanalytics.track('Checkout Started', {
       products: [
         {
           "price": 100,
           "name": "Skateboard",
+          "quantity": 1,
         }
       ]
     });
