@@ -3,7 +3,7 @@
     <img alt="RudderStack" width="512" src="https://raw.githubusercontent.com/rudderlabs/rudder-sdk-js/develop/assets/rs-logo-full-light.jpg">
   </a>
   <br />
-  <caption>The Customer Data Platform for Developers</caption>
+  <span>The Customer Data Platform for Developers</span>
 </p>
 <p align="center">
   <b>
@@ -63,7 +63,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4
 
       - name: Rudder AI Reviewer
         uses: rudderlabs/rudder-ai-reviewer@v1
