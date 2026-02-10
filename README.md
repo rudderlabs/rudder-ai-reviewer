@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://rudderstack.com/">
-    <img alt="RudderStack" width="512" src="https://raw.githubusercontent.com/rudderlabs/rudder-sdk-js/develop/assets/rs-logo-full-light.jpg">
+    <img alt="RudderStack" width="512" src=".github/images/rudderstack-logo.jpg">
   </a>
   <br />
   <span>The Customer Data Platform for Developers</span>
@@ -82,6 +82,13 @@ jobs:
 | `source-id` | ID of the RudderStack source | Yes | - |
 | `service-access-token` | Workspace SAT with editor permissions | Yes | - |
 | `root-directory` | Root directory of the project (useful for monorepos) | No | `.` |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `status` | Status of the review: `success`, `failed`, or `warning` |
+| `message` | Summary message from the review |
 
 ## What It Reviews
 
