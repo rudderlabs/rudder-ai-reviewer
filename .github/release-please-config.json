@@ -26,7 +26,7 @@
         {
           "type": "json",
           "path": "package-lock.json",
-          "jsonpath": "$.packages[\"\"] .version"
+          "jsonpath": "$.packages[\"\"].version"
         }
       ]
     }
