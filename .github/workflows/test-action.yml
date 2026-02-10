@@ -23,7 +23,6 @@ jobs:
       - name: Test Action
         uses: ./
         with:
-          github-token: ${{ github.token }}
           source-id: ${{ secrets.RUDDERSTACK_SOURCE_ID }}
           service-access-token: ${{ secrets.RUDDERSTACK_SERVICE_ACCESS_TOKEN }}
           root-directory: .
