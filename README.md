@@ -68,20 +68,18 @@ jobs:
       - name: Rudder AI Reviewer
         uses: rudderlabs/rudder-ai-reviewer@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           source-id: ${{ secrets.RUDDERSTACK_SOURCE_ID }}
           service-access-token: ${{ secrets.RUDDERSTACK_SERVICE_ACCESS_TOKEN }}
-          root-directory: '.'
 ```
 
 ## Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `github-token` | GitHub token for API access | Yes | - |
 | `source-id` | ID of the RudderStack source | Yes | - |
 | `service-access-token` | Workspace SAT with editor permissions | Yes | - |
 | `root-directory` | Root directory of the project (useful for monorepos) | No | `.` |
+| `github-token` | GitHub token for API access | No | ${{ github.token }} |
 
 ## Outputs
 
@@ -126,7 +124,6 @@ If your repository is a monorepo and the instrumented application is in a subdir
 - name: Rudder AI Reviewer
   uses: rudderlabs/rudder-ai-reviewer@v1
   with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
     source-id: ${{ secrets.RUDDERSTACK_SOURCE_ID }}
     service-access-token: ${{ secrets.RUDDERSTACK_SERVICE_ACCESS_TOKEN }}
     root-directory: 'apps/frontend'  # Path to your app
