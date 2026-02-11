@@ -6,6 +6,7 @@ jest.mock('@actions/core', () => ({
   info: jest.fn(),
   debug: jest.fn(),
   error: jest.fn(),
+  warning: jest.fn(),
 }));
 
 describe('PRReviewerServiceClient', () => {
@@ -63,6 +64,7 @@ describe('PRReviewerServiceClient', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    jest.useRealTimers();
     process.env = originalEnv;
   });
 
@@ -122,9 +124,11 @@ describe('PRReviewerServiceClient', () => {
       );
     });
 
-    it('should throw error on 500 server error', async () => {
+    it('should throw error on 500 server error after retries', async () => {
+      jest.useFakeTimers();
       const errorBody = 'Internal Server Error';
 
+      // Mock fetch to return 500 error for all retry attempts
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         status: 500,
@@ -133,25 +137,54 @@ describe('PRReviewerServiceClient', () => {
 
       const client = new PRReviewerServiceClient(mockServiceAccessToken);
 
-      await expect(client.postReview(mockPayload)).rejects.toThrow(
+      const promise = client.postReview(mockPayload).catch(error => error);
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe(
         'PR Reviewer Service request failed with status 500: Internal Server Error'
       );
+
+      // Should retry 3 times for 5xx errors (4 total calls)
+      expect(global.fetch).toHaveBeenCalledTimes(4);
     });
 
-    it('should throw error on network failure', async () => {
+    it('should throw error on network failure after retries', async () => {
+      jest.useFakeTimers();
+
+      // Mock fetch to throw network error for all retry attempts
       (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
       const client = new PRReviewerServiceClient(mockServiceAccessToken);
 
-      await expect(client.postReview(mockPayload)).rejects.toThrow('Network error');
+      const promise = client.postReview(mockPayload).catch(error => error);
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe('Network error');
+
+      // Should retry 3 times for network errors (4 total calls)
+      expect(global.fetch).toHaveBeenCalledTimes(4);
     });
 
-    it('should handle non-Error exceptions', async () => {
+    it('should handle non-Error exceptions after retries', async () => {
+      jest.useFakeTimers();
+
+      // Mock fetch to throw non-Error exception for all retry attempts
       (global.fetch as jest.Mock).mockRejectedValue('String error');
 
       const client = new PRReviewerServiceClient(mockServiceAccessToken);
 
-      await expect(client.postReview(mockPayload)).rejects.toBe('String error');
+      const promise = client.postReview(mockPayload).catch(error => error);
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBe('String error');
+
+      // Should retry 3 times for exceptions (4 total calls)
+      expect(global.fetch).toHaveBeenCalledTimes(4);
     });
 
     it('should post payload with optional fields', async () => {
