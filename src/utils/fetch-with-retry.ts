@@ -6,10 +6,10 @@ interface FetchWithRetryOptions extends RequestInit {
 
 /**
  * Checks if an HTTP status code is retryable
- * Matches ky's default retry behavior: 408, 429, 5xx
+ * Retries on: 5xx (Server Errors)
  */
 function isRetryableStatus(status: number): boolean {
-  return status === 408 || status === 429 || (status >= 500 && status < 600);
+  return status >= 500 && status < 600;
 }
 
 /**
@@ -32,13 +32,14 @@ export async function fetchWithRetry(
   options: FetchWithRetryOptions = {}
 ): Promise<Response> {
   const { retries = 3, ...fetchOptions } = options;
+  const validatedRetries = Math.max(0, Math.floor(retries));
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let attempt = 0; attempt <= validatedRetries; attempt++) {
     try {
       const response = await fetch(url, fetchOptions);
 
       // Return if successful or if we shouldn't retry this status or if we're out of retries
-      if (response.ok || !isRetryableStatus(response.status) || attempt === retries) {
+      if (response.ok || !isRetryableStatus(response.status) || attempt === validatedRetries) {
         return response;
       }
 
@@ -48,20 +49,23 @@ export async function fetchWithRetry(
       });
 
       core.warning(
-        `Request failed with status ${response.status}, retrying (${attempt + 1}/${retries})...`
+        `Request failed with status ${response.status}, retrying (${attempt + 1}/${validatedRetries})...`
       );
+
+      // Exponential backoff: 1s, 2s, 4s
+      await sleep(1000 * 2 ** attempt);
     } catch (error) {
-      if (attempt === retries) {
+      if (attempt === validatedRetries) {
         throw error;
       }
       const message = error instanceof Error ? error.message : 'Unknown error';
       core.warning(
-        `Request failed with error: ${message}, retrying (${attempt + 1}/${retries})...`
+        `Request failed with error: ${message}, retrying (${attempt + 1}/${validatedRetries})...`
       );
-    }
 
-    // Exponential backoff: 1s, 2s, 4s
-    await sleep(1000 * 2 ** attempt);
+      // Exponential backoff: 1s, 2s, 4s
+      await sleep(1000 * 2 ** attempt);
+    }
   }
 
   throw new Error('Unreachable');
