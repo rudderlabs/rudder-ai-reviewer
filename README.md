@@ -34,8 +34,7 @@ The Rudder AI Reviewer analyzes your pull requests through an intelligent pipeli
 ## Supported SDKs
 
 **SDKs:**
-- `@rudderstack/analytics-js` (via npm package installation)
-- `@rudderstack/analytics-js` (via CDN `<script>` tag)
+- **@rudderstack/analytics-js** — via npm package or CDN `<script>` tag
 
 ## Prerequisites
 
@@ -63,7 +62,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
       - name: Rudder AI Reviewer
         uses: rudderlabs/rudder-ai-reviewer@v1
@@ -99,6 +98,7 @@ The AI reviewer analyzes your RudderStack SDK instrumentation changes and provid
 - **Security** - Flags potential security issues in your instrumentation
 - **Performance** - Identifies performance concerns in your tracking implementation
 - **Deprecated API Usage** - Warns about deprecated SDK methods and suggests alternatives
+- **Incorrect Property Usage** - Flags incorrect property usage in your instrumentation
 
 ## Examples
 
