@@ -28,7 +28,7 @@ inputs:
   review-service-base-url:
     description: 'Base URL of the PR Reviewer Service'
     required: false
-    default: 'https://api.rudderstack.com'
+    default: 'https://ai-api.rudderstack.com'
 
 
 outputs:
