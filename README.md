@@ -42,7 +42,7 @@ Before using this action, you need:
 
 1. **RudderStack Account** - Sign up at [rudderstack.com](https://rudderstack.com)
 2. **Source ID** - Create a source in your RudderStack workspace and note its ID
-3. **Service Access Token** - Generate a `Workspace SAT` with editor permissions from your [organization settings](https://app.rudderstack.com/organization?tab=service_access_tokens)
+3. **Service Access Token** - Generate a `Workspace SAT` with viewer permissions from your [organization settings](https://app.rudderstack.com/organization?tab=service_access_tokens)
 
 ## Usage
 
