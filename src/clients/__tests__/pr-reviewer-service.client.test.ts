@@ -124,6 +124,31 @@ describe('PRReviewerServiceClient', () => {
       );
     });
 
+    it('should succeed after retrying on transient 500 error', async () => {
+      jest.useFakeTimers();
+      const errorBody = 'Temporary error';
+      const mockResponseData = { success: true, review_id: 'r-1' };
+
+      // First call returns 500 error, second call succeeds
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          text: jest.fn().mockResolvedValue(errorBody),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue(mockResponseData),
+        });
+
+      const client = new PRReviewerServiceClient(mockServiceAccessToken);
+      const promise = client.postReview(mockPayload);
+      await jest.runAllTimersAsync();
+
+      await expect(promise).resolves.toEqual(mockResponseData);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
     it('should throw error on 500 server error after retries', async () => {
       jest.useFakeTimers();
       const errorBody = 'Internal Server Error';

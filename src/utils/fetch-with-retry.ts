@@ -4,17 +4,10 @@ interface FetchWithRetryOptions extends RequestInit {
   retries?: number;
 }
 
-/**
- * Checks if an HTTP status code is retryable
- * Retries on: 5xx (Server Errors)
- */
 function isRetryableStatus(status: number): boolean {
-  return status >= 500 && status < 600;
+  return status === 429 || (status >= 500 && status < 600);
 }
 
-/**
- * Sleep for the specified number of milliseconds
- */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -52,8 +45,9 @@ export async function fetchWithRetry(
         `Request failed with status ${response.status}, retrying (${attempt + 1}/${validatedRetries})...`
       );
 
-      // Exponential backoff: 1s, 2s, 4s
-      await sleep(1000 * 2 ** attempt);
+      // Exponential backoff with full jitter to prevent thundering herd
+      const baseMs = 1000 * 2 ** attempt;
+      await sleep(Math.random() * baseMs);
     } catch (error) {
       if (attempt === validatedRetries) {
         throw error;
@@ -63,8 +57,9 @@ export async function fetchWithRetry(
         `Request failed with error: ${message}, retrying (${attempt + 1}/${validatedRetries})...`
       );
 
-      // Exponential backoff: 1s, 2s, 4s
-      await sleep(1000 * 2 ** attempt);
+      // Exponential backoff with full jitter to prevent thundering herd
+      const baseMs = 1000 * 2 ** attempt;
+      await sleep(Math.random() * baseMs);
     }
   }
 
