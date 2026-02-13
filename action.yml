@@ -7,10 +7,6 @@ branding:
   color: 'blue'
 
 inputs:
-  github-token:
-    description: 'GitHub token for API access'
-    required: true
-
   source-id:
     description: 'ID of the rudderstack source'
     required: true
@@ -18,6 +14,11 @@ inputs:
   service-access-token:
     description: 'Service access token for the rudderstack workspace'
     required: true
+
+  github-token:
+    description: 'GitHub token for API access'
+    required: false
+    default: ${{ github.token }}
 
   root-directory:
     description: 'Root directory of the project'
@@ -27,7 +28,7 @@ inputs:
   review-service-base-url:
     description: 'Base URL of the PR Reviewer Service'
     required: false
-    default: 'https://api.rudderstack.com'
+    default: 'https://ai-api.rudderstack.com'
 
 
 outputs:
