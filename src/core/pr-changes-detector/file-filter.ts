@@ -235,8 +235,7 @@ export const EXCLUDED_PATH_PATTERNS = [
  * 1. Check if the file extension can contain SDK code (SOURCE_FILE_PATTERNS)
  * 2. Check if the file path is explicitly excluded (EXCLUDED_PATH_PATTERNS)
  *
- * Special handling: package.json is always included if it matches source patterns,
- * even though *.json files are generally excluded.
+ * Special handling: package.json and deno.json are always included even though *.json files are generally excluded
  *
  * @param filename - The file path to check
  * @returns true if the file should be included in the review

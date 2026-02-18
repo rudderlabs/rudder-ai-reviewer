@@ -116,6 +116,7 @@ describe('file-filter', () => {
         expect(shouldIncludeFile('packages/foo/deno.json')).toBe(true);
         expect(shouldIncludeFile('apps/web/deno.json')).toBe(true);
       });
+
       it('should exclude lock files', () => {
         expect(shouldIncludeFile('package-lock.json')).toBe(false);
         expect(shouldIncludeFile('yarn.lock')).toBe(false);
