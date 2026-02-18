@@ -32,8 +32,8 @@ export const SOURCE_FILE_PATTERNS = [
   '**/*.m', // Objective-C iOS SDK
 
   // Package manifest (shows SDK dependency changes)
-  'package.json',
-  'deno.json',
+  '**/package.json',
+  '**/deno.json',
 ];
 
 /**
