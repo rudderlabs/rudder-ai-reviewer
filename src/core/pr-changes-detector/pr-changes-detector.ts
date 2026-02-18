@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import { GitHubClient } from '@clients/github.client';
 import type { GitHubPRContext } from '@core/shared/github/pr-context';
 import { isAbsolute, relative } from 'path';
+import { shouldIncludeFile } from './file-filter';
 import { countPatchHunks } from './patch-parser';
 import type { DiffFile, FileChange, FileStatus, PRChangesResult } from './types';
 
@@ -20,9 +21,12 @@ export class PRChangesDetector {
       const changedFiles = await this.githubClient.getChangedFiles(prContext);
 
       core.info(`Filtering files for root directory: ${rootDirectory}`);
-      const filteredFiles = this.filterFilesByPath(changedFiles, rootDirectory);
+      const filteredByPath = this.filterFilesByPath(changedFiles, rootDirectory);
+
+      core.info('Filtering source files...');
+      const filteredFiles = filteredByPath.filter(file => shouldIncludeFile(file.filename));
       core.info(
-        `Processing ${filteredFiles.length} changed files (${changedFiles.length - filteredFiles.length} filtered out)...`
+        `Processing ${filteredFiles.length} source files (${filteredByPath.length - filteredFiles.length} non-source files filtered out)`
       );
 
       const diffContext = this.processDiffFiles(filteredFiles);
