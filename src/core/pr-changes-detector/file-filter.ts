@@ -32,8 +32,8 @@ export const SOURCE_FILE_PATTERNS = [
   '**/*.m', // Objective-C iOS SDK
 
   // Package manifest (shows SDK dependency changes)
-  '**/package.json',
-  '**/deno.json',
+  'package.json',
+  'deno.json',
 ];
 
 /**
@@ -72,6 +72,9 @@ export const EXCLUDED_PATH_PATTERNS = [
   '**/*.stories.ts',
   '**/*.stories.jsx',
   '**/*.stories.tsx',
+  '**/*_test.go', // Go test convention
+  '**/test_*.py', // Python test convention (pytest default)
+  '**/*_test.py', // Python test convention (alternative)
 
   // Generated/build outputs
   '**/dist/**',

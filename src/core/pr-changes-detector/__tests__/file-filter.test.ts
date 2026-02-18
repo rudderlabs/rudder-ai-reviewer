@@ -1,4 +1,4 @@
-import { shouldIncludeFile, SOURCE_FILE_PATTERNS, EXCLUDED_PATH_PATTERNS } from '../file-filter';
+import { EXCLUDED_PATH_PATTERNS, shouldIncludeFile, SOURCE_FILE_PATTERNS } from '../file-filter';
 
 describe('file-filter', () => {
   describe('shouldIncludeFile', () => {
@@ -77,6 +77,13 @@ describe('file-filter', () => {
         expect(shouldIncludeFile('analytics/tracker.py')).toBe(true);
       });
 
+      it('should exclude Python test files', () => {
+        expect(shouldIncludeFile('test_analytics.py')).toBe(false);
+        expect(shouldIncludeFile('src/test_sdk.py')).toBe(false);
+        expect(shouldIncludeFile('sdk/analytics_test.py')).toBe(false);
+        expect(shouldIncludeFile('sdk/analytics.py')).toBe(true);
+      });
+
       it('should include Ruby files', () => {
         expect(shouldIncludeFile('app/controllers/analytics_controller.rb')).toBe(true);
       });
@@ -84,6 +91,12 @@ describe('file-filter', () => {
       it('should include Go files', () => {
         expect(shouldIncludeFile('main.go')).toBe(true);
         expect(shouldIncludeFile('analytics/tracker.go')).toBe(true);
+      });
+
+      it('should exclude Go test files', () => {
+        expect(shouldIncludeFile('analytics/tracker_test.go')).toBe(false);
+        expect(shouldIncludeFile('pkg/sdk/client_test.go')).toBe(false);
+        expect(shouldIncludeFile('main_test.go')).toBe(false);
       });
 
       it('should include Java files', () => {
@@ -107,14 +120,14 @@ describe('file-filter', () => {
     describe('Package manifest', () => {
       it('should include package.json', () => {
         expect(shouldIncludeFile('package.json')).toBe(true);
-        expect(shouldIncludeFile('packages/foo/package.json')).toBe(true);
-        expect(shouldIncludeFile('apps/web/package.json')).toBe(true);
+        expect(shouldIncludeFile('packages/foo/package.json')).toBe(false);
+        expect(shouldIncludeFile('apps/web/package.json')).toBe(false);
       });
 
       it('should include deno.json', () => {
         expect(shouldIncludeFile('deno.json')).toBe(true);
-        expect(shouldIncludeFile('packages/foo/deno.json')).toBe(true);
-        expect(shouldIncludeFile('apps/web/deno.json')).toBe(true);
+        expect(shouldIncludeFile('packages/foo/deno.json')).toBe(false);
+        expect(shouldIncludeFile('apps/web/deno.json')).toBe(false);
       });
 
       it('should exclude lock files', () => {
