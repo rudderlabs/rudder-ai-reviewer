@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import type { ReviewPayload } from '@custom-types/review-payload.types';
 import { ReviewResponse } from '@custom-types/review.types';
+import { fetchWithRetry } from '@utils/fetch-with-retry';
 
 const PR_REVIEWER_SERVICE_BASE_URL =
   process.env.INPUT_REVIEW_SERVICE_BASE_URL || 'https://ai-api.rudderstack.com';
@@ -18,13 +19,14 @@ export class PRReviewerServiceClient {
     try {
       core.info(`Posting review to PR Reviewer Service: ${PR_REVIEWER_SERVICE_BASE_URL}`);
 
-      const response = await fetch(`${PR_REVIEWER_SERVICE_BASE_URL}/v2/ai/pr-review`, {
+      const response = await fetchWithRetry(`${PR_REVIEWER_SERVICE_BASE_URL}/v2/ai/pr-review`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.serviceAccessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+        retries: 3,
       });
 
       if (!response.ok) {

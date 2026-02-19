@@ -112,14 +112,9 @@ describe('PRChangesDetector', () => {
     const detector = new PRChangesDetector(mockGitHubClient as any);
     const result = await detector.detect(mockPRContext);
 
-    expect(result.diff_context[0]).toEqual({
-      file_path: 'image.png',
-      patch: '',
-      hunks: 0,
-      additions: 0,
-      deletions: 0,
-      status: 'added',
-    });
+    // Binary files (like images) should be filtered out
+    expect(result.diff_context.length).toBe(0);
+    expect(result.pull_request.files_changed_count).toBe(0);
   });
 
   it('should propagate errors from GitHub client', async () => {
