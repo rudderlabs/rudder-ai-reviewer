@@ -24,3 +24,4 @@ export async function detectPRChanges(
 }
 
 export type { DiffFile, FileStatus, PRChangesResult } from './types';
+export { shouldIncludeFile, SOURCE_FILE_PATTERNS, EXCLUDED_PATH_PATTERNS } from './file-filter';
