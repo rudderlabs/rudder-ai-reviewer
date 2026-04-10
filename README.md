@@ -76,7 +76,7 @@ jobs:
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `source-id` | ID of the RudderStack source | Yes | - |
-| `service-access-token` | Workspace SAT with editor permissions | Yes | - |
+| `service-access-token` | Workspace SAT with viewer permissions | Yes | - |
 | `root-directory` | Root directory of the project (useful for monorepos) | No | `.` |
 | `github-token` | GitHub token for API access | No | ${{ github.token }} |
 
