@@ -35,7 +35,7 @@ async function run(): Promise<void> {
 
     core.info('🔍 Detecting PR changes...');
     const prChanges = await detectPRChanges(githubToken, prContext, rootDirectory);
-    core.info(`✅ Detected ${prChanges.diff_context.length} changed files`);
+    core.info(`✅ Detected ${prChanges.diff_context.length} relevant source files`);
     if (prChanges.diff_context.length === 0) {
       core.info('No relevant source file changes detected. Skipping PR Reviewer Service call.');
       core.setOutput('status', 'success');
