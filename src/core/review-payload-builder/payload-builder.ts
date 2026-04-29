@@ -21,7 +21,10 @@ export class ReviewPayloadBuilder {
   /**
    * Builds the complete payload for PR Reviewer Service
    */
-  async buildPayload(context: ChangeRequestContext, input: PayloadBuilderInput): Promise<ReviewPayload> {
+  async buildPayload(
+    context: ChangeRequestContext,
+    input: PayloadBuilderInput
+  ): Promise<ReviewPayload> {
     const { sourceId, prChanges, sdkDetection, frameworks = [] } = input;
     const { owner, repo } = context;
 
@@ -29,7 +32,10 @@ export class ReviewPayloadBuilder {
     const repoMetadata = await this.provider.getRepositoryMetadata(context);
 
     core.info('Fetching existing review comments...');
-    const existingReviewComments = await this.getExistingReviewComments(context, COMMENT_INLINE_MARKER);
+    const existingReviewComments = await this.getExistingReviewComments(
+      context,
+      COMMENT_INLINE_MARKER
+    );
 
     const { name, version } = this.getPackageDetails();
 

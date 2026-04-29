@@ -35,10 +35,7 @@ export class GitHubClient implements SCMProvider {
    * @param repo - Repository name
    */
   async getRepositoryMetadata(ctx: ChangeRequestContext): Promise<ProviderRepositoryMetadata>;
-  async getRepositoryMetadata(
-    owner: string,
-    repo: string
-  ): Promise<ProviderRepositoryMetadata>;
+  async getRepositoryMetadata(owner: string, repo: string): Promise<ProviderRepositoryMetadata>;
   async getRepositoryMetadata(
     ownerOrContext: string | ChangeRequestContext,
     repo?: string

@@ -13,7 +13,9 @@ describe('GitHubClient provider contract', () => {
     return {
       rest: {
         repos: {
-          get: jest.fn().mockResolvedValue({ data: { visibility: 'public', language: 'TypeScript' } }),
+          get: jest
+            .fn()
+            .mockResolvedValue({ data: { visibility: 'public', language: 'TypeScript' } }),
           listLanguages: jest.fn().mockResolvedValue({ data: { TypeScript: 100 } }),
         },
         pulls: {
@@ -42,7 +44,13 @@ describe('GitHubClient provider contract', () => {
   it('adapts metadata and changed-files methods to provider contract', async () => {
     const octokit = makeOctokit();
     octokit.paginate.mockResolvedValue([
-      { filename: 'src/a.ts', status: 'modified', additions: 1, deletions: 1, patch: '@@ -1 +1 @@' },
+      {
+        filename: 'src/a.ts',
+        status: 'modified',
+        additions: 1,
+        deletions: 1,
+        patch: '@@ -1 +1 @@',
+      },
     ]);
 
     const client = new GitHubClient(octokit as any);
@@ -83,7 +91,9 @@ describe('GitHubClient provider contract', () => {
     const octokit = makeOctokit();
     octokit.paginate
       .mockResolvedValueOnce([{ id: 201, body: 'inline <!-- marker-inline -->' }])
-      .mockResolvedValueOnce([{ filename: 'src/a.ts', status: 'modified', additions: 1, deletions: 0 }]);
+      .mockResolvedValueOnce([
+        { filename: 'src/a.ts', status: 'modified', additions: 1, deletions: 0 },
+      ]);
     const client = new GitHubClient(octokit as any);
     const comments: ProviderInlineComment[] = [
       { path: 'src/a.ts', line: 10, body: 'msg', side: 'RIGHT' },

@@ -19,7 +19,12 @@ describe('review-commenter', () => {
   const mockReview: ReviewResponse = {
     reviewId: 'rev_test',
     sdk: { name: 'rudderstack-javascript-sdk', version: '3.0.0', installationType: 'npm' },
-    summary: { overallAssessment: 'Review completed.', filesAnalyzed: 5, totalIssues: 1, verdict: 'comment' },
+    summary: {
+      overallAssessment: 'Review completed.',
+      filesAnalyzed: 5,
+      totalIssues: 1,
+      verdict: 'comment',
+    },
     events: [],
     issues: [
       {
@@ -90,7 +95,11 @@ describe('review-commenter', () => {
 
     await postAIReviewerComments(provider, mockContext, mockReview);
 
-    expect(provider.updateSummaryComment).toHaveBeenCalledWith(mockContext, 456, expect.any(String));
+    expect(provider.updateSummaryComment).toHaveBeenCalledWith(
+      mockContext,
+      456,
+      expect.any(String)
+    );
     expect(provider.createSummaryComment).not.toHaveBeenCalled();
   });
 
@@ -112,7 +121,9 @@ describe('review-commenter', () => {
     const provider = baseProvider();
     provider.createInlineReview.mockRejectedValue(new Error('Invalid line number'));
 
-    await expect(postAIReviewerComments(provider, mockContext, mockReview)).resolves.toBeUndefined();
+    await expect(
+      postAIReviewerComments(provider, mockContext, mockReview)
+    ).resolves.toBeUndefined();
     expect(provider.createSummaryComment).toHaveBeenCalled();
     expect(provider.createInlineReview).toHaveBeenCalled();
   });

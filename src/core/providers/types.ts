@@ -49,11 +49,16 @@ export interface SCMProvider {
   getRepositoryMetadata(ctx: ChangeRequestContext): Promise<ProviderRepositoryMetadata>;
   getChangeRequestMetadata(ctx: ChangeRequestContext): Promise<ProviderPRMetadata>;
   getChangedFiles(ctx: ChangeRequestContext): Promise<ProviderChangedFile[]>;
-  getChangedFilesMap(ctx: ChangeRequestContext): Promise<Map<string, { start: number; end: number; status: string }>>;
+  getChangedFilesMap(
+    ctx: ChangeRequestContext
+  ): Promise<Map<string, { start: number; end: number; status: string }>>;
   findSummaryComment(ctx: ChangeRequestContext, marker: string): Promise<number | null>;
   createSummaryComment(ctx: ChangeRequestContext, body: string): Promise<number>;
   updateSummaryComment(ctx: ChangeRequestContext, commentId: number, body: string): Promise<void>;
-  findInlineComments(ctx: ChangeRequestContext, marker: string): Promise<ProviderCommentReference[]>;
+  findInlineComments(
+    ctx: ChangeRequestContext,
+    marker: string
+  ): Promise<ProviderCommentReference[]>;
   createInlineReview(
     ctx: ChangeRequestContext,
     comments: ProviderInlineComment[],

@@ -119,9 +119,7 @@ describe('ReviewPayloadBuilder', () => {
         existing_review_comments: [],
       });
 
-      expect(mockGitHubClient.getRepositoryMetadata).toHaveBeenCalledWith(
-        mockContext
-      );
+      expect(mockGitHubClient.getRepositoryMetadata).toHaveBeenCalledWith(mockContext);
     });
 
     it('should include SDK detection when provided', async () => {
@@ -337,7 +335,9 @@ describe('ReviewPayloadBuilder', () => {
         { id: 456, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 2' },
       ];
 
-      mockGitHubClient.findInlineComments = jest.fn().mockResolvedValue(mockExistingComments as any);
+      mockGitHubClient.findInlineComments = jest
+        .fn()
+        .mockResolvedValue(mockExistingComments as any);
 
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
