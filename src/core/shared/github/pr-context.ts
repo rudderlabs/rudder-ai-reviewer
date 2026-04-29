@@ -6,6 +6,13 @@ export interface GitHubPRContext {
   prNumber: number;
 }
 
+export class NotPullRequestContextError extends Error {
+  constructor() {
+    super('Not running in pull request context');
+    this.name = 'NotPullRequestContextError';
+  }
+}
+
 /**
  * Extracts PR context from GitHub Actions environment
  */
@@ -13,7 +20,7 @@ export function extractGitHubPRContext(): GitHubPRContext {
   const { payload, repo } = context;
 
   if (!payload.pull_request) {
-    throw new Error('Not running in pull request context');
+    throw new NotPullRequestContextError();
   }
 
   return {

@@ -8,11 +8,17 @@ jest.mock('@core/shared/github', () => ({
     repo: 'repo',
     prNumber: 42,
   }),
+  NotPullRequestContextError: class MockNotPullRequestContextError extends Error {
+    constructor() {
+      super('Not running in pull request context');
+      this.name = 'NotPullRequestContextError';
+    }
+  },
 }));
 
 import { getOctokit } from '@actions/github';
-import { extractGitHubPRContext } from '@core/shared/github';
-import { createProviderRuntime, NotPullRequestContextError } from '../factory';
+import { extractGitHubPRContext, NotPullRequestContextError } from '@core/shared/github';
+import { createProviderRuntime } from '../factory';
 
 describe('createProviderRuntime', () => {
   const originalEnv = process.env;
@@ -44,9 +50,9 @@ describe('createProviderRuntime', () => {
     expect(() => createProviderRuntime()).toThrow('INPUT_GITHUB_TOKEN is required');
   });
 
-  it('maps non-PR context errors to NotPullRequestContextError', () => {
+  it('propagates non-PR context errors as NotPullRequestContextError', () => {
     (extractGitHubPRContext as jest.Mock).mockImplementationOnce(() => {
-      throw new Error('Not running in pull request context');
+      throw new NotPullRequestContextError();
     });
 
     expect(() => createProviderRuntime()).toThrow(NotPullRequestContextError);

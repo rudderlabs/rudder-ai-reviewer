@@ -5,15 +5,15 @@ import { COMMENT_SUMMARY_MARKER } from '@utils/constants';
 import {
   formatInlineComments,
   formatReviewComment as formatSummaryComment,
-  type GitHubContext,
+  type CommentFormatterContext,
 } from './comment-formatter';
 import { CommentSplitter } from './comment-splitter';
 
 /**
  * Posts AI reviewer comments on a PR
  *
- * @param githubToken - GitHub authentication token
- * @param prContext - GitHub PR context (owner, repo, prNumber)
+ * @param provider - SCM provider
+ * @param prContext - Change request context (provider, owner, repo, prNumber)
  * @param reviewResponse - Review response from pr-reviewer service
  */
 export async function postAIReviewerComments(
@@ -36,7 +36,7 @@ export async function postAIReviewerComments(
     const metadata = await provider.getChangeRequestMetadata(prContext);
     const commentSplitter = new CommentSplitter(provider);
 
-    const githubContext: GitHubContext = {
+    const formatterContext: CommentFormatterContext = {
       buildLineUrl: (file, line, column) =>
         provider.buildLineUrl(prContext, metadata.head_sha, file, line, column),
     };
@@ -46,7 +46,7 @@ export async function postAIReviewerComments(
       reviewResponse.issues
     );
 
-    await postSummaryComment(provider, prContext, reviewResponse, summaryIssues, githubContext);
+    await postSummaryComment(provider, prContext, reviewResponse, summaryIssues, formatterContext);
     await postInlineComments(provider, prContext, inlineIssues, metadata);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -59,7 +59,7 @@ async function postSummaryComment(
   prContext: ChangeRequestContext,
   reviewResponse: ReviewResponse,
   summaryIssues: ReviewIssue[],
-  githubContext: GitHubContext
+  formatterContext: CommentFormatterContext
 ): Promise<void> {
   const summaryCommentBody = formatSummaryComment(
     {
@@ -70,7 +70,7 @@ async function postSummaryComment(
       issues: summaryIssues,
       stats: reviewResponse.stats,
     },
-    githubContext
+    formatterContext
   );
   try {
     const commentId = await provider.findSummaryComment(prContext, COMMENT_SUMMARY_MARKER);
