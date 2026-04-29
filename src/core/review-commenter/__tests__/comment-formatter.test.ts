@@ -3,9 +3,8 @@ import { formatInlineComments, formatReviewComment } from '../comment-formatter'
 
 describe('comment-formatter', () => {
   const mockGitHubContext = {
-    owner: 'test-owner',
-    repo: 'test-repo',
-    commitSha: 'abc123def456',
+    buildLineUrl: (file: string, line: number) =>
+      `https://github.com/test-owner/test-repo/blob/abc123def456/${file}#L${line}`,
   };
 
   describe('formatReviewComment', () => {
@@ -388,9 +387,8 @@ describe('comment-formatter', () => {
       };
 
       const githubContext = {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        commitSha: 'abc123def456',
+        buildLineUrl: (file: string, line: number) =>
+          `https://github.com/test-owner/test-repo/blob/abc123def456/${file}#L${line}`,
       };
 
       const result = formatReviewComment(review, githubContext);

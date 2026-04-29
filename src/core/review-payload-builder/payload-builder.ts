@@ -1,9 +1,8 @@
 import * as core from '@actions/core';
-import { GitHubClient } from '@clients/github.client';
+import type { ChangeRequestContext, SCMProvider } from '@core/providers';
 import type { FrameworkDetectionResult } from '@core/framework-detector';
 import type { PRChangesResult } from '@core/pr-changes-detector';
 import type { SDKDetectionResult } from '@core/sdk-detector';
-import { GitHubPRContext } from '@core/shared/github/pr-context';
 import type { ReviewPayload } from '@custom-types/review-payload.types';
 import { COMMENT_INLINE_MARKER } from '@utils/constants';
 import { readFileSync } from 'fs';
@@ -11,30 +10,26 @@ import { join } from 'path';
 
 export interface PayloadBuilderInput {
   sourceId: string;
-  owner: string;
-  repo: string;
   prChanges: PRChangesResult;
   sdkDetection?: SDKDetectionResult | null;
   frameworks?: FrameworkDetectionResult[];
 }
 
 export class ReviewPayloadBuilder {
-  constructor(private readonly githubClient: GitHubClient) {}
+  constructor(private readonly provider: SCMProvider) {}
 
   /**
    * Builds the complete payload for PR Reviewer Service
    */
-  async buildPayload(input: PayloadBuilderInput): Promise<ReviewPayload> {
-    const { sourceId, owner, repo, prChanges, sdkDetection, frameworks = [] } = input;
+  async buildPayload(context: ChangeRequestContext, input: PayloadBuilderInput): Promise<ReviewPayload> {
+    const { sourceId, prChanges, sdkDetection, frameworks = [] } = input;
+    const { owner, repo } = context;
 
     core.info('Fetching repository metadata...');
-    const repoMetadata = await this.githubClient.getRepositoryMetadata(owner, repo);
+    const repoMetadata = await this.provider.getRepositoryMetadata(context);
 
     core.info('Fetching existing review comments...');
-    const existingReviewComments = await this.getExistingReviewComments(
-      input,
-      COMMENT_INLINE_MARKER
-    );
+    const existingReviewComments = await this.getExistingReviewComments(context, COMMENT_INLINE_MARKER);
 
     const { name, version } = this.getPackageDetails();
 
@@ -94,15 +89,7 @@ export class ReviewPayloadBuilder {
     }
   }
 
-  private async getExistingReviewComments(input: PayloadBuilderInput, marker: string) {
-    const { owner, repo, prChanges } = input;
-    const context: GitHubPRContext = { owner, repo, prNumber: prChanges.pull_request.number };
-    const comments = await this.githubClient.findReviewComments(context, marker);
-    return comments.map(comment => {
-      return {
-        id: comment.id,
-        body: comment.body ?? '',
-      };
-    });
+  private async getExistingReviewComments(context: ChangeRequestContext, marker: string) {
+    return this.provider.findInlineComments(context, marker);
   }
 }

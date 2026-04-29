@@ -1,15 +1,14 @@
-import { GitHubClient } from '@clients/github.client';
-import { GitHubPRContext } from '@core/shared/github/pr-context';
+import type { ChangeRequestContext, SCMProvider } from '@core/providers';
 import type { ReviewIssue } from '@custom-types/review.types';
 
 export class CommentSplitter {
-  constructor(private readonly githubClient: GitHubClient) {}
+  constructor(private readonly provider: SCMProvider) {}
 
   async getInlineAndSummaryIssues(
-    prContext: GitHubPRContext,
+    prContext: ChangeRequestContext,
     issues: ReviewIssue[]
   ): Promise<{ inlineIssues: ReviewIssue[]; summaryIssues: ReviewIssue[] }> {
-    const changedFilesMap = await this.githubClient.getChangedFilesMap(prContext);
+    const changedFilesMap = await this.provider.getChangedFilesMap(prContext);
     const { eligible, skipped } = this.filterInlineEligibleIssues(issues, changedFilesMap);
 
     return {

@@ -1,15 +1,8 @@
-import type { GitHubPRContext } from '@core/shared/github/pr-context';
+import type { ChangeRequestContext, SCMProvider } from '@core/providers';
 import { detectPRChanges } from '../index';
 
-jest.mock('@actions/github', () => ({
-  getOctokit: jest.fn(),
-}));
-
-jest.mock('@clients/github.client');
 jest.mock('../pr-changes-detector');
 
-import { getOctokit } from '@actions/github';
-import { GitHubClient } from '@clients/github.client';
 import { PRChangesDetector } from '../pr-changes-detector';
 
 describe('detectPRChanges', () => {
@@ -18,10 +11,11 @@ describe('detectPRChanges', () => {
   });
 
   it('should create detector with proper dependencies and return result', async () => {
-    const prContext: GitHubPRContext = {
+    const prContext: ChangeRequestContext = {
+      provider: 'github',
       owner: 'test-owner',
       repo: 'test-repo',
-      prNumber: 123,
+      number: 123,
     };
 
     const mockResult = {
@@ -40,19 +34,16 @@ describe('detectPRChanges', () => {
       diff_context: [],
     };
 
-    const mockOctokit = { rest: {}, paginate: jest.fn() };
-    (getOctokit as jest.Mock).mockReturnValue(mockOctokit);
+    const mockProvider = {} as SCMProvider;
 
     const mockDetector = {
       detect: jest.fn().mockResolvedValue(mockResult),
     };
     (PRChangesDetector as jest.Mock).mockImplementation(() => mockDetector);
 
-    const result = await detectPRChanges('test-token', prContext);
+    const result = await detectPRChanges(mockProvider, prContext);
 
-    expect(getOctokit).toHaveBeenCalledWith('test-token');
-    expect(GitHubClient).toHaveBeenCalledWith(mockOctokit);
-    expect(PRChangesDetector).toHaveBeenCalledWith(expect.any(Object));
+    expect(PRChangesDetector).toHaveBeenCalledWith(mockProvider);
     expect(mockDetector.detect).toHaveBeenCalledWith(prContext, '.');
     expect(result).toEqual(mockResult);
   });

@@ -12,9 +12,7 @@ import { COMMENT_INLINE_MARKER, COMMENT_SUMMARY_MARKER } from '@utils/constants'
 import path from 'node:path';
 
 export interface GitHubContext {
-  owner: string;
-  repo: string;
-  commitSha: string;
+  buildLineUrl(file: string, line: number, column?: number): string;
 }
 
 export function formatReviewComment(review: ReviewResponse, githubContext: GitHubContext): string {
@@ -33,16 +31,6 @@ export function formatReviewComment(review: ReviewResponse, githubContext: GitHu
 /**
  * Builds a GitHub permalink URL to a specific line in a file
  */
-function buildGitHubLineUrl(
-  file: string,
-  line: number,
-  _column: number | undefined,
-  context: GitHubContext
-): string {
-  const lineAnchor = `L${line}`;
-  return `https://github.com/${context.owner}/${context.repo}/blob/${context.commitSha}/${file}#${lineAnchor}`;
-}
-
 /**
  * Header with SDK badge and overall verdict
  */
@@ -201,7 +189,7 @@ function formatIssueItem(issue: ReviewIssue, index: number, githubContext: GitHu
   let item = `${index}. **${issue.message}**\n`;
 
   // Make line number clickable with GitHub permalink, showing full path
-  const url = buildGitHubLineUrl(issue.file, issue.line, issue.column, githubContext);
+  const url = githubContext.buildLineUrl(issue.file, issue.line, issue.column);
   const locationText = `${issue.file}:${issue.line}${issue.column ? `:${issue.column}` : ''}`;
   item += `   - Location: [${locationText}](${url})\n`;
 
@@ -249,7 +237,7 @@ function formatEventsTable(
       const propDetails = propCount > 0 ? `${propCount} props` : '-';
 
       // Make location clickable with GitHub permalink
-      const location = `[\`${event.file}:${event.line}\`](${buildGitHubLineUrl(event.file, event.line, undefined, githubContext)})`;
+      const location = `[\`${event.file}:${event.line}\`](${githubContext.buildLineUrl(event.file, event.line)})`;
 
       table += `| ${icon} ${status} | \`${event.name}\` | ${location} | ${propDetails} |\n`;
     });

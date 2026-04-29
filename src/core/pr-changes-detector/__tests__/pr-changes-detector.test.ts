@@ -1,13 +1,14 @@
-import type { GitHubPRContext } from '@core/shared/github';
+import type { ChangeRequestContext } from '@core/providers';
 import { PRChangesDetector } from '../pr-changes-detector';
 
 jest.mock('@clients/github.client');
 
 describe('PRChangesDetector', () => {
-  const mockPRContext: GitHubPRContext = {
+  const mockPRContext: ChangeRequestContext = {
+    provider: 'github',
     owner: 'test-owner',
     repo: 'test-repo',
-    prNumber: 123,
+    number: 123,
   };
 
   beforeEach(() => {
@@ -42,7 +43,7 @@ describe('PRChangesDetector', () => {
     ];
 
     const mockGitHubClient = {
-      getPRMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
+      getChangeRequestMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
       getChangedFiles: jest.fn().mockResolvedValue(mockFiles),
     };
 
@@ -80,7 +81,7 @@ describe('PRChangesDetector', () => {
       status: 'added',
     });
 
-    expect(mockGitHubClient.getPRMetadata).toHaveBeenCalledWith(mockPRContext);
+    expect(mockGitHubClient.getChangeRequestMetadata).toHaveBeenCalledWith(mockPRContext);
     expect(mockGitHubClient.getChangedFiles).toHaveBeenCalledWith(mockPRContext);
   });
 
@@ -105,7 +106,7 @@ describe('PRChangesDetector', () => {
     ];
 
     const mockGitHubClient = {
-      getPRMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
+      getChangeRequestMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
       getChangedFiles: jest.fn().mockResolvedValue(mockFiles),
     };
 
@@ -119,7 +120,7 @@ describe('PRChangesDetector', () => {
 
   it('should propagate errors from GitHub client', async () => {
     const mockGitHubClient = {
-      getPRMetadata: jest.fn().mockRejectedValue(new Error('API error')),
+      getChangeRequestMetadata: jest.fn().mockRejectedValue(new Error('API error')),
       getChangedFiles: jest.fn(),
     };
 
@@ -162,7 +163,7 @@ describe('PRChangesDetector', () => {
     ];
 
     const mockGitHubClient = {
-      getPRMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
+      getChangeRequestMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
       getChangedFiles: jest.fn().mockResolvedValue(mockFiles),
     };
 
@@ -211,7 +212,7 @@ describe('PRChangesDetector', () => {
     ];
 
     const mockGitHubClient = {
-      getPRMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
+      getChangeRequestMetadata: jest.fn().mockResolvedValue(mockPRMetadata),
       getChangedFiles: jest.fn().mockResolvedValue(mockFiles),
     };
 

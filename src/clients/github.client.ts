@@ -1,12 +1,32 @@
 import * as core from '@actions/core';
 import type { getOctokit } from '@actions/github';
-import { FileStatus } from '@core/pr-changes-detector';
+import type {
+  ChangeRequestContext,
+  ProviderCommentReference,
+  ProviderInlineComment,
+  ProviderPRMetadata,
+  ProviderRepositoryMetadata,
+  SCMProvider,
+} from '@core/providers';
 import type { GitHubPRContext } from '@core/shared/github';
 import { GitHubPRMetadata } from '@custom-types/github.types';
 import type { InlineComment } from '@custom-types/review.types';
 
-export class GitHubClient {
+export class GitHubClient implements SCMProvider {
+  readonly id = 'github' as const;
+
   constructor(private readonly octokit: ReturnType<typeof getOctokit>) {}
+
+  private toGitHubPRContext(context: ChangeRequestContext | GitHubPRContext): GitHubPRContext {
+    if ('prNumber' in context) {
+      return context;
+    }
+    return {
+      owner: context.owner,
+      repo: context.repo,
+      prNumber: context.number,
+    };
+  }
 
   /**
    * Fetches repository metadata (visibility, languages, primary language)
@@ -14,26 +34,25 @@ export class GitHubClient {
    * @param owner - Repository owner
    * @param repo - Repository name
    */
+  async getRepositoryMetadata(ctx: ChangeRequestContext): Promise<ProviderRepositoryMetadata>;
   async getRepositoryMetadata(
     owner: string,
     repo: string
-  ): Promise<{
-    visibility: 'public' | 'private' | 'internal';
-    primary_language?: string;
-    languages: Record<string, number>;
-  }> {
-    // Fetch repository details
-    const { data: repoData } = await this.octokit.rest.repos.get({
-      owner,
-      repo,
-    });
-
-    // Fetch languages used in the repository
+  ): Promise<ProviderRepositoryMetadata>;
+  async getRepositoryMetadata(
+    ownerOrContext: string | ChangeRequestContext,
+    repo?: string
+  ): Promise<ProviderRepositoryMetadata> {
+    const owner = typeof ownerOrContext === 'string' ? ownerOrContext : ownerOrContext.owner;
+    const resolvedRepo = typeof ownerOrContext === 'string' ? repo : ownerOrContext.repo;
+    if (!resolvedRepo) {
+      throw new Error('Repository name is required');
+    }
+    const { data: repoData } = await this.octokit.rest.repos.get({ owner, repo: resolvedRepo });
     const { data: languagesData } = await this.octokit.rest.repos.listLanguages({
       owner,
-      repo,
+      repo: resolvedRepo,
     });
-
     return {
       visibility: repoData.visibility as 'public' | 'private' | 'internal',
       primary_language: repoData.language || undefined,
@@ -46,16 +65,34 @@ export class GitHubClient {
    *
    * @param context - GitHub PR context (owner, repo, prNumber)
    */
+  async getChangedFiles(context: ChangeRequestContext): Promise<
+    Array<{
+      filename: string;
+      status: string;
+      additions: number;
+      deletions: number;
+      patch?: string;
+    }>
+  >;
   async getChangedFiles(context: GitHubPRContext): Promise<
     Array<{
       filename: string;
-      status: FileStatus;
+      status: string;
+      additions: number;
+      deletions: number;
+      patch?: string;
+    }>
+  >;
+  async getChangedFiles(context: ChangeRequestContext | GitHubPRContext): Promise<
+    Array<{
+      filename: string;
+      status: string;
       additions: number;
       deletions: number;
       patch?: string;
     }>
   > {
-    const { owner, repo, prNumber } = context;
+    const { owner, repo, prNumber } = this.toGitHubPRContext(context);
 
     // Use octokit.paginate for automatic pagination
     // This handles PRs with >100 files by fetching all pages
@@ -95,6 +132,10 @@ export class GitHubClient {
     };
   }
 
+  async getChangeRequestMetadata(context: ChangeRequestContext): Promise<ProviderPRMetadata> {
+    return this.getPRMetadata(this.toGitHubPRContext(context));
+  }
+
   async findReviewComments(context: GitHubPRContext, marker: string) {
     const { owner, repo, prNumber } = context;
     const comments = await this.octokit.paginate(this.octokit.rest.pulls.listReviewComments, {
@@ -107,6 +148,17 @@ export class GitHubClient {
       `Existing review comments ${existingComments.length ? `found (IDs: ${existingComments.map(c => c.id).join(', ')})` : 'not found'}`
     );
     return existingComments;
+  }
+
+  async findInlineComments(
+    context: ChangeRequestContext,
+    marker: string
+  ): Promise<ProviderCommentReference[]> {
+    const comments = await this.findReviewComments(this.toGitHubPRContext(context), marker);
+    return comments.map(comment => ({
+      id: comment.id,
+      body: comment.body ?? '',
+    }));
   }
 
   /**
@@ -136,6 +188,10 @@ export class GitHubClient {
     }
   }
 
+  async findSummaryComment(context: ChangeRequestContext, marker: string): Promise<number | null> {
+    return this.findComment(this.toGitHubPRContext(context), marker);
+  }
+
   /**
    * Creates a new PR review comment
    *
@@ -162,6 +218,10 @@ export class GitHubClient {
     }
   }
 
+  async createSummaryComment(context: ChangeRequestContext, body: string): Promise<number> {
+    return this.createComment(this.toGitHubPRContext(context), body);
+  }
+
   /**
    * Updates an existing PR review comment
    *
@@ -184,6 +244,14 @@ export class GitHubClient {
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to update review comment: ${message}`);
     }
+  }
+
+  async updateSummaryComment(
+    context: ChangeRequestContext,
+    commentId: number,
+    body: string
+  ): Promise<void> {
+    return this.updateComment(this.toGitHubPRContext(context), commentId, body);
   }
 
   /**
@@ -225,6 +293,19 @@ export class GitHubClient {
     }
   }
 
+  async createInlineReview(
+    context: ChangeRequestContext,
+    comments: ProviderInlineComment[],
+    commitId?: string
+  ): Promise<number> {
+    return this.createReview(
+      this.toGitHubPRContext(context),
+      comments as InlineComment[],
+      'COMMENT',
+      commitId
+    );
+  }
+
   /**
    * Gets a map of changed files with their line ranges
    *
@@ -232,9 +313,15 @@ export class GitHubClient {
    * @returns Map of file path to line range and status
    */
   async getChangedFilesMap(
+    context: ChangeRequestContext
+  ): Promise<Map<string, { start: number; end: number; status: string }>>;
+  async getChangedFilesMap(
     context: GitHubPRContext
+  ): Promise<Map<string, { start: number; end: number; status: string }>>;
+  async getChangedFilesMap(
+    context: ChangeRequestContext | GitHubPRContext
   ): Promise<Map<string, { start: number; end: number; status: string }>> {
-    const files = await this.getChangedFiles(context);
+    const files = await this.getChangedFiles(this.toGitHubPRContext(context));
     const fileMap = new Map<string, { start: number; end: number; status: string }>();
 
     files.forEach(file => {
@@ -261,6 +348,16 @@ export class GitHubClient {
     });
 
     return fileMap;
+  }
+
+  buildLineUrl(
+    context: ChangeRequestContext,
+    commitSha: string,
+    file: string,
+    line: number,
+    _column?: number
+  ): string {
+    return `https://github.com/${context.owner}/${context.repo}/blob/${commitSha}/${file}#L${line}`;
   }
 
   /**
