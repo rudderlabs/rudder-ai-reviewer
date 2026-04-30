@@ -30,19 +30,18 @@ function parseProjectPath(projectPath: string): { owner: string; repo: string } 
 
 function createGitLabProviderRuntime(): ProviderRuntime {
   const gitlabContext = extractGitLabMergeRequestContext();
-  const gitlabToken = process.env.INPUT_GITLAB_TOKEN || process.env.GITLAB_TOKEN || '';
-  const gitlabJobToken = process.env.CI_JOB_TOKEN || '';
+  const gitlabToken = process.env.INPUT_GITLAB_TOKEN || '';
 
-  if (!gitlabToken && !gitlabJobToken) {
-    throw new Error('GitLab token is required (INPUT_GITLAB_TOKEN, GITLAB_TOKEN, or CI_JOB_TOKEN)');
+  if (!gitlabToken) {
+    throw new Error('GitLab token is required (INPUT_GITLAB_TOKEN)');
   }
 
-  const gitlabBaseUrl =
-    process.env.INPUT_GITLAB_BASE_URL || process.env.CI_SERVER_URL || 'https://gitlab.com';
+  const gitlabBaseUrl = process.env.INPUT_GITLAB_BASE_URL || 'https://gitlab.com';
+
   const provider = GitLabClient.create({
     host: gitlabBaseUrl,
-    token: gitlabToken || undefined,
-    jobToken: gitlabToken ? undefined : gitlabJobToken || undefined,
+    token: gitlabToken,
+    jobToken: undefined,
   });
   const { owner, repo } = parseProjectPath(gitlabContext.projectPath);
   return { provider, context: { provider: 'gitlab', owner, repo, number: gitlabContext.mergeRequestIid } };

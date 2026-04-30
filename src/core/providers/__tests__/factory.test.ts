@@ -43,9 +43,7 @@ describe('createProviderRuntime', () => {
     delete process.env.CI_PROJECT_PATH;
     delete process.env.CI_JOB_TOKEN;
     delete process.env.INPUT_GITLAB_TOKEN;
-    delete process.env.GITLAB_TOKEN;
     delete process.env.INPUT_GITLAB_BASE_URL;
-    delete process.env.CI_SERVER_URL;
   });
 
   afterAll(() => {
@@ -92,30 +90,12 @@ describe('createProviderRuntime', () => {
     });
   });
 
-  it('uses CI job token when explicit GitLab token is not provided', () => {
-    process.env.CI_PROJECT_PATH = 'group/project';
-    process.env.CI_MERGE_REQUEST_IID = '23';
-    process.env.CI_JOB_TOKEN = 'job-token';
-
-    createProviderRuntime();
-
-    expect(GitLabClient.create).toHaveBeenCalledWith({
-      host: 'https://gitlab.com',
-      token: undefined,
-      jobToken: 'job-token',
-    });
-  });
-
-  it('throws when GitLab token and CI job token are missing in GitLab MR env', () => {
+  it('throws when INPUT_GITLAB_TOKEN is missing in GitLab MR env', () => {
     process.env.CI_PROJECT_PATH = 'group/project';
     process.env.CI_MERGE_REQUEST_IID = '23';
     process.env.INPUT_GITLAB_TOKEN = '';
-    process.env.GITLAB_TOKEN = '';
-    process.env.CI_JOB_TOKEN = '';
 
-    expect(() => createProviderRuntime()).toThrow(
-      'GitLab token is required (INPUT_GITLAB_TOKEN, GITLAB_TOKEN, or CI_JOB_TOKEN)'
-    );
+    expect(() => createProviderRuntime()).toThrow('GitLab token is required (INPUT_GITLAB_TOKEN)');
   });
 
   it('throws when INPUT_GITHUB_TOKEN is missing outside GitLab MR env', () => {
