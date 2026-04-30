@@ -68,10 +68,12 @@ export class GitLabClient implements SCMProvider {
     const projectPath = this.toProjectPath(ctx);
     // temporary logging
     console.log("getChangeRequestMetadata", projectPath, ctx.number);
-    const [mergeRequest, diffRefs] = await Promise.all([
-      this.gitlab.MergeRequests.show(projectPath, ctx.number),
-      this.getDiffRefs(projectPath, ctx.number),
-    ]);
+    const mergeRequest = await this.gitlab.MergeRequests.show(projectPath, ctx.number);
+    const diffRefs = await this.getDiffRefs(projectPath, ctx.number);
+    // const [mergeRequest, diffRefs] = await Promise.all([
+    //   this.gitlab.MergeRequests.show(projectPath, ctx.number),
+    //   this.getDiffRefs(projectPath, ctx.number),
+    // ]);
 
     return {
       number: (mergeRequest as { iid?: number }).iid ?? ctx.number,
