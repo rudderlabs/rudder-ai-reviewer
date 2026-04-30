@@ -14,7 +14,6 @@ import { COMMENT_INLINE_MARKER } from '@utils/constants';
 interface GitLabClientOptions {
   host: string;
   token?: string;
-  jobToken?: string;
 }
 
 interface GitLabNoteLike {
@@ -43,8 +42,7 @@ export class GitLabClient implements SCMProvider {
   static create(options: GitLabClientOptions): GitLabClient {
     const api = new Gitlab({
       host: options.host,
-      token: options.token,
-      jobToken: options.jobToken,
+      token: options.token
     });
 
     return new GitLabClient(api, { host: options.host });
