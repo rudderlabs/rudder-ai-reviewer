@@ -40,7 +40,7 @@ function createGitLabProviderRuntime(): ProviderRuntime {
 
   const provider = GitLabClient.create({
     host: gitlabBaseUrl,
-    token: gitlabToken,
+    token: gitlabToken.trim(),
     jobToken: undefined,
   });
   const { owner, repo } = parseProjectPath(gitlabContext.projectPath);
