@@ -121,11 +121,13 @@ describe('action entrypoint', () => {
     await import('../index');
     await flushAsyncWork();
 
-    expect(mockWarning).toHaveBeenCalledWith('This action must be run in a pull request context');
+    expect(mockWarning).toHaveBeenCalledWith(
+      'This action must be run in a pull request or merge request context'
+    );
     expect(mockSetOutput).toHaveBeenCalledWith('status', 'warning');
     expect(mockSetOutput).toHaveBeenCalledWith(
       'message',
-      'This action must be run in a pull request context'
+      'This action must be run in a pull request or merge request context'
     );
     expect(mockSetFailed).not.toHaveBeenCalled();
     expect(mockDetectPRChanges).not.toHaveBeenCalled();
