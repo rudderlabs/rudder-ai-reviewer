@@ -1,5 +1,4 @@
 import * as core from '@actions/core';
-import { Gitlab } from '@gitbeaker/rest';
 import type {
   ChangeRequestContext,
   ProviderChangedFile,
@@ -9,6 +8,7 @@ import type {
   ProviderRepositoryMetadata,
   SCMProvider,
 } from '@core/providers';
+import { Gitlab } from '@gitbeaker/rest';
 import { COMMENT_INLINE_MARKER } from '@utils/constants';
 
 interface GitLabClientOptions {
@@ -66,6 +66,8 @@ export class GitLabClient implements SCMProvider {
 
   async getChangeRequestMetadata(ctx: ChangeRequestContext): Promise<ProviderPRMetadata> {
     const projectPath = this.toProjectPath(ctx);
+    // temporary logging
+    console.log("getChangeRequestMetadata", projectPath, ctx.number);
     const [mergeRequest, diffRefs] = await Promise.all([
       this.gitlab.MergeRequests.show(projectPath, ctx.number),
       this.getDiffRefs(projectPath, ctx.number),
