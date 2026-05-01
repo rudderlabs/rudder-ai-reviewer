@@ -43,8 +43,6 @@ function createGitLabProviderRuntime(): ProviderRuntime {
     token: gitlabToken,
   });
   const { owner, repo } = parseProjectPath(gitlabContext.projectPath);
-  // temporary logging
-  console.log("gitlabContext", gitlabBaseUrl, gitlabToken.slice(-5) + "...");
   return { provider, context: { provider: 'gitlab', owner, repo, number: gitlabContext.mergeRequestIid } };
 }
 
