@@ -1,4 +1,4 @@
-import { extractGitHubPRContext } from '../pr-context';
+import { extractGitHubPRContext, NotPullRequestContextError } from '../pr-context';
 
 jest.mock('@actions/github', () => ({
   context: {
@@ -39,7 +39,7 @@ describe('extractGitHubPRContext', () => {
       repo: 'test-repo',
     };
 
-    expect(() => extractGitHubPRContext()).toThrow('Not running in pull request context');
+    expect(() => extractGitHubPRContext()).toThrow(NotPullRequestContextError);
   });
 
   it('should throw when pull_request is null', () => {
@@ -51,6 +51,6 @@ describe('extractGitHubPRContext', () => {
       repo: 'test-repo',
     };
 
-    expect(() => extractGitHubPRContext()).toThrow('Not running in pull request context');
+    expect(() => extractGitHubPRContext()).toThrow(NotPullRequestContextError);
   });
 });

@@ -1,6 +1,4 @@
-import { getOctokit } from '@actions/github';
-import { GitHubClient } from '@clients/github.client';
-import type { GitHubPRContext } from '@core/shared/github/pr-context';
+import type { ChangeRequestContext, SCMProvider } from '@core/providers';
 import { PRChangesDetector } from './pr-changes-detector';
 import type { PRChangesResult } from './types';
 
@@ -12,13 +10,11 @@ import type { PRChangesResult } from './types';
  * @param rootDirectory - Optional root directory to filter changed files (default: '.')
  */
 export async function detectPRChanges(
-  githubToken: string,
-  prContext: GitHubPRContext,
+  provider: SCMProvider,
+  prContext: ChangeRequestContext,
   rootDirectory = '.'
 ): Promise<PRChangesResult> {
-  const octokit = getOctokit(githubToken);
-  const githubClient = new GitHubClient(octokit);
-  const detector = new PRChangesDetector(githubClient);
+  const detector = new PRChangesDetector(provider);
 
   return detector.detect(prContext, rootDirectory);
 }

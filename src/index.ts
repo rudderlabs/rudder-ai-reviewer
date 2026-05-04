@@ -1,12 +1,11 @@
 import * as core from '@actions/core';
-import * as github from '@actions/github';
 import { PRReviewerServiceClient } from '@clients/pr-reviewer-service.client';
 import { detectFrameworks } from '@core/framework-detector';
 import { detectPRChanges } from '@core/pr-changes-detector';
+import { createProviderRuntime, NotPullRequestContextError } from '@core/providers';
 import { postAIReviewerComments } from '@core/review-commenter';
 import { buildReviewPayload } from '@core/review-payload-builder';
 import { detectSDK } from '@core/sdk-detector';
-import type { GitHubPRContext } from '@core/shared/github';
 import { resolve } from 'path';
 
 async function run(): Promise<void> {
@@ -16,25 +15,15 @@ async function run(): Promise<void> {
     const sourceId = process.env.INPUT_SOURCE_ID || '';
     const serviceAccessToken = process.env.INPUT_SERVICE_ACCESS_TOKEN || '';
     const rootDirectory = process.env.INPUT_ROOT_DIRECTORY || '.';
-    const githubToken = process.env.INPUT_GITHUB_TOKEN || '';
-
-    const prNumber = github.context.payload.pull_request?.number;
-    if (!prNumber) {
-      core.warning('This action must be run in a pull request context');
-      core.setOutput('status', 'warning');
-      core.setOutput('message', 'This action must be run in a pull request context');
-      return;
-    }
-
-    const { owner, repo } = github.context.repo;
+    const { provider, context } = createProviderRuntime();
+    const { owner, repo } = context;
+    const prNumber = context.number;
     core.info(`Repository: ${owner}/${repo}`);
     core.info(`PR Number: ${prNumber}`);
 
     const serviceClient = new PRReviewerServiceClient(serviceAccessToken);
-    const prContext: GitHubPRContext = { owner, repo, prNumber };
-
     core.info('🔍 Detecting PR changes...');
-    const prChanges = await detectPRChanges(githubToken, prContext, rootDirectory);
+    const prChanges = await detectPRChanges(provider, context, rootDirectory);
     core.info(`✅ Detected ${prChanges.diff_context.length} relevant source files`);
     if (prChanges.diff_context.length === 0) {
       core.info('No relevant source file changes detected. Skipping PR Reviewer Service call.');
@@ -68,10 +57,8 @@ async function run(): Promise<void> {
     }
 
     core.info('📦 Building review payload...');
-    const payload = await buildReviewPayload(githubToken, {
+    const payload = await buildReviewPayload(provider, context, {
       sourceId,
-      owner,
-      repo,
       prChanges,
       sdkDetection,
       frameworks,
@@ -83,12 +70,19 @@ async function run(): Promise<void> {
     core.debug(`Review response: ${JSON.stringify(reviewResponse, null, 2)}`);
 
     core.info('📤 Posting review comment to PR...');
-    await postAIReviewerComments(githubToken, prContext, reviewResponse);
+    await postAIReviewerComments(provider, context, reviewResponse);
 
     core.info('✨ Rudder AI Reviewer completed successfully!');
     core.setOutput('status', 'success');
     core.setOutput('message', 'Successfully analyzed and submitted PR review');
   } catch (error) {
+    if (error instanceof NotPullRequestContextError) {
+      core.warning('This action must be run in a pull request context');
+      core.setOutput('status', 'warning');
+      core.setOutput('message', 'This action must be run in a pull request context');
+      return;
+    }
+
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
 

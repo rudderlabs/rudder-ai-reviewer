@@ -2,10 +2,9 @@ import type { ReviewIssue, ReviewResponse } from '@custom-types/review.types';
 import { formatInlineComments, formatReviewComment } from '../comment-formatter';
 
 describe('comment-formatter', () => {
-  const mockGitHubContext = {
-    owner: 'test-owner',
-    repo: 'test-repo',
-    commitSha: 'abc123def456',
+  const mockFormatterContext = {
+    buildLineUrl: (file: string, line: number) =>
+      `https://github.com/test-owner/test-repo/blob/abc123def456/${file}#L${line}`,
   };
 
   describe('formatReviewComment', () => {
@@ -71,7 +70,7 @@ describe('comment-formatter', () => {
         },
       };
 
-      const result = formatReviewComment(review, mockGitHubContext);
+      const result = formatReviewComment(review, mockFormatterContext);
 
       expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('🔴 Rudder AI Reviewer');
@@ -115,7 +114,7 @@ describe('comment-formatter', () => {
         },
       };
 
-      const result = formatReviewComment(review, mockGitHubContext);
+      const result = formatReviewComment(review, mockFormatterContext);
 
       expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('🟢 Rudder AI Reviewer');
@@ -162,7 +161,7 @@ describe('comment-formatter', () => {
         },
       };
 
-      const result = formatReviewComment(review, mockGitHubContext);
+      const result = formatReviewComment(review, mockFormatterContext);
 
       expect(result).toContain('🟡 Rudder AI Reviewer');
       expect(result).toContain('<summary><b>⚠️ Warnings (1)</b></summary>');
@@ -226,7 +225,7 @@ describe('comment-formatter', () => {
         },
       };
 
-      const result = formatReviewComment(review, mockGitHubContext);
+      const result = formatReviewComment(review, mockFormatterContext);
 
       expect(result).toContain('### ❌ Errors (3)');
       expect(result).toContain('#### `src/analytics.ts`');
@@ -285,7 +284,7 @@ describe('comment-formatter', () => {
         },
       };
 
-      const result = formatReviewComment(review, mockGitHubContext);
+      const result = formatReviewComment(review, mockFormatterContext);
 
       expect(result).toContain('Events Detected (3)');
       expect(result).toContain('✅ added');
@@ -333,7 +332,7 @@ describe('comment-formatter', () => {
         },
       };
 
-      const result = formatReviewComment(review, mockGitHubContext);
+      const result = formatReviewComment(review, mockFormatterContext);
 
       expect(result).toContain('<!-- rudder-pr-reviewer-bot-summary -->');
       expect(result).toContain('💡 Suggestions (1)');
@@ -387,13 +386,12 @@ describe('comment-formatter', () => {
         },
       };
 
-      const githubContext = {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        commitSha: 'abc123def456',
+      const formatterContext = {
+        buildLineUrl: (file: string, line: number) =>
+          `https://github.com/test-owner/test-repo/blob/abc123def456/${file}#L${line}`,
       };
 
-      const result = formatReviewComment(review, githubContext);
+      const result = formatReviewComment(review, formatterContext);
 
       expect(result).toContain(
         'Location: [src/analytics.ts:23:5](https://github.com/test-owner/test-repo/blob/abc123def456/src/analytics.ts#L23)'

@@ -1,13 +1,13 @@
-import { GitHubClient } from '@clients/github.client';
-import type { GitHubPRContext } from '@core/shared/github/pr-context';
+import type { ChangeRequestContext, SCMProvider } from '@core/providers';
 import type { ReviewIssue } from '@custom-types/review.types';
 import { CommentSplitter } from '../comment-splitter';
 
 describe('CommentSplitter', () => {
-  const mockContext: GitHubPRContext = {
+  const mockContext: ChangeRequestContext = {
+    provider: 'github',
     owner: 'test-owner',
     repo: 'test-repo',
-    prNumber: 123,
+    number: 123,
   };
 
   const mockIssue = (
@@ -105,7 +105,7 @@ describe('CommentSplitter', () => {
 
       const changedFiles = new Map([['src/app.ts', { start: 10, end: 20, status: 'modified' }]]);
 
-      const mockGitHubClient = {} as GitHubClient;
+      const mockGitHubClient = {} as SCMProvider;
       const splitter = new CommentSplitter(mockGitHubClient);
 
       const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
@@ -124,7 +124,7 @@ describe('CommentSplitter', () => {
 
       const changedFiles = new Map([['src/app.ts', { start: 10, end: 20, status: 'modified' }]]);
 
-      const mockGitHubClient = {} as GitHubClient;
+      const mockGitHubClient = {} as SCMProvider;
       const splitter = new CommentSplitter(mockGitHubClient);
 
       const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
@@ -146,7 +146,7 @@ describe('CommentSplitter', () => {
         ['src/app.ts', { start: 10, end: 20, status: 'modified' }],
       ]);
 
-      const mockGitHubClient = {} as GitHubClient;
+      const mockGitHubClient = {} as SCMProvider;
       const splitter = new CommentSplitter(mockGitHubClient);
 
       const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
@@ -165,7 +165,7 @@ describe('CommentSplitter', () => {
 
       const changedFiles = new Map([['src/app.ts', { start: 5, end: 20, status: 'modified' }]]);
 
-      const mockGitHubClient = {} as GitHubClient;
+      const mockGitHubClient = {} as SCMProvider;
       const splitter = new CommentSplitter(mockGitHubClient);
 
       const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
@@ -179,7 +179,7 @@ describe('CommentSplitter', () => {
     it('should handle empty issues array', () => {
       const changedFiles = new Map([['src/app.ts', { start: 5, end: 20, status: 'modified' }]]);
 
-      const mockGitHubClient = {} as GitHubClient;
+      const mockGitHubClient = {} as SCMProvider;
       const splitter = new CommentSplitter(mockGitHubClient);
 
       const { eligible, skipped } = splitter.filterInlineEligibleIssues([], changedFiles);
@@ -193,7 +193,7 @@ describe('CommentSplitter', () => {
 
       const changedFiles = new Map();
 
-      const mockGitHubClient = {} as GitHubClient;
+      const mockGitHubClient = {} as SCMProvider;
       const splitter = new CommentSplitter(mockGitHubClient);
 
       const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
@@ -211,7 +211,7 @@ describe('CommentSplitter', () => {
 
       const changedFiles = new Map([['src/app.ts', { start: 1, end: 20, status: 'modified' }]]);
 
-      const mockGitHubClient = {} as GitHubClient;
+      const mockGitHubClient = {} as SCMProvider;
       const splitter = new CommentSplitter(mockGitHubClient);
 
       const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);
@@ -230,7 +230,7 @@ describe('CommentSplitter', () => {
 
       const changedFiles = new Map([['src/app.ts', { start: 10, end: 20, status: 'modified' }]]);
 
-      const mockGitHubClient = {} as GitHubClient;
+      const mockGitHubClient = {} as SCMProvider;
       const splitter = new CommentSplitter(mockGitHubClient);
 
       const { eligible, skipped } = splitter.filterInlineEligibleIssues(issues, changedFiles);

@@ -1,24 +1,23 @@
 import * as core from '@actions/core';
-import { GitHubClient } from '@clients/github.client';
-import type { GitHubPRContext } from '@core/shared/github/pr-context';
+import type { ChangeRequestContext, SCMProvider } from '@core/providers';
 import { isAbsolute, relative } from 'path';
 import { shouldIncludeFile } from './file-filter';
 import { countPatchHunks } from './patch-parser';
 import type { DiffFile, FileChange, FileStatus, PRChangesResult } from './types';
 
 export class PRChangesDetector {
-  constructor(private readonly githubClient: GitHubClient) {}
+  constructor(private readonly provider: SCMProvider) {}
 
   /**
    * Main entry point - fetches and processes all PR changes
    */
-  async detect(prContext: GitHubPRContext, rootDirectory = '.'): Promise<PRChangesResult> {
+  async detect(prContext: ChangeRequestContext, rootDirectory = '.'): Promise<PRChangesResult> {
     try {
       core.info('Fetching PR metadata...');
-      const prMetadata = await this.githubClient.getPRMetadata(prContext);
+      const prMetadata = await this.provider.getChangeRequestMetadata(prContext);
 
       core.info('Fetching changed files...');
-      const changedFiles = await this.githubClient.getChangedFiles(prContext);
+      const changedFiles = await this.provider.getChangedFiles(prContext);
 
       core.info(`Filtering files for root directory: ${rootDirectory}`);
       const filteredByPath = this.filterFilesByPath(changedFiles, rootDirectory);

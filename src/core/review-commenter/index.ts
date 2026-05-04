@@ -1,27 +1,24 @@
 import * as core from '@actions/core';
-import { getOctokit } from '@actions/github';
-import { GitHubClient } from '@clients/github.client';
-import type { GitHubPRContext } from '@core/shared/github/pr-context';
-import { GitHubPRMetadata } from '@custom-types/github.types';
+import type { ChangeRequestContext, ProviderPRMetadata, SCMProvider } from '@core/providers';
 import type { ReviewIssue, ReviewResponse } from '@custom-types/review.types';
 import { COMMENT_SUMMARY_MARKER } from '@utils/constants';
 import {
   formatInlineComments,
   formatReviewComment as formatSummaryComment,
-  type GitHubContext,
+  type CommentFormatterContext,
 } from './comment-formatter';
 import { CommentSplitter } from './comment-splitter';
 
 /**
  * Posts AI reviewer comments on a PR
  *
- * @param githubToken - GitHub authentication token
- * @param prContext - GitHub PR context (owner, repo, prNumber)
+ * @param provider - SCM provider
+ * @param prContext - Change request context (provider, owner, repo, prNumber)
  * @param reviewResponse - Review response from pr-reviewer service
  */
 export async function postAIReviewerComments(
-  githubToken: string,
-  prContext: GitHubPRContext,
+  provider: SCMProvider,
+  prContext: ChangeRequestContext,
   reviewResponse: ReviewResponse
 ): Promise<void> {
   try {
@@ -30,15 +27,18 @@ export async function postAIReviewerComments(
       return;
     }
 
-    const octokit = getOctokit(githubToken);
-    const githubClient = new GitHubClient(octokit);
-    const metadata = await githubClient.getPRMetadata(prContext);
-    const commentSplitter = new CommentSplitter(githubClient);
+    if (provider.id !== prContext.provider) {
+      throw new Error(
+        `Provider mismatch: provider '${provider.id}' cannot handle context '${prContext.provider}'`
+      );
+    }
 
-    const githubContext: GitHubContext = {
-      owner: prContext.owner,
-      repo: prContext.repo,
-      commitSha: metadata.head_sha,
+    const metadata = await provider.getChangeRequestMetadata(prContext);
+    const commentSplitter = new CommentSplitter(provider);
+
+    const formatterContext: CommentFormatterContext = {
+      buildLineUrl: (file, line, column) =>
+        provider.buildLineUrl(prContext, metadata.head_sha, file, line, column),
     };
 
     const { inlineIssues, summaryIssues } = await commentSplitter.getInlineAndSummaryIssues(
@@ -46,8 +46,8 @@ export async function postAIReviewerComments(
       reviewResponse.issues
     );
 
-    await postSummaryComment(githubClient, prContext, reviewResponse, summaryIssues, githubContext);
-    await postInlineComments(githubClient, prContext, inlineIssues, metadata);
+    await postSummaryComment(provider, prContext, reviewResponse, summaryIssues, formatterContext);
+    await postInlineComments(provider, prContext, inlineIssues, metadata);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Failed to post AI reviewer comments: ${message}`);
@@ -55,11 +55,11 @@ export async function postAIReviewerComments(
 }
 
 async function postSummaryComment(
-  githubClient: GitHubClient,
-  prContext: GitHubPRContext,
+  provider: SCMProvider,
+  prContext: ChangeRequestContext,
   reviewResponse: ReviewResponse,
   summaryIssues: ReviewIssue[],
-  githubContext: GitHubContext
+  formatterContext: CommentFormatterContext
 ): Promise<void> {
   const summaryCommentBody = formatSummaryComment(
     {
@@ -70,14 +70,14 @@ async function postSummaryComment(
       issues: summaryIssues,
       stats: reviewResponse.stats,
     },
-    githubContext
+    formatterContext
   );
   try {
-    const commentId = await githubClient.findComment(prContext, COMMENT_SUMMARY_MARKER);
+    const commentId = await provider.findSummaryComment(prContext, COMMENT_SUMMARY_MARKER);
     if (commentId) {
-      await githubClient.updateComment(prContext, commentId, summaryCommentBody);
+      await provider.updateSummaryComment(prContext, commentId, summaryCommentBody);
     } else {
-      await githubClient.createComment(prContext, summaryCommentBody);
+      await provider.createSummaryComment(prContext, summaryCommentBody);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -86,15 +86,15 @@ async function postSummaryComment(
 }
 
 async function postInlineComments(
-  githubClient: GitHubClient,
-  prContext: GitHubPRContext,
+  provider: SCMProvider,
+  prContext: ChangeRequestContext,
   inlineIssues: ReviewIssue[],
-  metadata: GitHubPRMetadata
+  metadata: ProviderPRMetadata
 ): Promise<void> {
   if (inlineIssues.length > 0) {
     try {
       const inlineComments = formatInlineComments(inlineIssues);
-      await githubClient.createReview(prContext, inlineComments, 'COMMENT', metadata.head_sha);
+      await provider.createInlineReview(prContext, inlineComments, metadata.head_sha);
       core.info(`Successfully posted ${inlineComments.length} inline comment(s)`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

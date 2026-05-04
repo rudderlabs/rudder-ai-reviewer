@@ -1,5 +1,4 @@
-import { getOctokit } from '@actions/github';
-import { GitHubClient } from '@clients/github.client';
+import type { ChangeRequestContext, SCMProvider } from '@core/providers';
 import { ReviewPayload } from '@custom-types/review-payload.types';
 import { PayloadBuilderInput, ReviewPayloadBuilder } from './payload-builder';
 
@@ -7,11 +6,10 @@ export { ReviewPayloadBuilder } from './payload-builder';
 export type { PayloadBuilderInput } from './payload-builder';
 
 export async function buildReviewPayload(
-  githubToken: string,
+  provider: SCMProvider,
+  context: ChangeRequestContext,
   payloadBuilderInput: PayloadBuilderInput
 ): Promise<ReviewPayload> {
-  const octokit = getOctokit(githubToken);
-  const githubClient = new GitHubClient(octokit);
-  const reviewPayloadBuilder = new ReviewPayloadBuilder(githubClient);
-  return reviewPayloadBuilder.buildPayload(payloadBuilderInput);
+  const reviewPayloadBuilder = new ReviewPayloadBuilder(provider);
+  return reviewPayloadBuilder.buildPayload(context, payloadBuilderInput);
 }

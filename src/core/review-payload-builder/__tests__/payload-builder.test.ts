@@ -1,4 +1,5 @@
 import type { GitHubClient } from '@clients/github.client';
+import type { ChangeRequestContext } from '@core/providers';
 import type { FrameworkDetectionResult } from '@core/framework-detector';
 import type { PRChangesResult } from '@core/pr-changes-detector';
 import type { SDKDetectionResult } from '@core/sdk-detector';
@@ -63,13 +64,19 @@ describe('ReviewPayloadBuilder', () => {
   ];
 
   let mockGitHubClient: jest.Mocked<GitHubClient>;
+  const mockContext: ChangeRequestContext = {
+    provider: 'github',
+    owner: 'test-owner',
+    repo: 'test-repo',
+    number: 123,
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
 
     mockGitHubClient = {
       getRepositoryMetadata: jest.fn().mockResolvedValue(mockRepoMetadata),
-      findReviewComments: jest.fn().mockResolvedValue([]),
+      findInlineComments: jest.fn().mockResolvedValue([]),
     } as any;
 
     (readFileSync as jest.Mock).mockReturnValue(
@@ -84,13 +91,11 @@ describe('ReviewPayloadBuilder', () => {
     it('should build payload with all required fields', async () => {
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload).toEqual({
         source_id: 'test-source-id',
@@ -114,23 +119,18 @@ describe('ReviewPayloadBuilder', () => {
         existing_review_comments: [],
       });
 
-      expect(mockGitHubClient.getRepositoryMetadata).toHaveBeenCalledWith(
-        'test-owner',
-        'test-repo'
-      );
+      expect(mockGitHubClient.getRepositoryMetadata).toHaveBeenCalledWith(mockContext);
     });
 
     it('should include SDK detection when provided', async () => {
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
         sdkDetection: mockSDKDetection,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.detected_sdk).toEqual({
         name: '@rudderstack/analytics-js',
@@ -142,14 +142,12 @@ describe('ReviewPayloadBuilder', () => {
     it('should include frameworks when provided', async () => {
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
         frameworks: mockFrameworks,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.frameworks).toEqual([
         { name: 'React', version: '18.2.0' },
@@ -160,15 +158,13 @@ describe('ReviewPayloadBuilder', () => {
     it('should include both SDK and frameworks when provided', async () => {
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
         sdkDetection: mockSDKDetection,
         frameworks: mockFrameworks,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.detected_sdk).toEqual({
         name: '@rudderstack/analytics-js',
@@ -184,14 +180,12 @@ describe('ReviewPayloadBuilder', () => {
     it('should not include SDK when sdkDetection is null', async () => {
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
         sdkDetection: null,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.detected_sdk).toBeUndefined();
     });
@@ -199,14 +193,12 @@ describe('ReviewPayloadBuilder', () => {
     it('should not include frameworks when empty array is provided', async () => {
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
         frameworks: [],
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.frameworks).toEqual([]);
     });
@@ -220,14 +212,12 @@ describe('ReviewPayloadBuilder', () => {
 
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
         sdkDetection: cdnSDK,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.detected_sdk).toEqual({
         name: '@rudderstack/analytics-js',
@@ -245,14 +235,12 @@ describe('ReviewPayloadBuilder', () => {
 
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
         sdkDetection: sdkNoVersion,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.detected_sdk).toEqual({
         name: '@rudderstack/analytics-js',
@@ -269,14 +257,12 @@ describe('ReviewPayloadBuilder', () => {
 
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
         frameworks: frameworksNoVersion,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.frameworks).toEqual([
         { name: 'React', version: undefined },
@@ -293,13 +279,11 @@ describe('ReviewPayloadBuilder', () => {
 
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.repository).toEqual({
         owner: 'test-owner',
@@ -317,13 +301,11 @@ describe('ReviewPayloadBuilder', () => {
 
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.github_action).toEqual({
         name: 'rudderstack-ai-reviewer',
@@ -339,14 +321,12 @@ describe('ReviewPayloadBuilder', () => {
 
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
 
-      await expect(builder.buildPayload(input)).rejects.toThrow('GitHub API error');
+      await expect(builder.buildPayload(mockContext, input)).rejects.toThrow('GitHub API error');
     });
 
     it('should include existing review comments when present', async () => {
@@ -355,24 +335,24 @@ describe('ReviewPayloadBuilder', () => {
         { id: 456, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 2' },
       ];
 
-      mockGitHubClient.findReviewComments = jest.fn().mockResolvedValue(mockExistingComments);
+      mockGitHubClient.findInlineComments = jest
+        .fn()
+        .mockResolvedValue(mockExistingComments as any);
 
       const input: PayloadBuilderInput = {
         sourceId: 'test-source-id',
-        owner: 'test-owner',
-        repo: 'test-repo',
         prChanges: mockPRChanges,
       };
 
       const builder = new ReviewPayloadBuilder(mockGitHubClient);
-      const payload = await builder.buildPayload(input);
+      const payload = await builder.buildPayload(mockContext, input);
 
       expect(payload.existing_review_comments).toEqual([
         { id: 123, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 1' },
         { id: 456, body: '<!-- rudder-pr-reviewer-bot-inline -->\nExisting comment 2' },
       ]);
-      expect(mockGitHubClient.findReviewComments).toHaveBeenCalledWith(
-        { owner: 'test-owner', repo: 'test-repo', prNumber: 123 },
+      expect(mockGitHubClient.findInlineComments).toHaveBeenCalledWith(
+        mockContext,
         expect.stringContaining('rudder-pr-reviewer-bot-inline')
       );
     });

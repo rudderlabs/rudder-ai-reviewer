@@ -11,19 +11,20 @@ import type {
 import { COMMENT_INLINE_MARKER, COMMENT_SUMMARY_MARKER } from '@utils/constants';
 import path from 'node:path';
 
-export interface GitHubContext {
-  owner: string;
-  repo: string;
-  commitSha: string;
+export interface CommentFormatterContext {
+  buildLineUrl(file: string, line: number, column?: number): string;
 }
 
-export function formatReviewComment(review: ReviewResponse, githubContext: GitHubContext): string {
+export function formatReviewComment(
+  review: ReviewResponse,
+  context: CommentFormatterContext
+): string {
   const sections: string[] = [
     COMMENT_SUMMARY_MARKER,
     formatHeader(review),
     formatSummarySection(review),
-    formatIssuesSection(review, githubContext),
-    formatEventsSection(review, githubContext),
+    formatIssuesSection(review, context),
+    formatEventsSection(review, context),
     formatFooter(review),
   ].filter(section => section.length > 0);
 
@@ -33,16 +34,6 @@ export function formatReviewComment(review: ReviewResponse, githubContext: GitHu
 /**
  * Builds a GitHub permalink URL to a specific line in a file
  */
-function buildGitHubLineUrl(
-  file: string,
-  line: number,
-  _column: number | undefined,
-  context: GitHubContext
-): string {
-  const lineAnchor = `L${line}`;
-  return `https://github.com/${context.owner}/${context.repo}/blob/${context.commitSha}/${file}#${lineAnchor}`;
-}
-
 /**
  * Header with SDK badge and overall verdict
  */
@@ -73,7 +64,7 @@ function formatSummarySection(review: ReviewResponse): string {
 /**
  * Issues section grouped by severity (collapsible)
  */
-function formatIssuesSection(review: ReviewResponse, githubContext: GitHubContext): string {
+function formatIssuesSection(review: ReviewResponse, context: CommentFormatterContext): string {
   if (review.issues.length === 0) {
     return '';
   }
@@ -83,17 +74,17 @@ function formatIssuesSection(review: ReviewResponse, githubContext: GitHubContex
 
   // Errors (always expanded if present)
   if (issuesBySeverity.error && issuesBySeverity.error.length > 0) {
-    section += formatIssueGroup('error', issuesBySeverity.error, false, githubContext);
+    section += formatIssueGroup('error', issuesBySeverity.error, false, context);
   }
 
   // Warnings (collapsible)
   if (issuesBySeverity.warning && issuesBySeverity.warning.length > 0) {
-    section += formatIssueGroup('warning', issuesBySeverity.warning, true, githubContext);
+    section += formatIssueGroup('warning', issuesBySeverity.warning, true, context);
   }
 
   // Suggestions (collapsible)
   if (issuesBySeverity.suggestion && issuesBySeverity.suggestion.length > 0) {
-    section += formatIssueGroup('suggestion', issuesBySeverity.suggestion, true, githubContext);
+    section += formatIssueGroup('suggestion', issuesBySeverity.suggestion, true, context);
   }
 
   return section;
@@ -102,7 +93,7 @@ function formatIssuesSection(review: ReviewResponse, githubContext: GitHubContex
 /**
  * Events section as collapsible table
  */
-function formatEventsSection(review: ReviewResponse, githubContext: GitHubContext): string {
+function formatEventsSection(review: ReviewResponse, context: CommentFormatterContext): string {
   if (review.events.length === 0) {
     return '';
   }
@@ -111,7 +102,7 @@ function formatEventsSection(review: ReviewResponse, githubContext: GitHubContex
 
   let section = `<details>\n`;
   section += `<summary><b>Events Detected (${review.events.length})</b></summary>\n\n`;
-  section += formatEventsTable(eventsByStatus, githubContext);
+  section += formatEventsTable(eventsByStatus, context);
   section += `\n</details>`;
 
   return section;
@@ -164,7 +155,7 @@ function formatIssueGroup(
   severity: IssueSeverity,
   issues: ReviewIssue[],
   collapsible: boolean,
-  githubContext: GitHubContext
+  context: CommentFormatterContext
 ): string {
   const icon = getSeverityIcon(severity);
   const label = severity.charAt(0).toUpperCase() + severity.slice(1) + 's';
@@ -183,7 +174,7 @@ function formatIssueGroup(
   Object.entries(issuesByFile).forEach(([file, fileIssues]) => {
     section += `#### \`${file}\`\n\n`;
     fileIssues.forEach((issue, idx) => {
-      section += formatIssueItem(issue, idx + 1, githubContext);
+      section += formatIssueItem(issue, idx + 1, context);
     });
   });
 
@@ -197,11 +188,15 @@ function formatIssueGroup(
 /**
  * Formats a single issue item
  */
-function formatIssueItem(issue: ReviewIssue, index: number, githubContext: GitHubContext): string {
+function formatIssueItem(
+  issue: ReviewIssue,
+  index: number,
+  context: CommentFormatterContext
+): string {
   let item = `${index}. **${issue.message}**\n`;
 
   // Make line number clickable with GitHub permalink, showing full path
-  const url = buildGitHubLineUrl(issue.file, issue.line, issue.column, githubContext);
+  const url = context.buildLineUrl(issue.file, issue.line, issue.column);
   const locationText = `${issue.file}:${issue.line}${issue.column ? `:${issue.column}` : ''}`;
   item += `   - Location: [${locationText}](${url})\n`;
 
@@ -234,7 +229,7 @@ function getFileExtension(file: string): string {
  */
 function formatEventsTable(
   eventsByStatus: Record<string, EventDetection[]>,
-  githubContext: GitHubContext
+  context: CommentFormatterContext
 ): string {
   let table = `| Status | Event | Location | Properties |\n`;
   table += `|--------|-------|----------|------------|\n`;
@@ -249,7 +244,7 @@ function formatEventsTable(
       const propDetails = propCount > 0 ? `${propCount} props` : '-';
 
       // Make location clickable with GitHub permalink
-      const location = `[\`${event.file}:${event.line}\`](${buildGitHubLineUrl(event.file, event.line, undefined, githubContext)})`;
+      const location = `[\`${event.file}:${event.line}\`](${context.buildLineUrl(event.file, event.line)})`;
 
       table += `| ${icon} ${status} | \`${event.name}\` | ${location} | ${propDetails} |\n`;
     });
