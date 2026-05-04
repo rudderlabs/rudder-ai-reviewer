@@ -77,9 +77,12 @@ async function run(): Promise<void> {
     core.setOutput('message', 'Successfully analyzed and submitted PR review');
   } catch (error) {
     if (error instanceof NotPullRequestContextError) {
-      core.warning('This action must be run in a pull request context');
+      core.warning('This action must be run in a pull request or merge request context');
       core.setOutput('status', 'warning');
-      core.setOutput('message', 'This action must be run in a pull request context');
+      core.setOutput(
+        'message',
+        'This action must be run in a pull request or merge request context'
+      );
       return;
     }
 

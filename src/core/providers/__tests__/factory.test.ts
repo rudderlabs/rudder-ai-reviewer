@@ -8,16 +8,26 @@ jest.mock('@core/shared/github', () => ({
     repo: 'repo',
     prNumber: 42,
   }),
-  NotPullRequestContextError: class MockNotPullRequestContextError extends Error {
-    constructor() {
-      super('Not running in pull request context');
-      this.name = 'NotPullRequestContextError';
-    }
+}));
+
+jest.mock('@core/shared/gitlab', () => ({
+  extractGitLabMergeRequestContext: jest.fn().mockReturnValue({
+    projectPath: 'group/project',
+    mergeRequestIid: 19,
+  }),
+}));
+
+jest.mock('@clients/gitlab.client', () => ({
+  GitLabClient: {
+    create: jest.fn().mockReturnValue({ id: 'gitlab' }),
   },
 }));
 
 import { getOctokit } from '@actions/github';
-import { extractGitHubPRContext, NotPullRequestContextError } from '@core/shared/github';
+import { GitLabClient } from '@clients/gitlab.client';
+import { NotPullRequestContextError } from '@core/shared/errors';
+import { extractGitHubPRContext } from '@core/shared/github';
+import { extractGitLabMergeRequestContext } from '@core/shared/gitlab';
 import { createProviderRuntime } from '../factory';
 
 describe('createProviderRuntime', () => {
@@ -25,16 +35,24 @@ describe('createProviderRuntime', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env = { ...originalEnv };
-    process.env.INPUT_GITHUB_TOKEN = 'token';
+    process.env = {
+      ...originalEnv,
+      INPUT_GITHUB_TOKEN: 'gh-token',
+    };
+    delete process.env.CI_MERGE_REQUEST_IID;
+    delete process.env.CI_PROJECT_PATH;
+    delete process.env.CI_JOB_TOKEN;
+    delete process.env.INPUT_GITLAB_TOKEN;
+    delete process.env.INPUT_GITLAB_BASE_URL;
   });
 
   afterAll(() => {
     process.env = originalEnv;
   });
 
-  it('defaults to github provider', () => {
+  it('defaults to github provider when not in GitLab MR env', () => {
     const runtime = createProviderRuntime();
+
     expect(runtime.provider.id).toBe('github');
     expect(runtime.context).toEqual({
       provider: 'github',
@@ -42,15 +60,49 @@ describe('createProviderRuntime', () => {
       repo: 'repo',
       number: 42,
     });
-    expect(getOctokit).toHaveBeenCalledWith('token');
+    expect(getOctokit).toHaveBeenCalledWith('gh-token');
   });
 
-  it('throws when INPUT_GITHUB_TOKEN is missing', () => {
+  it('uses GitLab provider when GitLab MR env vars are present', () => {
+    process.env.CI_PROJECT_PATH = 'group/subgroup/project';
+    process.env.CI_MERGE_REQUEST_IID = '23';
+    process.env.INPUT_GITLAB_TOKEN = 'gl-token';
+    process.env.INPUT_GITLAB_BASE_URL = 'https://gitlab.example.com';
+    (extractGitLabMergeRequestContext as jest.Mock).mockReturnValueOnce({
+      projectPath: 'group/subgroup/project',
+      mergeRequestIid: 23,
+    });
+
+    const runtime = createProviderRuntime();
+
+    expect(extractGitLabMergeRequestContext).toHaveBeenCalled();
+    expect(GitLabClient.create).toHaveBeenCalledWith({
+      host: 'https://gitlab.example.com',
+      token: 'gl-token',
+    });
+    expect(runtime.provider.id).toBe('gitlab');
+    expect(runtime.context).toEqual({
+      provider: 'gitlab',
+      owner: 'group/subgroup',
+      repo: 'project',
+      number: 23,
+    });
+  });
+
+  it('throws when INPUT_GITLAB_TOKEN is missing in GitLab MR env', () => {
+    process.env.CI_PROJECT_PATH = 'group/project';
+    process.env.CI_MERGE_REQUEST_IID = '23';
+    process.env.INPUT_GITLAB_TOKEN = '';
+
+    expect(() => createProviderRuntime()).toThrow('GitLab token is required (INPUT_GITLAB_TOKEN)');
+  });
+
+  it('throws when INPUT_GITHUB_TOKEN is missing outside GitLab MR env', () => {
     process.env.INPUT_GITHUB_TOKEN = '';
     expect(() => createProviderRuntime()).toThrow('INPUT_GITHUB_TOKEN is required');
   });
 
-  it('propagates non-PR context errors as NotPullRequestContextError', () => {
+  it('propagates NotPullRequestContextError in github mode', () => {
     (extractGitHubPRContext as jest.Mock).mockImplementationOnce(() => {
       throw new NotPullRequestContextError();
     });
