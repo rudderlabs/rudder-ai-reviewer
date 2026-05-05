@@ -375,7 +375,7 @@ export class GitLabClient implements SCMProvider {
       positionType: 'text',
       baseSha: metadata.base_sha,
       headSha: metadata.head_sha,
-      startSha: metadata.start_sha ?? metadata.base_sha,
+      startSha: metadata.base_sha,
       oldPath: comment.path,
       newPath: comment.path,
       ...this.toDiscussionLinePosition(comment.side, comment.line),
