@@ -160,17 +160,24 @@ export class GitLabClient implements SCMProvider {
       maxPages: 20,
       perPage: 100,
     })) as GitLabDiscussionLike[];
+    const notes = await this.getMergeRequestNotes(ctx);
 
-    const results: ProviderCommentReference[] = [];
+    const results = new Map<number, ProviderCommentReference>();
     discussions.forEach(discussion => {
       (discussion.notes ?? []).forEach(note => {
         if (!note.system && typeof note.body === 'string' && note.body.includes(marker)) {
-          results.push({ id: note.id, body: note.body });
+          results.set(note.id, { id: note.id, body: note.body });
         }
       });
     });
 
-    return results;
+    notes.forEach(note => {
+      if (!note.system && typeof note.body === 'string' && note.body.includes(marker)) {
+        results.set(note.id, { id: note.id, body: note.body });
+      }
+    });
+
+    return Array.from(results.values());
   }
 
   async createInlineReview(
@@ -346,23 +353,39 @@ export class GitLabClient implements SCMProvider {
     };
   }
 
+  private toDiscussionLinePosition(
+    side: ProviderInlineComment['side'],
+    line: number
+  ): Record<string, number> {
+    if (side === 'LEFT') {
+      return { oldLine: line };
+    }
+
+    return { newLine: line };
+  }
+
   private toDiscussionPosition(
     comment: ProviderInlineComment,
     metadata: ProviderPRMetadata
-  ): Record<string, string | number> {
-    const position: Record<string, string | number> = {
+  ): Record<string, string | number | Record<string, number> | Record<string, Record<string, number>>> {
+    const position: Record<
+      string,
+      string | number | Record<string, number> | Record<string, Record<string, number>>
+    > = {
       positionType: 'text',
       baseSha: metadata.base_sha,
       headSha: metadata.head_sha,
       startSha: metadata.start_sha ?? metadata.base_sha,
       oldPath: comment.path,
       newPath: comment.path,
+      ...this.toDiscussionLinePosition(comment.side, comment.line),
     };
 
-    if (comment.side === 'LEFT') {
-      position.oldLine = comment.line;
-    } else {
-      position.newLine = comment.line;
+    if (comment.start_line && comment.start_side) {
+      position.lineRange = {
+        start: this.toDiscussionLinePosition(comment.start_side, comment.start_line),
+        end: this.toDiscussionLinePosition(comment.side, comment.line),
+      };
     }
 
     return position;
