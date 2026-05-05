@@ -92,6 +92,7 @@ export class GitLabClient implements SCMProvider {
 
       return {
         filename: newPath || oldPath,
+        previous_filename: oldPath !== newPath ? oldPath : undefined,
         status: this.mapFileStatus(change),
         additions,
         deletions,
@@ -245,12 +246,26 @@ export class GitLabClient implements SCMProvider {
 
   private async getMergeRequestNotes(ctx: ChangeRequestContext): Promise<GitLabNoteLike[]> {
     const projectPath = this.toProjectPath(ctx);
-    const notes = (await this.gitlab.MergeRequestNotes.all(projectPath, ctx.number, {
-      maxPages: 20,
-      perPage: 100,
-      sort: 'desc',
-      orderBy: 'updated_at',
-    })) as GitLabNoteLike[];
+    const perPage = 100;
+    const notes: GitLabNoteLike[] = [];
+    let page = 1;
+
+    while (true) {
+      const pageNotes = (await this.gitlab.MergeRequestNotes.all(projectPath, ctx.number, {
+        page,
+        perPage,
+        sort: 'desc',
+        orderBy: 'updated_at',
+      })) as GitLabNoteLike[];
+
+      notes.push(...pageNotes);
+
+      if (pageNotes.length < perPage) {
+        break;
+      }
+
+      page += 1;
+    }
 
     return notes.filter(note => !note.system);
   }
@@ -339,7 +354,7 @@ export class GitLabClient implements SCMProvider {
       positionType: 'text',
       baseSha: metadata.base_sha,
       headSha: metadata.head_sha,
-      startSha: metadata.base_sha,
+      startSha: metadata.start_sha ?? metadata.base_sha,
       oldPath: comment.path,
       newPath: comment.path,
     };
