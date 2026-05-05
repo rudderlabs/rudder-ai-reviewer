@@ -316,6 +316,19 @@ describe('ReviewPayloadBuilder', () => {
       );
     });
 
+    it('should read package.json from repoPath when provided', async () => {
+      const input: PayloadBuilderInput = {
+        sourceId: 'test-source-id',
+        prChanges: mockPRChanges,
+        repoPath: '/tmp/fixtures/e2e-test-app',
+      };
+
+      const builder = new ReviewPayloadBuilder(mockGitHubClient);
+      await builder.buildPayload(mockContext, input);
+
+      expect(readFileSync).toHaveBeenCalledWith('/tmp/fixtures/e2e-test-app/package.json', 'utf-8');
+    });
+
     it('should throw error when GitHub API fails', async () => {
       mockGitHubClient.getRepositoryMetadata.mockRejectedValue(new Error('GitHub API error'));
 

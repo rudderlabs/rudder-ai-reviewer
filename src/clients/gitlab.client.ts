@@ -1,4 +1,3 @@
-import * as core from '@actions/core';
 import type {
   ChangeRequestContext,
   ProviderChangedFile,
@@ -8,6 +7,7 @@ import type {
   ProviderRepositoryMetadata,
   SCMProvider,
 } from '@core/providers';
+import { logger } from '@core/logging/logger';
 import { Gitlab } from '@gitbeaker/rest';
 import { COMMENT_INLINE_MARKER } from '@utils/constants';
 
@@ -213,7 +213,7 @@ export class GitLabClient implements SCMProvider {
       } catch (error) {
         fallbackComments.push(comment);
         const message = error instanceof Error ? error.message : 'Unknown error';
-        core.warning(
+        logger.warning(
           `Failed to create GitLab inline comment for ${comment.path}:${comment.line}. ${message}`
         );
       }
@@ -227,7 +227,7 @@ export class GitLabClient implements SCMProvider {
         fallbackBody
       );
       const fallbackNoteId = (note as { id: number }).id;
-      core.warning(
+      logger.warning(
         `Fell back to summary note for ${fallbackComments.length} inline comment(s) in GitLab.`
       );
       return firstDiscussionId || fallbackNoteId;
@@ -367,7 +367,10 @@ export class GitLabClient implements SCMProvider {
   private toDiscussionPosition(
     comment: ProviderInlineComment,
     metadata: ProviderPRMetadata
-  ): Record<string, string | number | Record<string, number> | Record<string, Record<string, number>>> {
+  ): Record<
+    string,
+    string | number | Record<string, number> | Record<string, Record<string, number>>
+  > {
     const position: Record<
       string,
       string | number | Record<string, number> | Record<string, Record<string, number>>

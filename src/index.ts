@@ -60,6 +60,7 @@ async function run(): Promise<void> {
     const payload = await buildReviewPayload(provider, context, {
       sourceId,
       prChanges,
+      repoPath,
       sdkDetection,
       frameworks,
     });
