@@ -1,6 +1,7 @@
 import { getOctokit } from '@actions/github';
 import { GitHubClient } from '@clients/github.client';
 import { GitLabClient } from '@clients/gitlab.client';
+import { detectProviderIdFromEnvironment } from '@core/providers/environment';
 import { extractGitHubPRContext } from '@core/shared/github';
 import { extractGitLabMergeRequestContext } from '@core/shared/gitlab';
 import type { ChangeRequestContext, SCMProvider } from './types';
@@ -8,10 +9,6 @@ import type { ChangeRequestContext, SCMProvider } from './types';
 export interface ProviderRuntime {
   provider: SCMProvider;
   context: ChangeRequestContext;
-}
-
-function isGitLabMergeRequestEnvironment(env: NodeJS.ProcessEnv): boolean {
-  return Boolean(env.CI_MERGE_REQUEST_IID && env.CI_PROJECT_PATH);
 }
 
 function parseProjectPath(projectPath: string): { owner: string; repo: string } {
@@ -69,7 +66,7 @@ function createGitHubProviderRuntime(): ProviderRuntime {
 }
 
 export function createProviderRuntime(): ProviderRuntime {
-  if (isGitLabMergeRequestEnvironment(process.env)) {
+  if (detectProviderIdFromEnvironment(process.env) === 'gitlab') {
     return createGitLabProviderRuntime();
   }
   return createGitHubProviderRuntime();

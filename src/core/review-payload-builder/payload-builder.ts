@@ -1,4 +1,3 @@
-import * as core from '@actions/core';
 import type { ChangeRequestContext, SCMProvider } from '@core/providers';
 import type { FrameworkDetectionResult } from '@core/framework-detector';
 import type { PRChangesResult } from '@core/pr-changes-detector';
@@ -7,6 +6,7 @@ import type { ReviewPayload } from '@custom-types/review-payload.types';
 import { COMMENT_INLINE_MARKER } from '@utils/constants';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { logger } from '@core/logging/logger';
 
 export interface PayloadBuilderInput {
   sourceId: string;
@@ -29,10 +29,10 @@ export class ReviewPayloadBuilder {
     const { sourceId, prChanges, repoPath, sdkDetection, frameworks = [] } = input;
     const { owner, repo } = context;
 
-    core.info('Fetching repository metadata...');
+    logger.info('Fetching repository metadata...');
     const repoMetadata = await this.provider.getRepositoryMetadata(context);
 
-    core.info('Fetching existing review comments...');
+    logger.info('Fetching existing review comments...');
     const existingReviewComments = await this.getExistingReviewComments(
       context,
       COMMENT_INLINE_MARKER
@@ -89,7 +89,7 @@ export class ReviewPayloadBuilder {
       return { name: packageJson.name, version: packageJson.version };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      core.warning(
+      logger.warning(
         `Failed to read package.json: ${errorMessage}. Using default: rudderstack-ai-reviewer@1.0.0`
       );
       return { name: 'rudderstack-ai-reviewer', version: '1.0.0' };

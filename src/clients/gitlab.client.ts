@@ -256,8 +256,9 @@ export class GitLabClient implements SCMProvider {
     const perPage = 100;
     const notes: GitLabNoteLike[] = [];
     let page = 1;
+    let hasMorePages = true;
 
-    while (true) {
+    while (hasMorePages) {
       const pageNotes = (await this.gitlab.MergeRequestNotes.all(projectPath, ctx.number, {
         page,
         perPage,
@@ -267,10 +268,7 @@ export class GitLabClient implements SCMProvider {
 
       notes.push(...pageNotes);
 
-      if (pageNotes.length < perPage) {
-        break;
-      }
-
+      hasMorePages = pageNotes.length === perPage;
       page += 1;
     }
 

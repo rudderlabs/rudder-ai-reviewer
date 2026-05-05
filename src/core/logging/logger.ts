@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import { detectProviderIdFromEnvironment } from '@core/providers/environment';
 
 export interface Logger {
   debug(message: string): void;
@@ -8,6 +9,7 @@ export interface Logger {
 }
 
 const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
+const providerId = detectProviderIdFromEnvironment(process.env);
 const isDebugEnabled = process.env.RUNNER_DEBUG === '1' || process.env.LOG_LEVEL === 'debug';
 
 const consoleLogger: Logger = {
@@ -34,4 +36,5 @@ const actionsLogger: Logger = {
   error: message => core.error(message),
 };
 
-export const logger: Logger = isGitHubActions ? actionsLogger : consoleLogger;
+export const logger: Logger =
+  providerId === 'github' && isGitHubActions ? actionsLogger : consoleLogger;
