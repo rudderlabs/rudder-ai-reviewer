@@ -1,3 +1,4 @@
+import { logger } from '@core/logging/logger';
 import type { ChangeRequestContext, ProviderInlineComment } from '@core/providers';
 import { GitLabClient } from '@clients/gitlab.client';
 import { COMMENT_INLINE_MARKER } from '@utils/constants';
@@ -79,6 +80,35 @@ describe('GitLabClient provider contract', () => {
     await expect(client.getChangedFilesMap(context)).resolves.toBeInstanceOf(Map);
   });
 
+  it('skips files with unparseable patches when building the changed-files map', async () => {
+    const api = makeGitLabApi();
+    api.MergeRequests.showChanges.mockResolvedValue({
+      changes: [
+        {
+          new_path: 'src/a.ts',
+          old_path: 'src/a.ts',
+          new_file: false,
+          deleted_file: false,
+          renamed_file: false,
+          diff: 'not a unified diff',
+        },
+      ],
+    });
+    const client = new GitLabClient(api as any, { host: 'https://gitlab.example.com' });
+    const warningSpy = jest.spyOn(logger, 'warning').mockImplementation();
+
+    try {
+      const fileMap = await client.getChangedFilesMap(context);
+
+      expect(fileMap.has('src/a.ts')).toBe(false);
+      expect(warningSpy).toHaveBeenCalledWith(
+        "Skipping file 'src/a.ts' due to patch parsing failure"
+      );
+    } finally {
+      warningSpy.mockRestore();
+    }
+  });
+
   it('adapts summary comment methods to provider contract', async () => {
     const api = makeGitLabApi();
     const client = new GitLabClient(api as any, { host: 'https://gitlab.example.com' });
@@ -118,6 +148,11 @@ describe('GitLabClient provider contract', () => {
       expect.stringContaining(`${COMMENT_INLINE_MARKER}\nmsg`),
       expect.objectContaining({
         commitId: 'head',
+        position: expect.objectContaining({
+          baseSha: 'base',
+          startSha: 'start',
+          headSha: 'head',
+        }),
       })
     );
   });

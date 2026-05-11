@@ -1,8 +1,17 @@
-import * as core from '@actions/core';
 import type { FileSystem } from '@custom-types/file.type';
 import { LockFileParser } from '../lock-file-parser';
+import { logger } from '@core/logging/logger';
 
-jest.mock('@actions/core');
+jest.mock('@core/logging/logger', () => ({
+  logger: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warning: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 describe('LockFileParser', () => {
   let mockFs: FileSystem;
@@ -139,14 +148,10 @@ react@^18.0.0:
       (mockFs.exists as jest.Mock).mockReturnValue(true);
       (mockFs.read as jest.Mock).mockReturnValue('invalid json');
 
-      const coreErrorSpy = jest.spyOn(core, 'error').mockImplementation();
-
       const versions = await parser.getVersions('/test/repo', ['react']);
 
       expect(versions.size).toBe(0);
-      expect(coreErrorSpy).toHaveBeenCalled();
-
-      coreErrorSpy.mockRestore();
+      expect(mockLogger.error).toHaveBeenCalled();
     });
 
     it('should filter only requested packages', async () => {

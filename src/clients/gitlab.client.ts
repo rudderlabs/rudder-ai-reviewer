@@ -1,3 +1,4 @@
+import { logger } from '@core/logging/logger';
 import type {
   ChangeRequestContext,
   ProviderChangedFile,
@@ -7,7 +8,6 @@ import type {
   ProviderRepositoryMetadata,
   SCMProvider,
 } from '@core/providers';
-import { logger } from '@core/logging/logger';
 import { Gitlab } from '@gitbeaker/rest';
 import { COMMENT_INLINE_MARKER } from '@utils/constants';
 
@@ -76,6 +76,7 @@ export class GitLabClient implements SCMProvider {
       base_sha: diffRefs.base_sha,
       head_ref: (mergeRequest as { source_branch?: string }).source_branch ?? '',
       base_ref: (mergeRequest as { target_branch?: string }).target_branch ?? '',
+      start_sha: diffRefs.start_sha,
     };
   }
 
@@ -116,15 +117,16 @@ export class GitLabClient implements SCMProvider {
             end: lineRanges.end,
             status: file.status,
           });
-          return;
+        } else {
+          logger.warning(`Skipping file '${file.filename}' due to patch parsing failure`);
         }
+      } else {
+        fileMap.set(file.filename, {
+          start: 1,
+          end: file.status === 'removed' ? 0 : Number.MAX_SAFE_INTEGER,
+          status: file.status,
+        });
       }
-
-      fileMap.set(file.filename, {
-        start: 1,
-        end: file.status === 'removed' ? 0 : Number.MAX_SAFE_INTEGER,
-        status: file.status,
-      });
     });
 
     return fileMap;
@@ -376,7 +378,7 @@ export class GitLabClient implements SCMProvider {
       positionType: 'text',
       baseSha: metadata.base_sha,
       headSha: metadata.head_sha,
-      startSha: metadata.base_sha,
+      startSha: metadata.start_sha ?? metadata.base_sha,
       oldPath: comment.path,
       newPath: comment.path,
       ...this.toDiscussionLinePosition(comment.side, comment.line),

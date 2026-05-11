@@ -4,17 +4,23 @@ import type { FrameworkDetectionResult } from '@core/framework-detector';
 import type { PRChangesResult } from '@core/pr-changes-detector';
 import type { SDKDetectionResult } from '@core/sdk-detector';
 import { PayloadBuilderInput, ReviewPayloadBuilder } from '../payload-builder';
+import { logger } from '@core/logging/logger';
 
-jest.mock('@actions/core', () => ({
-  info: jest.fn(),
-  warning: jest.fn(),
+jest.mock('@core/logging/logger', () => ({
+  logger: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warning: jest.fn(),
+    error: jest.fn(),
+  },
 }));
+
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
 }));
 
-import * as core from '@actions/core';
 import { readFileSync } from 'fs';
 
 describe('ReviewPayloadBuilder', () => {
@@ -311,7 +317,7 @@ describe('ReviewPayloadBuilder', () => {
         name: 'rudderstack-ai-reviewer',
         version: '1.0.0',
       });
-      expect(core.warning).toHaveBeenCalledWith(
+      expect(mockLogger.warning).toHaveBeenCalledWith(
         'Failed to read package.json: File not found. Using default: rudderstack-ai-reviewer@1.0.0'
       );
     });
