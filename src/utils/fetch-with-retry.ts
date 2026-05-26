@@ -1,4 +1,4 @@
-import * as core from '@actions/core';
+import { logger } from '@core/logging/logger';
 
 interface FetchWithRetryOptions extends RequestInit {
   retries?: number;
@@ -41,7 +41,7 @@ export async function fetchWithRetry(
         // Ignore errors when consuming body - we're retrying anyway
       });
 
-      core.warning(
+      logger.warning(
         `Request failed with status ${response.status}, retrying (${attempt + 1}/${validatedRetries})...`
       );
 
@@ -53,7 +53,7 @@ export async function fetchWithRetry(
         throw error;
       }
       const message = error instanceof Error ? error.message : 'Unknown error';
-      core.warning(
+      logger.warning(
         `Request failed with error: ${message}, retrying (${attempt + 1}/${validatedRetries})...`
       );
 

@@ -1,7 +1,7 @@
-import * as core from '@actions/core';
 import type { LockFileParser, PackageReader } from '@core/shared/npm';
 import type { CDNScanner } from './cdn/file-scanner';
 import type { SDKDetectionResult, SDKInstallationType } from './types';
+import { logger } from '@core/logging/logger';
 
 interface NPMDetectionResult {
   found: boolean;
@@ -35,7 +35,7 @@ export class JavaScriptSDKDetector {
     const declaredVersion = declaredVersions.get(packageName);
 
     if (!declaredVersion) {
-      core.debug('SDK NPM detection: not found');
+      logger.debug('SDK NPM detection: not found');
       return { found: false };
     }
 
@@ -47,13 +47,13 @@ export class JavaScriptSDKDetector {
       declaredVersion,
       exactVersion: exactVersion || declaredVersion,
     };
-    core.debug(`SDK NPM detection: found version ${result.exactVersion}`);
+    logger.debug(`SDK NPM detection: found version ${result.exactVersion}`);
     return result;
   }
 
   private async detectCDN(repoPath: string): Promise<CDNDetectionResult> {
     const result = await this.cdnScanner.scan(repoPath);
-    core.debug(
+    logger.debug(
       `SDK CDN detection: ${result.found ? `found version ${result.version || 'unknown'}` : 'not found'}`
     );
     return result;
@@ -76,11 +76,11 @@ export class JavaScriptSDKDetector {
       installationType = 'cdn';
       version = cdnResult.version;
     } else {
-      core.debug('SDK detection: No SDK found (neither NPM nor CDN)');
+      logger.debug('SDK detection: No SDK found (neither NPM nor CDN)');
       return null;
     }
 
-    core.debug(
+    logger.debug(
       `SDK detection: Final result - ${installationType} installation, version ${version || 'unknown'}`
     );
 

@@ -1,6 +1,6 @@
-import * as core from '@actions/core';
 import { cleanSemverPrefix } from '@core/shared/npm/version-utils';
 import type { FileSystem } from '@custom-types/file.type';
+import { logger } from '@core/logging/logger';
 
 export type PackageVersionMap = Map<string, string>;
 
@@ -43,7 +43,7 @@ export class PackageReader {
       return versions;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      core.error(`Failed to read package.json: ${errorMessage}`);
+      logger.error(`Failed to read package.json: ${errorMessage}`);
       return new Map();
     }
   }

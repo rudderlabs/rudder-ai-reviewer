@@ -1,5 +1,5 @@
 export { createProviderRuntime } from './factory';
-export { NotPullRequestContextError } from '@core/shared/github';
+export { NotPullRequestContextError } from '@core/shared/errors';
 export type {
   ChangeRequestContext,
   ProviderChangedFile,

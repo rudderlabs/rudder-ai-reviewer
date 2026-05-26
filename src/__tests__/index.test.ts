@@ -4,6 +4,12 @@ const mockSetOutput = jest.fn();
 const mockSetFailed = jest.fn();
 const mockError = jest.fn();
 const mockDebug = jest.fn();
+const mockLogger = {
+  debug: jest.fn(),
+  info: jest.fn(),
+  warning: jest.fn(),
+  error: jest.fn(),
+};
 
 const mockPostReview = jest.fn();
 const mockDetectPRChanges = jest.fn();
@@ -26,6 +32,10 @@ jest.mock('@actions/core', () => ({
   setFailed: mockSetFailed,
   error: mockError,
   debug: mockDebug,
+}));
+
+jest.mock('@core/logging/logger', () => ({
+  logger: mockLogger,
 }));
 
 jest.mock('@clients/pr-reviewer-service.client', () => ({
@@ -121,11 +131,13 @@ describe('action entrypoint', () => {
     await import('../index');
     await flushAsyncWork();
 
-    expect(mockWarning).toHaveBeenCalledWith('This action must be run in a pull request context');
+    expect(mockLogger.warning).toHaveBeenCalledWith(
+      'This action must be run in a pull request or merge request context'
+    );
     expect(mockSetOutput).toHaveBeenCalledWith('status', 'warning');
     expect(mockSetOutput).toHaveBeenCalledWith(
       'message',
-      'This action must be run in a pull request context'
+      'This action must be run in a pull request or merge request context'
     );
     expect(mockSetFailed).not.toHaveBeenCalled();
     expect(mockDetectPRChanges).not.toHaveBeenCalled();
@@ -139,7 +151,7 @@ describe('action entrypoint', () => {
     await import('../index');
     await flushAsyncWork();
 
-    expect(mockError).toHaveBeenCalledWith('Action failed: bootstrap exploded');
+    expect(mockLogger.error).toHaveBeenCalledWith('Action failed: bootstrap exploded');
     expect(mockSetFailed).toHaveBeenCalledWith('bootstrap exploded');
     expect(mockSetOutput).toHaveBeenCalledWith('status', 'failed');
   });

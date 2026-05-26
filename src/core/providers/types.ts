@@ -20,6 +20,7 @@ export interface ProviderPRMetadata {
   base_sha: string;
   head_ref: string;
   base_ref: string;
+  start_sha?: string;
 }
 
 export interface ProviderChangedFile {

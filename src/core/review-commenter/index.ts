@@ -1,4 +1,3 @@
-import * as core from '@actions/core';
 import type { ChangeRequestContext, ProviderPRMetadata, SCMProvider } from '@core/providers';
 import type { ReviewIssue, ReviewResponse } from '@custom-types/review.types';
 import { COMMENT_SUMMARY_MARKER } from '@utils/constants';
@@ -8,6 +7,7 @@ import {
   type CommentFormatterContext,
 } from './comment-formatter';
 import { CommentSplitter } from './comment-splitter';
+import { logger } from '@core/logging/logger';
 
 /**
  * Posts AI reviewer comments on a PR
@@ -23,7 +23,7 @@ export async function postAIReviewerComments(
 ): Promise<void> {
   try {
     if (reviewResponse.summary.verdict === 'no_comment') {
-      core.info('No comment needed for this PR');
+      logger.info('No comment needed for this PR');
       return;
     }
 
@@ -95,15 +95,15 @@ async function postInlineComments(
     try {
       const inlineComments = formatInlineComments(inlineIssues);
       await provider.createInlineReview(prContext, inlineComments, metadata.head_sha);
-      core.info(`Successfully posted ${inlineComments.length} inline comment(s)`);
+      logger.info(`Successfully posted ${inlineComments.length} inline comment(s)`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      core.warning(
+      logger.warning(
         `Failed to post inline comments, but summary comment was successful: ${message}`
       );
     }
   } else {
-    core.info('No inline comments to post');
+    logger.info('No inline comments to post');
   }
 }
 

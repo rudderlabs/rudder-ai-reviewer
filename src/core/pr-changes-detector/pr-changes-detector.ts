@@ -1,5 +1,5 @@
-import * as core from '@actions/core';
 import type { ChangeRequestContext, SCMProvider } from '@core/providers';
+import { logger } from '@core/logging/logger';
 import { isAbsolute, relative } from 'path';
 import { shouldIncludeFile } from './file-filter';
 import { countPatchHunks } from './patch-parser';
@@ -13,18 +13,18 @@ export class PRChangesDetector {
    */
   async detect(prContext: ChangeRequestContext, rootDirectory = '.'): Promise<PRChangesResult> {
     try {
-      core.info('Fetching PR metadata...');
+      logger.info('Fetching PR metadata...');
       const prMetadata = await this.provider.getChangeRequestMetadata(prContext);
 
-      core.info('Fetching changed files...');
+      logger.info('Fetching changed files...');
       const changedFiles = await this.provider.getChangedFiles(prContext);
 
-      core.info(`Filtering files for root directory: ${rootDirectory}`);
+      logger.info(`Filtering files for root directory: ${rootDirectory}`);
       const filteredByPath = this.filterFilesByPath(changedFiles, rootDirectory);
 
-      core.info('Filtering source files...');
+      logger.info('Filtering source files...');
       const filteredFiles = filteredByPath.filter(file => shouldIncludeFile(file.filename));
-      core.info(
+      logger.info(
         `Processing ${filteredFiles.length} source files (${filteredByPath.length - filteredFiles.length} non-source files filtered out)`
       );
 
@@ -44,7 +44,7 @@ export class PRChangesDetector {
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      core.error(`Failed to detect PR changes: ${message}`);
+      logger.error(`Failed to detect PR changes: ${message}`);
       throw error;
     }
   }
