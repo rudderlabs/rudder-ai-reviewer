@@ -33,6 +33,7 @@
     "@babel/parser": "^7.26.3",
     "@babel/traverse": "^7.26.5",
     "@babel/types": "^7.26.3",
+    "@gitbeaker/rest": "^43.8.0",
     "micromatch": "^4.0.8",
     "snyk-nodejs-lockfile-parser": "^2.4.4"
   },

@@ -1,16 +1,10 @@
 import { context } from '@actions/github';
+import { NotPullRequestContextError } from '@core/shared/errors';
 
 export interface GitHubPRContext {
   owner: string;
   repo: string;
   prNumber: number;
-}
-
-export class NotPullRequestContextError extends Error {
-  constructor() {
-    super('Not running in pull request context');
-    this.name = 'NotPullRequestContextError';
-  }
 }
 
 /**

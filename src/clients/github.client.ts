@@ -1,4 +1,3 @@
-import * as core from '@actions/core';
 import type { getOctokit } from '@actions/github';
 import type {
   ChangeRequestContext,
@@ -8,6 +7,7 @@ import type {
   ProviderRepositoryMetadata,
   SCMProvider,
 } from '@core/providers';
+import { logger } from '@core/logging/logger';
 import type { GitHubPRContext } from '@core/shared/github';
 import { GitHubPRMetadata } from '@custom-types/github.types';
 import type { InlineComment } from '@custom-types/review.types';
@@ -100,7 +100,7 @@ export class GitHubClient implements SCMProvider {
       per_page: 100,
     });
 
-    core.debug(`Fetched ${files.length} changed files from PR #${prNumber}`);
+    logger.debug(`Fetched ${files.length} changed files from PR #${prNumber}`);
 
     return files;
   }
@@ -141,7 +141,7 @@ export class GitHubClient implements SCMProvider {
       pull_number: prNumber,
     });
     const existingComments = comments.filter(c => c.body?.includes(marker));
-    core.debug(
+    logger.debug(
       `Existing review comments ${existingComments.length ? `found (IDs: ${existingComments.map(c => c.id).join(', ')})` : 'not found'}`
     );
     return existingComments;
@@ -177,7 +177,9 @@ export class GitHubClient implements SCMProvider {
 
       const existingComment = comments.find(c => c.body?.includes(marker));
       const commentId = existingComment?.id ?? null;
-      core.debug(`Existing review comment ${commentId ? `found (ID: ${commentId})` : 'not found'}`);
+      logger.debug(
+        `Existing review comment ${commentId ? `found (ID: ${commentId})` : 'not found'}`
+      );
       return commentId;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -198,7 +200,7 @@ export class GitHubClient implements SCMProvider {
    */
   async createComment(context: GitHubPRContext, body: string): Promise<number> {
     const { owner, repo, prNumber } = context;
-    core.debug(`Creating comment for PR #${prNumber} with body: ${body}`);
+    logger.debug(`Creating comment for PR #${prNumber} with body: ${body}`);
 
     try {
       const { data } = await this.octokit.rest.issues.createComment({
@@ -228,7 +230,7 @@ export class GitHubClient implements SCMProvider {
    */
   async updateComment(context: GitHubPRContext, commentId: number, body: string): Promise<void> {
     const { owner, repo } = context;
-    core.debug(`Updating comment ${commentId} with body: ${body}`);
+    logger.debug(`Updating comment ${commentId} with body: ${body}`);
 
     try {
       await this.octokit.rest.issues.updateComment({
@@ -269,7 +271,7 @@ export class GitHubClient implements SCMProvider {
     body?: string
   ): Promise<number> {
     const { owner, repo, prNumber } = context;
-    core.debug(`Creating review for PR #${prNumber} with ${comments.length} inline comments`);
+    logger.debug(`Creating review for PR #${prNumber} with ${comments.length} inline comments`);
 
     try {
       const { data } = await this.octokit.rest.pulls.createReview({
@@ -282,7 +284,7 @@ export class GitHubClient implements SCMProvider {
         commit_id: commitId,
       });
 
-      core.debug(`Review created with ID: ${data.id}`);
+      logger.debug(`Review created with ID: ${data.id}`);
       return data.id;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -332,7 +334,7 @@ export class GitHubClient implements SCMProvider {
             status: file.status,
           });
         } else {
-          core.warning(`Skipping file '${file.filename}' due to patch parsing failure`);
+          logger.warning(`Skipping file '${file.filename}' due to patch parsing failure`);
         }
       } else {
         // For files without patch or removed files, set a default range
@@ -382,7 +384,7 @@ export class GitHubClient implements SCMProvider {
     }
 
     if (minLine === Number.MAX_SAFE_INTEGER || maxLine === 0) {
-      core.warning(
+      logger.warning(
         `Failed to parse patch line ranges. Patch format may be invalid or contain no valid hunks. Patch preview: ${patch.substring(0, 200)}`
       );
       return null;

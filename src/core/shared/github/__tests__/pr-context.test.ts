@@ -1,4 +1,5 @@
-import { extractGitHubPRContext, NotPullRequestContextError } from '../pr-context';
+import { NotPullRequestContextError } from '@core/shared/errors';
+import { extractGitHubPRContext } from '../pr-context';
 
 jest.mock('@actions/github', () => ({
   context: {

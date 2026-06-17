@@ -1,9 +1,9 @@
-import * as core from '@actions/core';
 import { extractVersionNumber } from '@core/shared/npm/version-utils';
 import type { FileSystem } from '@custom-types/file.type';
 import * as path from 'path';
 import type { CDNConfig } from '../config';
 import { VariableExtractor } from './variable-extractor';
+import { logger } from '@core/logging/logger';
 
 export interface CDNResult {
   found: boolean;
@@ -61,7 +61,7 @@ export class CDNScanner {
       return { found: false };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      core.error(`Failed to scan directory ${dirPath}: ${errorMessage}`);
+      logger.error(`Failed to scan directory ${dirPath}: ${errorMessage}`);
       return { found: false };
     }
   }
@@ -110,7 +110,7 @@ export class CDNScanner {
       return { found: true, version };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      core.error(`Failed to scan file ${filename}: ${errorMessage}`);
+      logger.error(`Failed to scan file ${filename}: ${errorMessage}`);
       return { found: false };
     }
   }

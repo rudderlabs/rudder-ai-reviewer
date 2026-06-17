@@ -1,6 +1,6 @@
-import * as core from '@actions/core';
 import type { ReviewPayload } from '@custom-types/review-payload.types';
 import { ReviewResponse } from '@custom-types/review.types';
+import { logger } from '@core/logging/logger';
 import { fetchWithRetry } from '@utils/fetch-with-retry';
 
 const PR_REVIEWER_SERVICE_BASE_URL =
@@ -17,7 +17,7 @@ export class PRReviewerServiceClient {
    */
   async postReview(payload: ReviewPayload): Promise<ReviewResponse> {
     try {
-      core.info(`Posting review to PR Reviewer Service: ${PR_REVIEWER_SERVICE_BASE_URL}`);
+      logger.info(`Posting review to PR Reviewer Service: ${PR_REVIEWER_SERVICE_BASE_URL}`);
 
       const response = await fetchWithRetry(`${PR_REVIEWER_SERVICE_BASE_URL}/v2/ai/pr-review`, {
         method: 'POST',
@@ -37,11 +37,11 @@ export class PRReviewerServiceClient {
       }
 
       const responseData = (await response.json()) as ReviewResponse;
-      core.debug(`Review response: ${JSON.stringify(responseData)}`);
+      logger.debug(`Review response: ${JSON.stringify(responseData)}`);
       return responseData;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      core.error(`Failed to post review: ${message}`);
+      logger.error(`Failed to post review: ${message}`);
       throw error;
     }
   }

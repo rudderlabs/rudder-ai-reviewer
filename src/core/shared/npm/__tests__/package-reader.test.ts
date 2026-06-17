@@ -1,8 +1,17 @@
-import * as core from '@actions/core';
 import { createMockFileSystem } from '@tests/test.utils';
 import { PackageReader } from '../package-reader';
+import { logger } from '@core/logging/logger';
 
-jest.mock('@actions/core');
+jest.mock('@core/logging/logger', () => ({
+  logger: {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warning: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 describe('PackageReader', () => {
   describe('getVersions', () => {
@@ -111,14 +120,10 @@ describe('PackageReader', () => {
       });
       const reader = new PackageReader(fs);
 
-      const coreErrorSpy = jest.spyOn(core, 'error').mockImplementation();
-
       const versions = reader.getVersions('/repo', ['react']);
 
       expect(versions.size).toBe(0);
-      expect(coreErrorSpy).toHaveBeenCalled();
-
-      coreErrorSpy.mockRestore();
+      expect(mockLogger.error).toHaveBeenCalled();
     });
 
     test('cleans semver prefixes from versions', () => {
