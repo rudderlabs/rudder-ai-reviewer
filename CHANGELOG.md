@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.0](https://github.com/rudderlabs/rudder-ai-reviewer/compare/v1.1.0...v1.2.0) (2026-06-17)
+
+
+### Features
+
+* gitlab scm provider ([#69](https://github.com/rudderlabs/rudder-ai-reviewer/issues/69)) ([a9b69f0](https://github.com/rudderlabs/rudder-ai-reviewer/commit/a9b69f0308a670ed3059648f24a5c220f5a91ed5))
+
+
+### Bug Fixes
+
+* correct SAT permission level in inputs table from editor to viewer ([#63](https://github.com/rudderlabs/rudder-ai-reviewer/issues/63)) ([b630afe](https://github.com/rudderlabs/rudder-ai-reviewer/commit/b630afe9c1230acab108218dc63c50a9d66e6c3b))
+* skip review service when no relevant changes are detected ([#65](https://github.com/rudderlabs/rudder-ai-reviewer/issues/65)) ([30b8a70](https://github.com/rudderlabs/rudder-ai-reviewer/commit/30b8a70eda5d1654215aa58f15476ec7571290a7))
+* **vuln:** pin and bump action refs (SEC-171) ([#62](https://github.com/rudderlabs/rudder-ai-reviewer/issues/62)) ([7ccb742](https://github.com/rudderlabs/rudder-ai-reviewer/commit/7ccb742dc865faee58395824639de3e2b7584017))
+
+
+### Miscellaneous
+
+* implement provider runtime for GitHub context handling ([#67](https://github.com/rudderlabs/rudder-ai-reviewer/issues/67)) ([6d06f39](https://github.com/rudderlabs/rudder-ai-reviewer/commit/6d06f398cf5b065f8a41e591c8da0a06c9ac53f8))
+* **vuln:** zizmor --fix=all findings (SEC-199) ([#66](https://github.com/rudderlabs/rudder-ai-reviewer/issues/66)) ([bb73a0d](https://github.com/rudderlabs/rudder-ai-reviewer/commit/bb73a0df89de7fdf053709ed7c97891b87941528))
+
+
+### Documentation
+
+* bootstrap knowledge base for rudder-ai-reviewer ([#70](https://github.com/rudderlabs/rudder-ai-reviewer/issues/70)) ([15fdd2d](https://github.com/rudderlabs/rudder-ai-reviewer/commit/15fdd2d5a43dfd943b27e30ce292650039fa4af5))
+
 ## [1.1.0](https://github.com/rudderlabs/rudder-ai-reviewer/compare/v1.0.0...v1.1.0) (2026-02-20)
 
 
