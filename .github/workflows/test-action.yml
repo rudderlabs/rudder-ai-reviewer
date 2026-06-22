@@ -25,4 +25,4 @@ jobs:
         with:
           source-id: ${{ secrets.RUDDERSTACK_SOURCE_ID }}
           service-access-token: ${{ secrets.RUDDERSTACK_SERVICE_ACCESS_TOKEN }}
-          root-directory: .
+          root-directory: ./fixtures/js/Load_Instrumentation/NPM/nextjs-page_router
