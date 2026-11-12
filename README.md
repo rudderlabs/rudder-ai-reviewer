@@ -1,3 +1,6 @@
+> [!WARNING]
+> **This Action is deprecated.** It stops working when RudderStack removes the hosted PR review route that it calls. To review RudderStack SDK instrumentation in your pull requests, use the PR review skill in [RudderStack Agent Skills](https://github.com/rudderlabs/rudder-agent-skills) instead.
+
 <p align="center">
   <a href="https://rudderstack.com/">
     <img alt="RudderStack" width="512" src=".github/images/rudderstack-logo.jpg">
