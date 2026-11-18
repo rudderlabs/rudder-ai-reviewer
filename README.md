@@ -1,3 +1,6 @@
+> [!WARNING]
+> **This Action is deprecated.** It stops working when RudderStack removes the hosted PR review route that it calls. To review RudderStack SDK instrumentation, use the [`rudder-tracking-review`](https://github.com/rudderlabs/rudder-agent-skills/tree/main/plugins/rudder-core/skills/rudder-tracking-review) skill in RudderStack Agent Skills instead. See [Moving from Rudder AI Reviewer](#moving-from-rudder-ai-reviewer).
+
 <p align="center">
   <a href="https://rudderstack.com/">
     <img alt="RudderStack" width="512" src=".github/images/rudderstack-logo.jpg">
@@ -20,6 +23,19 @@
 # Rudder AI Reviewer
 
 A GitHub Action to automatically review pull requests using AI for RudderStack SDK instrumentation changes.
+
+## Moving from Rudder AI Reviewer
+
+[`rudder-tracking-review`](https://github.com/rudderlabs/rudder-agent-skills/tree/main/plugins/rudder-core/skills/rudder-tracking-review) replaces the Rudder AI Reviewer GitHub Action. It works in a different way:
+
+- It runs in your coding agent, on your machine, before the change ships. Ask the agent to review a change, or let it check its own edits to analytics calls before it reports a task as done.
+- It tells the agent what to look for and how to check it against your workspace. The agent reports in the chat. It does not post PR comments, and it does not run in CI.
+- It only reads. It never changes your workspace.
+- The Action took a Source ID input. Give the agent your source ID or source name instead, or let it match the source. It asks you when more than one source matches.
+- The Action took a token secret. The skill reads pipeline context through the RudderStack MCP server or `rudder-cli` instead. Connect one of them:
+  - MCP server, interactive: the browser sign-in at `https://mcp.rudderstack.com/mcp`. The [`rudder-mcp-setup`](https://github.com/rudderlabs/rudder-agent-skills/tree/main/plugins/rudder-mcp/skills/rudder-mcp-setup) skill covers it.
+  - MCP server, headless: `https://mcp.rudderstack.com/bearer-auth-mcp`. Send `Authorization: Bearer ${RUDDERSTACK_ACCESS_TOKEN}` and the `X-Workspace-ID` header for the workspace. Keep the token in the environment variable, never in a committed file. The "Access-token route" section of `rudder-mcp-setup` has the exact config.
+  - `rudder-cli`: the [`rudder-cli-setup`](https://github.com/rudderlabs/rudder-agent-skills/tree/main/plugins/rudder-cli/skills/rudder-cli-setup) skill installs and authenticates it. The CLI gives tracking plans and specs, but not received event schemas or destination settings.
 
 ## How It Works
 
